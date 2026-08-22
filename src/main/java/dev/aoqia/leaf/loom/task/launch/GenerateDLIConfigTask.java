@@ -133,7 +133,7 @@ public abstract class GenerateDLIConfigTask extends AbstractLoomTask {
             getCommonGameJarPath().set(getGameJarPath("common"));
         }
 
-        getRunDirectory().set(getProject().file("run"));
+        getRunDirectory().convention(getProject().getLayout().getProjectDirectory().dir("run"));
 		getNativesDirectoryPath().set(getExtension().getFiles().getNativesDirectory(getProject()).getAbsolutePath());
 		getDevLauncherConfig().set(getExtension().getFiles().getDevLauncherConfig());
 		getProductionNamespace().set(getExtension().getProductionNamespaceEnum().map(MappingsNamespace::toString));
