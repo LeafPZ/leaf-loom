@@ -70,13 +70,13 @@ public final class JarWalker {
 	private JarWalker() {
 	}
 
-	public static List<ClassEntry> findClasses(Path jar, boolean decompileEverything) throws IOException {
+	public static List<ClassEntry> findClasses(Path jar) throws IOException {
 		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(jar)) {
-			return findClasses(fs, decompileEverything);
+			return findClasses(fs);
 		}
 	}
 
-	public static List<ClassEntry> findClasses(FileSystemUtil.Delegate fs, boolean decompileEverything) throws IOException {
+	public static List<ClassEntry> findClasses(FileSystemUtil.Delegate fs) throws IOException {
 		List<String> outerClasses = new ArrayList<>();
 		Map<String, List<String>> innerClasses = new HashMap<>();
 
@@ -99,10 +99,6 @@ public final class JarWalker {
 				if (!fileName.endsWith(".class") || fileName.startsWith("META-INF/versions/")) {
 					continue;
 				}
-
-                if (!decompileEverything && !fileName.startsWith("zombie/")) {
-                    continue;
-                }
 
 				String outerClass = findOuterClass(fs, fileName, innerClassesFromOuterCache);
 

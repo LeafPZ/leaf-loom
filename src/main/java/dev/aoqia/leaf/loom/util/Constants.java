@@ -184,10 +184,6 @@ public class Constants {
          */
         public static final String ENABLE_GAME_VALIDATION = "leaf.loom.enableGameValidation";
         /**
-         * When decompiling game files this will accept all class files, not just ones in zombie/*
-         */
-        public static final String DECOMPILE_EVERYTHING = "leaf.loom.decompileEverything";
-        /**
          * When loom is applied as a plugin to a project, ignore the fact that there may be missing required game files.
          */
         public static final String MINIMAL_SETUP = "leaf.loom.minimalSetup";
