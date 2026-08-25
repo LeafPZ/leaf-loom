@@ -84,10 +84,6 @@ public abstract class GenerateDLIConfigTask extends AbstractLoomTask {
 	@Input
 	protected abstract Property<String> getLog4jConfigPaths();
 
-    @InputDirectory
-    @PathSensitive(PathSensitivity.ABSOLUTE)
-    protected abstract DirectoryProperty getRunDirectory();
-
 	@Input
 	@Optional
 	protected abstract Property<String> getClientGameJarPath();
@@ -133,7 +129,6 @@ public abstract class GenerateDLIConfigTask extends AbstractLoomTask {
             getCommonGameJarPath().set(getGameJarPath("common"));
         }
 
-        getRunDirectory().convention(getProject().getLayout().getProjectDirectory().dir("run"));
 		getNativesDirectoryPath().set(getExtension().getFiles().getNativesDirectory(getProject()).getAbsolutePath());
 		getDevLauncherConfig().set(getExtension().getFiles().getDevLauncherConfig());
 		getProductionNamespace().set(getExtension().getProductionNamespaceEnum().map(MappingsNamespace::toString));
@@ -149,8 +144,7 @@ public abstract class GenerateDLIConfigTask extends AbstractLoomTask {
             .property("log4j.configurationFile", getLog4jConfigPaths().get())
             .property("log4j2.formatMsgNoLookups", "true")
             .property("leaf.defaultModDistributionNamespace", getProductionNamespace().get())
-            .property("leaf.defaultMixinRemapType", getDefaultMixinRemapType().get())
-            .property("leaf.runDir", getRunDirectory().get().getAsFile().getAbsolutePath());
+            .property("leaf.defaultMixinRemapType", getDefaultMixinRemapType().get());
 
 		if (getRemapClasspathFile().isPresent()) {
 			launchConfig.property("leaf.remapClasspathFile", getRemapClasspathFile().get().getAsFile().getAbsolutePath());
