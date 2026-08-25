@@ -80,10 +80,16 @@ public abstract class AbstractRunTask extends JavaExec {
 	@Inject
 	protected abstract ExecOperations getExecOperations();
 
+    // TODO maybe revert back to a string
+	@InputFiles
+	@PathSensitive(PathSensitivity.NONE)
+	protected abstract DirectoryProperty getInternalWorkingDir();
+
 	// TODO maybe revert back to a string
 	@InputFiles
 	@PathSensitive(PathSensitivity.NONE)
 	protected abstract DirectoryProperty getInternalRunDir();
+
 	@Input
 	protected abstract MapProperty<String, Object> getInternalEnvironmentVars();
 	@Input
@@ -149,6 +155,7 @@ public abstract class AbstractRunTask extends JavaExec {
 		getMainClass().set(config.flatMap(RunConfiguration::getDevLaunchMainClass));
 		getJvmArgumentProviders().add(this::getGameJvmArgs);
 
+        getInternalWorkingDir().set(config.flatMap(RunConfiguration::getWorkingDirectory));
         getInternalRunDir().set(config.flatMap(RunConfiguration::getRunDirectory));
         getInternalEnvironmentVars().set(config.flatMap(RunConfiguration::getEnvironmentVars));
         getInternalJvmArgs().set(config.flatMap(RunConfiguration::getJvmArguments));
@@ -198,11 +205,10 @@ public abstract class AbstractRunTask extends JavaExec {
 			super.setClasspath(getInternalClasspath());
 		}
 
-		setWorkingDir(getInternalRunDir());
+		setWorkingDir(getInternalWorkingDir());
 		environment(getInternalEnvironmentVars().get());
 
 		Path runDirectory = getInternalRunDir().getAsFile().get().toPath();
-
 		if (!Files.exists(runDirectory)) {
 			try {
 				Files.createDirectories(runDirectory);
