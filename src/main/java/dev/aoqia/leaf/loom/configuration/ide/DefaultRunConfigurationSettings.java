@@ -64,7 +64,9 @@ public class DefaultRunConfigurationSettings {
 			return configName;
 		}));
         run.getWorkingDirectory().set(MirrorUtil.getGameJavaPath(project).toFile());
-		run.getRunDirectory().set(project.file("run"));
+
+		run.getRunDirectory().convention(project.getLayout().getProjectDirectory().dir("run"));
+
 		run.getGenerateRunConfig().convention(GradleUtils.isRootProject(project));
 		run.getPreferGradleTask().convention(true);
 	}
@@ -133,6 +135,9 @@ public class DefaultRunConfigurationSettings {
                 run.getJvmArguments().add(arg);
             }
         });
+
+        // Add runDir to cachedir
+        run.getProgramArguments().add("-cachedir=" + run.getRunDirectory().get());
 
 		finialiseValues(run);
 
