@@ -61,6 +61,11 @@ public class LoomRepositoryPlugin implements Plugin<PluginAware> {
 	private void declareRepositories(RepositoryHandler repositories, LoomFiles files, ExtensionAware target) {
 		declareLocalRepositories(repositories, files);
 
+        repositories.maven(repo -> {
+			repo.setName("Leaf");
+			repo.setUrl(MirrorUtil.getLeafRepository(target));
+		});
+
 		repositories.maven(repo -> {
 			repo.setName("Fabric");
 			repo.setUrl(MirrorUtil.getFabricRepository(target));

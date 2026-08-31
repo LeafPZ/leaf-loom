@@ -87,4 +87,13 @@ public class MirrorUtil {
 
 		return Constants.FABRIC_REPOSITORY;
 	}
+
+    public static String getLeafRepository(ExtensionAware aware) {
+        final var ext = aware.getExtensions().getExtraProperties();
+		if (ext.has("loom_leaf_repository")) {
+			return String.valueOf(ext.get("loom_leaf_repository"));
+		}
+
+		return Constants.LEAF_REPOSITORY;
+	}
 }

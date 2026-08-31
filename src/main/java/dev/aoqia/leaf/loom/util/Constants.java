@@ -33,6 +33,8 @@ public class Constants {
     public static final String VERSION_MANIFESTS = "https://raw.githubusercontent.com/aoqia194/leaf/refs/heads/main/dist/manifests";
 
 	public static final String FABRIC_REPOSITORY = "https://maven.fabricmc.net/";
+	public static final String LEAF_REPOSITORY = "https://maven.aoqia.dev/";
+
 	public static final String DLI_ENTRYPOINT = "net.fabricmc.devlaunchinjector.Main";
 
 	public static final int ASM_VERSION = Opcodes.ASM9;
