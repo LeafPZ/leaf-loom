@@ -55,10 +55,6 @@ plugins {
     id("package-info")
 }
 
-base {
-    archivesName = project.name
-}
-
 configurations.configureEach {
     resolutionStrategy {
         failOnNonReproducibleResolution()
