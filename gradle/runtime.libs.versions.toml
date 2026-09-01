@@ -10,7 +10,7 @@ dev-launch-injector = "0.2.1+build.8"
 fabric-log4j-util = "1.0.2"
 jetbrains-annotations = "26.0.2"
 native-support = "1.0.1"
-leaf-installer = "1.6.0"
+leaf-installer = "1.2.0"
 
 # Dev tools
 renderdoc = "1.37"
