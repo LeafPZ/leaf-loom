@@ -33,9 +33,8 @@ toolchain.
 
 ### Usage
 
-To get started using Loom to develop your own mods, please follow the guide
-on [Setting up a mod development environment][FabricWikiSetup]. Even though this guide is originally for
-FabricMC/fabric, if you understand the concepts it presents, it also works here.
+To get started using Loom to develop your own mods, please follow the guide on [Setting up][FabricDocsSetup]. Despite
+this guide originally being created for FabricMC/fabric, if you understand the concepts it presents, it also works here.
 
 ### Development
 
@@ -64,7 +63,7 @@ FabricMC/fabric, if you understand the concepts it presents, it also works here.
 - The entire [FabricMC team][FabricMC]
 
 [FabricMC]: https://github.com/FabricMC
-[FabricWikiSetup]: https://fabricmc.net/wiki/tutorial:setup
+[FabricDocsSetup]: https://docs.fabricmc.net/develop/getting-started/setting-up
 [Gradle]: https://gradle.org
 [LeafExampleMod]: https://github.com/aoqia194/leaf-example-mod
 [LeafYarn]: https://github.com/aoqia194/leaf-yarn
