@@ -93,7 +93,14 @@ public class ZomboidProvider {
 
     protected void setup(Project project) {
         Path gamePath = MirrorUtil.getGameJavaPath(project);
-        this.gameJar = gamePath.resolve("projectzomboid.jar").toFile();
+        gameJar = gamePath.resolve("projectzomboid.jar").toFile();
+        if (!gameJar.exists()) {
+            throw new RuntimeException(String.format(
+                "The projectzomboid.jar file doesn't exist at '%s'. Check the game paths provided to loom, such as the"
+                + " LEAF_CLIENT_GAME_PATH and LEAF_SERVER_GAME_PATH environment variables.",
+                gameJar.getAbsolutePath()
+            ));
+        }
 
         // Find all other game lib jars in the root game folder and add them as compile libraries
 //        project.getDependencies().add(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES,
