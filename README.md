@@ -1,44 +1,70 @@
-# Leaf Loom
+<div align="center">
 
-A [Gradle](https://gradle.org/) plugin to set up a development environment for Project Zomboid mods. Primarily used in
-the Leaf toolchain.
+<h1>
+    The Gradle development plugin for
+    <a href="https://pzwiki.net/wiki/Leaf">
+        <img src="res/leaf.png" width="36"> leaf
+    </a>
+</h1>
 
-* Has built in support for tiny mappings (Used by [Yarn](https://github.com/aoqia194/leaf-yarn))
-* Utilises the Vineflower and CFR decompilers to generate source code with comments.
-* Designed to support modern versions of Project Zomboid (Tested with 41.78.16 and upwards, including unstable versions)
-* Built in support for IntelliJ IDEA, Eclipse and Visual Studio Code to generate run configurations for Zomboid.
-* Loom targets the latest version of Gradle 7 or newer
-* Supports Java 17 upwards
+![License](https://img.shields.io/github/license/aoqia194/leaf-loom?label=License)
+![Gradle version](https://img.shields.io/badge/Gradle-9.7.1-teal?logo=gradle)
+![Build status](https://github.com/aoqia194/leaf-loom/actions/workflows/build.yml/badge.svg?branch=main&label=build)
+![Code Size](https://img.shields.io/github/languages/code-size/aoqia194/leaf-loom?label=Code%20Size)
+![Maven status](https://img.shields.io/website?url=https%3A%2F%2Fmaven.aoqia.dev%2F&label=Maven)
 
-## Use Loom to develop mods
+</div>
 
-To get started developing your own mods please follow the guide
-on [Setting up a mod development environment](https://fabricmc.net/wiki/tutorial:setup). Even though this guide is
-originally for FabricMC/fabric, if you understand the concepts it presents, it also works here.
+A [Gradle][Gradle] plugin to set up a development environment for Project Zomboid mods. Primarily used in the Leaf
+toolchain.
 
-## Debugging Loom (Only needed if you want to work on Loom itself)
+### Features
 
-_This guide assumes you are using IntelliJ IDEA, other IDE's have not been tested; your experience may vary._
+- Has built in support for tiny mappings (used with [Yarn][LeafYarn])
+- Utilises the Vineflower and CFR decompilers to generate source code with comments.
+- Designed to support modern versions of Project Zomboid (Tested with 41.78.16 and upwards, mostly including unstable
+  versions)
+- Built in support for IntelliJ IDEA, Eclipse and Visual Studio Code to generate run configurations for Zomboid.
+- Loom targets the latest version of Gradle 7 or newer (though it is recommended to use the latest)
+
+### Requirements
+
+- Java 17 or newer
+
+### Usage
+
+To get started using Loom to develop your own mods, please follow the guide
+on [Setting up a mod development environment][FabricWikiSetup]. Even though this guide is originally for
+FabricMC/fabric, if you understand the concepts it presents, it also works here.
+
+### Development
+
+*This guide assumes you are using IntelliJ IDEA, other IDE's have not been tested; your experience may vary.*
+
+<details open>
+<summary>Debugging</summary>
 
 1. Import as a Gradle project by opening the build.gradle
 2. Create a Gradle run configuration to run the following tasks `build publishToMavenLocal -x test`. This will build
-   Loom and publish to a local maven repo without running the test suite. You can run it now.
+   Loom and publish to a local maven repo without running the test suite.
 3. Prepare a project for using the local version of Loom:
-    * A good starting point is to clone the [leaf-example-mod](https://github.com/aoqia194/leaf-example-mod) into
-      your working directory
-    * Add `mavenLocal()` to the repositories:
-        * If you're using `id 'leaf-loom'` inside `plugins`, the correct `repositories` block is
-          inside `pluginManagement` in settings.gradle
-        * If you're using `apply plugin:` for Loom, the correct `repositories` block is inside `buildscript` in
-          build.gradle
-    * Change the loom version to `<version>.local`. For example `id 'leaf-loom' version '0.6.3.local'`
+    * A good starting point is to clone [leaf-example-mod][LeafExampleMod] into your working directory
+    * Add `mavenLocal()` to the `repositories` block inside of `pluginManagement` in settings.gradle
+    * Change the loom version to `<version>.local`. For example `id("leaf-loom") version "0.6.3.local"`
 4. Create a Gradle run configuration:
     * Set the Gradle project path to the project you have just configured above
     * Set some tasks to run, such as `clean build` you can change these to suit your needs.
     * Add the run configuration you created earlier to the "Before Launch" section to rebuild loom each time you debug
 5. You should now be able to run the configuration in debug mode, with working breakpoints.
 
-## Credits
+</details>
 
-I owe the FabricMC devs a small thanks here as the least I can do, as they helped me immensely.
-Especially **modmuss**! I forgot I even wrote this here, but @modmuss yet again helped me. They deserve triple credits honestly.
+### Special Thanks
+
+- The entire [FabricMC team][FabricMC]
+
+[FabricMC]: https://github.com/FabricMC
+[FabricWikiSetup]: https://fabricmc.net/wiki/tutorial:setup
+[Gradle]: https://gradle.org
+[LeafExampleMod]: https://github.com/aoqia194/leaf-example-mod
+[LeafYarn]: https://github.com/aoqia194/leaf-yarn
