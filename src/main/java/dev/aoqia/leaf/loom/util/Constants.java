@@ -30,7 +30,7 @@ import org.objectweb.asm.Opcodes;
 import java.nio.file.Path;
 
 public class Constants {
-    public static final String VERSION_MANIFESTS = "https://raw.githubusercontent.com/aoqia194/leaf/refs/heads/main/dist/manifests";
+    public static final String VERSION_MANIFESTS = "https://raw.githubusercontent.com/LeafPZ/leaf/refs/heads/main/dist/manifests";
 
 	public static final String FABRIC_REPOSITORY = "https://maven.fabricmc.net/";
 	public static final String LEAF_REPOSITORY = "https://maven.aoqia.dev/";

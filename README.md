@@ -3,14 +3,15 @@
 <h1>
     The Gradle development plugin for
     <a href="https://pzwiki.net/wiki/Leaf">
-        <img src="res/leaf.png" width="36"> leaf
+        <img src="https://github.com/LeafPZ.png" width="24px" alt="LeafPZ Icon">
+        leaf
     </a>
 </h1>
 
-![License](https://img.shields.io/github/license/aoqia194/leaf-loom?label=License)
+![License](https://img.shields.io/github/license/LeafPZ/leaf-loom?label=License)
 ![Gradle version](https://img.shields.io/badge/Gradle-9.7.1-teal?logo=gradle)
-![Build status](https://github.com/aoqia194/leaf-loom/actions/workflows/build.yml/badge.svg?branch=main&label=build)
-![Code Size](https://img.shields.io/github/languages/code-size/aoqia194/leaf-loom?label=Code%20Size)
+![Build status](https://github.com/LeafPZ/leaf-loom/actions/workflows/build.yml/badge.svg?branch=main&label=build)
+![Code Size](https://img.shields.io/github/languages/code-size/LeafPZ/leaf-loom?label=Code%20Size)
 ![Maven status](https://img.shields.io/website?url=https%3A%2F%2Fmaven.aoqia.dev%2F&label=Maven)
 
 </div>
@@ -65,5 +66,5 @@ this guide originally being created for FabricMC/fabric, if you understand the c
 [FabricMC]: https://github.com/FabricMC
 [FabricDocsSetup]: https://docs.fabricmc.net/develop/getting-started/setting-up
 [Gradle]: https://gradle.org
-[LeafExampleMod]: https://github.com/aoqia194/leaf-example-mod
-[LeafYarn]: https://github.com/aoqia194/leaf-yarn
+[LeafExampleMod]: https://github.com/LeafPZ/leaf-example-mod
+[LeafYarn]: https://github.com/LeafPZ/leaf-yarn
