@@ -27,7 +27,7 @@ package net.fabricmc.loom.test.unit
 import org.gradle.testfixtures.ProjectBuilder
 import spock.lang.Specification
 
-import net.fabricmc.loom.configuration.ide.RunConfigSettings
+import dev.aoqia.leaf.loom.configuration.ide.RunConfigSettings
 import net.fabricmc.loom.util.Arguments
 
 class RunConfigUnitTest extends Specification {
