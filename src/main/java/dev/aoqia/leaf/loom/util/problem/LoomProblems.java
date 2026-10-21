@@ -22,11 +22,7 @@
  * SOFTWARE.
  */
 
-<<<<<<<< HEAD:src/main/java/dev/aoqia/leaf/loom/util/LoomProblems.java
-package dev.aoqia.leaf.loom.util;
-========
-package net.fabricmc.loom.util.problem;
->>>>>>>> upstream/dev/1.18:src/main/java/dev/aoqia/leaf/loom/util/problem/LoomProblems.java
+package dev.aoqia.leaf.loom.util.problem;
 
 import org.gradle.api.problems.ProblemGroup;
 import org.gradle.api.problems.ProblemId;

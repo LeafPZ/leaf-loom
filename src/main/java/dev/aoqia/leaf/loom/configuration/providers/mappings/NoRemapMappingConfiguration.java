@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package net.fabricmc.loom.configuration.providers.mappings;
+package dev.aoqia.leaf.loom.configuration.providers.mappings;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -34,16 +34,17 @@ import org.gradle.api.provider.Provider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.fabricmc.loom.api.decompilers.JavadocStyle;
-import net.fabricmc.loom.api.mappings.layered.MappingsNamespace;
-import net.fabricmc.loom.configuration.DependencyInfo;
-import net.fabricmc.loom.configuration.providers.mappings.tiny.TinyJarInfo;
-import net.fabricmc.loom.configuration.providers.mappings.unpick.UnpickMetadata;
-import net.fabricmc.loom.configuration.providers.minecraft.MinecraftProvider;
-import net.fabricmc.loom.util.Checksum;
-import net.fabricmc.loom.util.service.ServiceFactory;
 import net.fabricmc.mappingio.MappingReader;
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
+
+import dev.aoqia.leaf.loom.api.decompilers.JavadocStyle;
+import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
+import dev.aoqia.leaf.loom.configuration.DependencyInfo;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.tiny.TinyJarInfo;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.unpick.UnpickMetadata;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
+import dev.aoqia.leaf.loom.util.Checksum;
+import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 public final class NoRemapMappingConfiguration extends MappingConfiguration {
 	private static final Logger LOGGER = LoggerFactory.getLogger(NoRemapMappingConfiguration.class);
@@ -52,20 +53,20 @@ public final class NoRemapMappingConfiguration extends MappingConfiguration {
 		super(mappingsIdentifier, inputJar);
 	}
 
-	public static NoRemapMappingConfiguration create(Project project, DependencyInfo dependency, MinecraftProvider minecraftProvider) {
+	public static NoRemapMappingConfiguration create(Project project, DependencyInfo dependency, ZomboidProvider gameProvider) {
 		final String version = dependency.getResolvedVersion();
 		final Path inputJar = resolveInputJar(dependency, "annotations");
 		final String[] dependencyParts = dependency.getDepString().split(":");
 		final String mappingsName = "annotations.%s.%s.%s".formatted(dependencyParts[0], dependencyParts[1], Checksum.of(inputJar).sha256().hex(12));
-		final TinyJarInfo jarInfo = readJarInfo(inputJar, dependency, minecraftProvider, "annotations");
-		final String mappingsIdentifier = createMappingsIdentifier(mappingsName, version, getMappingsClassifier(dependency, jarInfo.v2()), minecraftProvider.minecraftVersion());
+		final TinyJarInfo jarInfo = readJarInfo(inputJar, dependency, gameProvider, "annotations");
+		final String mappingsIdentifier = createMappingsIdentifier(mappingsName, version, getMappingsClassifier(dependency, jarInfo.v2()), gameProvider.gameVersion());
 		var mappingConfiguration = new NoRemapMappingConfiguration(mappingsIdentifier, inputJar);
-		mappingConfiguration.setup(project, minecraftProvider, dependency, "annotations");
+		mappingConfiguration.setup(project, gameProvider, dependency, "annotations");
 		return mappingConfiguration;
 	}
 
 	@Override
-	protected void setupMappings(Project project, MinecraftProvider minecraftProvider, FileSystem inputJar) throws IOException {
+	protected void setupMappings(Project project, ZomboidProvider gameProvider, FileSystem inputJar) throws IOException {
 		for (var annotationsData : getAnnotationsData()) {
 			if (!MappingsNamespace.OFFICIAL.toString().equals(annotationsData.namespace())) {
 				throw new IOException("Annotations patches must use the official namespace");

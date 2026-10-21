@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package net.fabricmc.loom.util.problem;
+package dev.aoqia.leaf.loom.util.problem;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +32,7 @@ import org.gradle.api.Action;
 import org.gradle.api.problems.ProblemId;
 import org.gradle.api.problems.ProblemReporter;
 
-import net.fabricmc.loom.util.github.GithubActionsAnnotations;
+import dev.aoqia.leaf.loom.util.github.GithubActionsAnnotations;
 
 /**
  * A wrapper for {@link ProblemReporter}. This class can manage multiple problems at a time

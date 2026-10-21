@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package net.fabricmc.loom.configuration.providers.mappings;
+package dev.aoqia.leaf.loom.configuration.providers.mappings;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -41,19 +41,19 @@ import org.gradle.api.Project;
 import org.gradle.api.provider.Provider;
 import org.jspecify.annotations.Nullable;
 
-import net.fabricmc.loom.LoomGradleExtension;
-import net.fabricmc.loom.LoomGradlePlugin;
-import net.fabricmc.loom.api.decompilers.JavadocStyle;
-import net.fabricmc.loom.api.mappings.layered.MappingsNamespace;
-import net.fabricmc.loom.configuration.DependencyInfo;
-import net.fabricmc.loom.configuration.providers.mappings.tiny.MappingsMerger;
-import net.fabricmc.loom.configuration.providers.mappings.tiny.TinyJarInfo;
-import net.fabricmc.loom.configuration.providers.minecraft.MinecraftProvider;
-import net.fabricmc.loom.util.Checksum;
-import net.fabricmc.loom.util.Constants;
-import net.fabricmc.loom.util.DeletingFileVisitor;
-import net.fabricmc.loom.util.ZipUtils;
-import net.fabricmc.loom.util.service.ServiceFactory;
+import dev.aoqia.leaf.loom.LoomGradleExtension;
+import dev.aoqia.leaf.loom.LoomGradlePlugin;
+import dev.aoqia.leaf.loom.api.decompilers.JavadocStyle;
+import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
+import dev.aoqia.leaf.loom.configuration.DependencyInfo;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.tiny.MappingsMerger;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.tiny.TinyJarInfo;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
+import dev.aoqia.leaf.loom.util.Checksum;
+import dev.aoqia.leaf.loom.util.Constants;
+import dev.aoqia.leaf.loom.util.DeletingFileVisitor;
+import dev.aoqia.leaf.loom.util.ZipUtils;
+import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import net.fabricmc.mappingio.MappingReader;
 import net.fabricmc.mappingio.format.MappingFormat;
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
@@ -76,22 +76,22 @@ public final class RemapMappingConfiguration extends MappingConfiguration {
 		this.tinyMappingsJar = mappingsWorkingDir.resolve("mappings.jar");
 	}
 
-	public static RemapMappingConfiguration create(Project project, ServiceFactory serviceFactory, DependencyInfo dependency, MinecraftProvider minecraftProvider) {
+	public static RemapMappingConfiguration create(Project project, ServiceFactory serviceFactory, DependencyInfo dependency, ZomboidProvider gameProvider) {
 		final String version = dependency.getResolvedVersion();
 		final Path inputJar = resolveInputJar(dependency, "mappings");
 		final String mappingsName = StringUtils.removeSuffix(dependency.getDependency().getGroup() + "." + dependency.getDependency().getName(), "-unmerged");
-		final TinyJarInfo jarInfo = readJarInfo(inputJar, dependency, minecraftProvider, "mappings");
-		final String mappingsIdentifier = createMappingsIdentifier(mappingsName, version, getMappingsClassifier(dependency, jarInfo.v2()), minecraftProvider.minecraftVersion());
-		final Path workingDir = minecraftProvider.dir(mappingsIdentifier).toPath();
+		final TinyJarInfo jarInfo = readJarInfo(inputJar, dependency, gameProvider, "mappings");
+		final String mappingsIdentifier = createMappingsIdentifier(mappingsName, version, getMappingsClassifier(dependency, jarInfo.v2()), gameProvider.gameVersion());
+		final Path workingDir = gameProvider.dir(mappingsIdentifier).toPath();
 		var mappingConfiguration = new RemapMappingConfiguration(mappingsIdentifier, workingDir, inputJar, serviceFactory);
 
-		mappingConfiguration.setup(project, minecraftProvider, dependency, "mappings");
+		mappingConfiguration.setup(project, gameProvider, dependency, "mappings");
 		return mappingConfiguration;
 	}
 
 	@Override
-	protected void prepare(MinecraftProvider minecraftProvider) throws IOException {
-		if (minecraftProvider.refreshDeps()) {
+	protected void prepare(ZomboidProvider gameProvider) throws IOException {
+		if (gameProvider.refreshDeps()) {
 			cleanup();
 		}
 
@@ -106,46 +106,46 @@ public final class RemapMappingConfiguration extends MappingConfiguration {
 	}
 
 	@Override
-	protected void setupMappings(Project project, MinecraftProvider minecraftProvider, FileSystem inputJar) throws IOException {
+	protected void setupMappings(Project project, ZomboidProvider gameProvider, FileSystem inputJar) throws IOException {
 		extractSignatureFixes(inputJar);
 
-		if (Files.notExists(tinyMappings) || minecraftProvider.refreshDeps()) {
+		if (Files.notExists(tinyMappings) || gameProvider.refreshDeps()) {
 			TinyJarInfo.extractMappings(inputJar, baseTinyMappings);
-			storeMappings(project, minecraftProvider);
+			storeMappings(project, gameProvider);
 		}
 
-		if (Files.notExists(tinyMappingsJar) || minecraftProvider.refreshDeps()) {
+		if (Files.notExists(tinyMappingsJar) || gameProvider.refreshDeps()) {
 			Files.deleteIfExists(tinyMappingsJar);
 			ZipUtils.add(tinyMappingsJar, TinyJarInfo.MAPPINGS_PATH, Files.readAllBytes(tinyMappings));
 		}
 	}
 
-	private void storeMappings(Project project, MinecraftProvider minecraftProvider) throws IOException {
+	private void storeMappings(Project project, ZomboidProvider gameProvider) throws IOException {
 		if (areMappingsV2(baseTinyMappings)) {
 			final LoomGradleExtension extension = LoomGradleExtension.get(project);
 
 			if (extension.getUseIntermediateMappings().get()) {
-				IntermediateMappingsService intermediateMappingsService = serviceFactory.get(IntermediateMappingsService.createOptions(project, minecraftProvider));
-				MappingsMerger.mergeAndSaveMappings(baseTinyMappings, tinyMappings, minecraftProvider, intermediateMappingsService);
+				IntermediateMappingsService intermediateMappingsService = serviceFactory.get(IntermediateMappingsService.createOptions(project, gameProvider));
+				MappingsMerger.mergeAndSaveMappings(baseTinyMappings, tinyMappings, gameProvider, intermediateMappingsService);
 			} else {
 				Files.copy(baseTinyMappings, tinyMappings, StandardCopyOption.REPLACE_EXISTING);
 			}
 		} else {
-			final List<Path> minecraftJars = minecraftProvider.getMinecraftJars();
+			final List<Path> gameJars = gameProvider.getGameJars();
 
-			if (minecraftJars.size() != 1) {
-				throw new UnsupportedOperationException("V1 mappings only support single jar minecraft providers");
+			if (gameJars.size() != 1) {
+				throw new UnsupportedOperationException("V1 mappings only support single jar zomboid providers");
 			}
 
 			Files.deleteIfExists(tinyMappings);
 			LOGGER.info(":populating field names");
-			suggestFieldNames(minecraftJars.get(0), baseTinyMappings, tinyMappings);
+			suggestFieldNames(gameJars.getFirst(), baseTinyMappings, tinyMappings);
 		}
 	}
 
 	private static void validateMappings(MemoryMappingTree mappingTree) throws IOException {
 		if (!mappingTree.getMetadata(MARKDOWN_METADATA_KEY).isEmpty()) {
-			LOGGER.warn("Markdown comments are currently not supported for remapped Minecraft. Reinterpreting comments as HTML.");
+			LOGGER.warn("Markdown comments are currently not supported for remapped Zomboid. Reinterpreting comments as HTML.");
 		}
 	}
 

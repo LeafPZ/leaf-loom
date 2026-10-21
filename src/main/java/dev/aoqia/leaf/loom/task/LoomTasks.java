@@ -296,10 +296,6 @@ public abstract class LoomTasks implements Runnable {
 	}
 
 	public static Provider<Task> getIDELaunchConfigureTaskName(Project project) {
-		return project.provider(() -> {
-			final MinecraftJarConfiguration jarConfiguration = LoomGradleExtension.get(project).getMinecraftJarConfiguration().get();
-			final String name = jarConfiguration == MinecraftJarConfiguration.SERVER_ONLY ? "configureLaunch" : "configureClientLaunch";
-			return project.getTasks().getByName(name);
-		});
+		return project.provider(() -> project.getTasks().getByName("configureLaunch"));
 	}
 }

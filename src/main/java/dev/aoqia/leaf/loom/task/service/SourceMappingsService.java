@@ -46,11 +46,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
+import dev.aoqia.leaf.loom.api.decompilers.JavadocStyle;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.ConfigContextImpl;
 import dev.aoqia.leaf.loom.configuration.processors.MappingProcessorContextImpl;
 import dev.aoqia.leaf.loom.configuration.processors.ZomboidJarProcessorManager;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.task.GenerateSourcesTask;
+import dev.aoqia.leaf.loom.util.Checksum;
 import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 import dev.aoqia.leaf.loom.util.service.Service;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
@@ -151,7 +155,7 @@ public class SourceMappingsService extends Service<SourceMappingsService.Options
 		return path;
 	}
 
-	private static void createMappings(Project project, @Nullable MinecraftJarProcessorManager jarProcessor, @Nullable MappingConfiguration mappingConfiguration, Path emptyMappings, Path outputMappings) throws IOException {
+	private static void createMappings(Project project, @Nullable ZomboidJarProcessorManager jarProcessor, @Nullable MappingConfiguration mappingConfiguration, Path emptyMappings, Path outputMappings) throws IOException {
 		LoomGradleExtension extension = LoomGradleExtension.get(project);
 		MemoryMappingTree mappingTree = new MemoryMappingTree();
 		String sourceNamespace = !extension.disableObfuscation() && extension.getUseIntermediateMappings().get()

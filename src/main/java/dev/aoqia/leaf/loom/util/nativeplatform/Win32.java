@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package net.fabricmc.loom.util.nativeplatform;
+package dev.aoqia.leaf.loom.util.nativeplatform;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.AddressLayout;

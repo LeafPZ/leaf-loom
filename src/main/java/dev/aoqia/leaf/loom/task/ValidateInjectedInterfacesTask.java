@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package net.fabricmc.loom.task;
+package dev.aoqia.leaf.loom.task;
 
 import java.io.File;
 import java.io.IOException;
@@ -71,23 +71,23 @@ import org.slf4j.LoggerFactory;
 
 import net.fabricmc.classtweaker.api.ClassTweakerReader;
 import net.fabricmc.classtweaker.api.visitor.ClassTweakerVisitor;
-import net.fabricmc.loom.LoomGradleExtension;
-import net.fabricmc.loom.configuration.ifaceinject.InterfaceInjectionProcessor;
-import net.fabricmc.loom.configuration.providers.minecraft.MinecraftSourceSets;
-import net.fabricmc.loom.util.Constants;
-import net.fabricmc.loom.util.FileSystemUtil;
-import net.fabricmc.loom.util.fmj.FabricModJson;
-import net.fabricmc.loom.util.fmj.FabricModJsonFactory;
-import net.fabricmc.loom.util.gradle.SourceSetHelper;
-import net.fabricmc.loom.util.problem.LoomProblemReporter;
-import net.fabricmc.loom.util.problem.LoomProblems;
-import net.fabricmc.loom.util.problem.ProblemReportingOptions;
+import dev.aoqia.leaf.loom.LoomGradleExtension;
+import dev.aoqia.leaf.loom.configuration.ifaceinject.InterfaceInjectionProcessor;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
+import dev.aoqia.leaf.loom.util.Constants;
+import dev.aoqia.leaf.loom.util.FileSystemUtil;
+import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
+import dev.aoqia.leaf.loom.util.fmj.LeafModJsonFactory;
+import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
+import dev.aoqia.leaf.loom.util.problem.LoomProblemReporter;
+import dev.aoqia.leaf.loom.util.problem.LoomProblems;
+import dev.aoqia.leaf.loom.util.problem.ProblemReportingOptions;
 
 /**
  * Checks that injected interfaces are valid, i.e. that all their instance methods have a default implementation.
  *
  * <p>{@snippet lang=groovy :
- * tasks.register('validateInjectedInterfaces', net.fabricmc.loom.task.ValidateInjectedInterfacesTask) {
+ * tasks.register('validateInjectedInterfaces', dev.aoqia.leaf.loom.task.ValidateInjectedInterfacesTask) {
  * 	// By default, this task is set up for the default mod jar - the "jar" or "remapJar" task depending
  * 	// on the project configuration - and the main source set. To modify the defaults:
  * 	modJar = tasks.named('otherJar').flatMap { it.archiveFile }
@@ -152,7 +152,7 @@ public abstract class ValidateInjectedInterfacesTask extends DefaultTask {
 		source(SourceSetHelper.getMainSourceSet(getProject()));
 
 		if (extension.areEnvironmentSourceSetsSplit()) {
-			source(SourceSetHelper.getSourceSetByName(MinecraftSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME, getProject()));
+			source(SourceSetHelper.getSourceSetByName(ZomboidSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME, getProject()));
 		}
 	}
 
@@ -281,17 +281,17 @@ public abstract class ValidateInjectedInterfacesTask extends DefaultTask {
 		private void check() throws IOException {
 			List<Violation> violations = new ArrayList<>();
 			Path modJar = getParameters().getModJar().get().getAsFile().toPath();
-			FabricModJson fabricModJson = FabricModJsonFactory.createFromZip(modJar);
+			LeafModJson modJson = LeafModJsonFactory.createFromZip(modJar);
 			Set<String> injectedInterfaces = new HashSet<>();
 
 			// Look for injected interfaces in fabric.mod.json "custom" section
-			for (InterfaceInjectionProcessor.InjectedInterface injectedInterface : InterfaceInjectionProcessor.InjectedInterface.fromMod(fabricModJson)) {
+			for (InterfaceInjectionProcessor.InjectedInterface injectedInterface : InterfaceInjectionProcessor.InjectedInterface.fromMod(modJson)) {
 				injectedInterfaces.add(injectedInterface.ifaceName());
 			}
 
 			try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(modJar)) {
 				// Look for injected interfaces in class tweakers
-				for (String classTweaker : fabricModJson.getClassTweakers().keySet()) {
+				for (String classTweaker : modJson.getClassTweakers().keySet()) {
 					byte[] ctBytes = Files.readAllBytes(fs.getPath(classTweaker));
 					findInjectedInterfacesFromClassTweaker(ctBytes, injectedInterfaces::add);
 				}

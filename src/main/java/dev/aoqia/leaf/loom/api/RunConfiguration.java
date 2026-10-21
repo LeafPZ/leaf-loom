@@ -33,7 +33,7 @@ import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.SourceSet;
 import org.jetbrains.annotations.ApiStatus;
 
-import net.fabricmc.loom.task.RunGameTask;
+import dev.aoqia.leaf.loom.task.RunGameTask;
 
 /**
  * Represents a run configuration for Minecraft, these can presented via an IDE run configuration or a Gradle task.
@@ -45,7 +45,7 @@ public interface RunConfiguration extends Named {
 	/**
 	 * The full name of the run configuration, i.e. 'Minecraft Client'.
 	 *
-	 * <p>By default this is determined from the base name.
+	 * <p>By default, this is determined from the base name.
 	 *
 	 * <p>Note: unless the project is the root project (or {@link #getAppendProjectPathToDisplayName()} is disabled),
 	 * the project path will be appended automatically, e.g. 'Minecraft Client (:some:project)'.

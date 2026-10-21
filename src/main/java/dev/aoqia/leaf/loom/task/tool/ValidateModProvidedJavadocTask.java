@@ -69,7 +69,9 @@ import net.fabricmc.mappingio.adapter.ForwardingMappingVisitor;
 
 import dev.aoqia.leaf.loom.task.AbstractLoomTask;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;
-import dev.aoqia.leaf.loom.util.LoomProblems;
+import dev.aoqia.leaf.loom.util.problem.LoomProblemReporter;
+import dev.aoqia.leaf.loom.util.problem.LoomProblems;
+import dev.aoqia.leaf.loom.util.problem.ProblemReportingOptions;
 
 /**
  * Checks that the mod-provided javadoc mappings in a specific file are valid.
@@ -142,7 +144,7 @@ public abstract class ValidateModProvidedJavadocTask extends AbstractLoomTask {
 			}
 		});
 
-		try (var validator = new Validator(errorReporter, getMinecraftJars().getFiles())) {
+		try (var validator = new Validator(errorReporter, getZomboidJars().getFiles())) {
 			for (File mappingFile : getMappingFiles()) {
 				validator.check(mappingFile.toPath(), getExpectedNamespace().get());
 			}

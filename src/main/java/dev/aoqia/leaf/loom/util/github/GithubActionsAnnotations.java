@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package net.fabricmc.loom.util.github;
+package dev.aoqia.leaf.loom.util.github;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -31,7 +31,7 @@ import java.util.Map;
 
 import org.jspecify.annotations.Nullable;
 
-import net.fabricmc.loom.util.problem.Problem;
+import dev.aoqia.leaf.loom.util.problem.Problem;
 
 public final class GithubActionsAnnotations {
 	// See https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#setting-a-notice-message

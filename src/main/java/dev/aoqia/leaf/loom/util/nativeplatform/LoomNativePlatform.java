@@ -22,13 +22,13 @@
  * SOFTWARE.
  */
 
-package net.fabricmc.loom.util.nativeplatform;
+package dev.aoqia.leaf.loom.util.nativeplatform;
 
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 
-import net.fabricmc.loom.util.Platform;
+import dev.aoqia.leaf.loom.util.Platform;
 
 public final class LoomNativePlatform {
 	private static final NativePlatform PLATFORM = create();

@@ -46,6 +46,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
 
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
+import dev.aoqia.leaf.loom.api.processor.MarkdownJavadocOption;
 import dev.aoqia.leaf.loom.api.processor.ZomboidJarProcessor;
 import dev.aoqia.leaf.loom.api.processor.ProcessorContext;
 import dev.aoqia.leaf.loom.api.processor.SpecContext;
@@ -83,8 +84,8 @@ public abstract class ModJavadocProcessor implements ZomboidJarProcessor<ModJava
 	public ModJavadocProcessor.@Nullable Spec buildSpec(SpecContext context) {
 		List<ModJavadoc> javadocs = new ArrayList<>();
 
-		for (LeafModJson fabricModJson : context.modDependenciesCompileRuntime()) {
-			ModJavadoc javadoc = ModJavadoc.create(fabricModJson, context.productionNamespace(), context.markdownJavadocOption());
+		for (LeafModJson leafModJson : context.modDependenciesCompileRuntime()) {
+			ModJavadoc javadoc = ModJavadoc.create(leafModJson, context.productionNamespace(), context.markdownJavadocOption());
 
 			if (javadoc != null) {
 				javadocs.add(javadoc);
@@ -120,10 +121,10 @@ public abstract class ModJavadocProcessor implements ZomboidJarProcessor<ModJava
 
 	public record ModJavadoc(String modId, MemoryMappingTree mappingTree, String mappingsHash) {
 		@Nullable
-		public static ModJavadoc create(LeafModJson fabricModJson, MappingsNamespace productionNamespace, MarkdownJavadocOption markdownJavadocOption) {
-			final String modId = fabricModJson.getId();
-			final boolean remoteMod = fabricModJson.getSource() instanceof FabricModJsonSource.ZipSource;
-			final JsonElement customElement = fabricModJson.getCustom(Constants.CustomModJsonKeys.PROVIDED_JAVADOC);
+		public static ModJavadoc create(LeafModJson leafModJson, MappingsNamespace productionNamespace, MarkdownJavadocOption markdownJavadocOption) {
+			final String modId = leafModJson.getId();
+			final boolean remoteMod = leafModJson.getSource() instanceof LeafModJsonSource.ZipSource;
+			final JsonElement customElement = leafModJson.getCustom(Constants.CustomModJsonKeys.PROVIDED_JAVADOC);
 
 			if (customElement == null) {
 				return null;
@@ -134,7 +135,7 @@ public abstract class ModJavadocProcessor implements ZomboidJarProcessor<ModJava
 			final String mappingsHash;
 
 			try {
-				final byte[] data = fabricModJson.getSource().read(javaDocPath);
+				final byte[] data = leafModJson.getSource().read(javaDocPath);
 				mappingsHash = Checksum.of(data).sha1().hex();
 
 				try (Reader reader = new InputStreamReader(new ByteArrayInputStream(data))) {

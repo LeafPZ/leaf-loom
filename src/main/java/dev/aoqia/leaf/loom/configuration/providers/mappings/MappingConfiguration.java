@@ -71,13 +71,13 @@ public abstract sealed class MappingConfiguration permits RemapMappingConfigurat
 		this.inputJar = inputJar;
 	}
 
-	protected final void setup(Project project, MinecraftProvider minecraftProvider, DependencyInfo dependency, String displayName) {
+	protected final void setup(Project project, ZomboidProvider gameProvider, DependencyInfo dependency, String displayName) {
 		try {
-			prepare(minecraftProvider);
+			prepare(gameProvider);
 
 			try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(inputJar)) {
 				readExtras(delegate.fs());
-				setupMappings(project, minecraftProvider, delegate.fs());
+				setupMappings(project, gameProvider, delegate.fs());
 			}
 		} catch (IOException e) {
 			try {
@@ -90,13 +90,13 @@ public abstract sealed class MappingConfiguration permits RemapMappingConfigurat
 		}
 	}
 
-	protected void prepare(MinecraftProvider minecraftProvider) throws IOException {
+	protected void prepare(ZomboidProvider gameProvider) throws IOException {
 	}
 
 	protected void cleanup() throws IOException {
 	}
 
-	protected abstract void setupMappings(Project project, MinecraftProvider minecraftProvider, FileSystem inputJar) throws IOException;
+	protected abstract void setupMappings(Project project, ZomboidProvider gameProvider, FileSystem inputJar) throws IOException;
 
 	public abstract Provider<TinyMappingsService.Options> getMappingsServiceOptions(Project project);
 
@@ -131,11 +131,11 @@ public abstract sealed class MappingConfiguration permits RemapMappingConfigurat
 				.toPath();
 	}
 
-	protected static TinyJarInfo readJarInfo(Path inputJar, DependencyInfo dependency, MinecraftProvider minecraftProvider, String displayName) {
+	protected static TinyJarInfo readJarInfo(Path inputJar, DependencyInfo dependency, ZomboidProvider gameProvider, String displayName) {
 		TinyJarInfo jarInfo = TinyJarInfo.get(inputJar);
-		jarInfo.minecraftVersionId().ifPresent(id -> {
-			if (!minecraftProvider.minecraftVersion().equals(id)) {
-				LOGGER.warn("The %s (%s) were not built for Minecraft version %s, proceed with caution.".formatted(displayName, dependency.getDepString(), minecraftProvider.minecraftVersion()));
+		jarInfo.gameVersionId().ifPresent(id -> {
+			if (!gameProvider.gameVersion().equals(id)) {
+				LOGGER.warn("The %s (%s) were not built for Zomboid version %s, proceed with caution.".formatted(displayName, dependency.getDepString(), gameProvider.gameVersion()));
 			}
 		});
 		return jarInfo;
@@ -151,10 +151,10 @@ public abstract sealed class MappingConfiguration permits RemapMappingConfigurat
 		return isV2 ? "-v2" : "";
 	}
 
-	protected static String createMappingsIdentifier(String mappingsName, String version, String classifier, String minecraftVersion) {
+	protected static String createMappingsIdentifier(String mappingsName, String version, String classifier, String gameVersion) {
 		//          mappingsName      . mcVersion . version        classifier
 		// Example: net.fabricmc.yarn . 1_16_5    . 1.16.5+build.5 -v2
-		return mappingsName + "." + minecraftVersion.replace(' ', '_').replace('.', '_').replace('-', '_') + "." + version + classifier;
+		return mappingsName + "." + gameVersion.replace(' ', '_').replace('.', '_').replace('-', '_') + "." + version + classifier;
 	}
 
 	private void readExtras(FileSystem jar) throws IOException {

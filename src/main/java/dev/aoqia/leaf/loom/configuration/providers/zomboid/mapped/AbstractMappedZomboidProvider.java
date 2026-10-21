@@ -213,7 +213,7 @@ public abstract class AbstractMappedZomboidProvider<M extends ZomboidProvider> i
 				return extension.getZomboidProvider().gameVersion();
 			}
 
-			return "%s-%s".formatted(extension.getMinecraftProvider().minecraftVersion(), mappingConfiguration.mappingsIdentifier());
+			return "%s-%s".formatted(extension.getZomboidProvider().gameVersion(), mappingConfiguration.mappingsIdentifier());
 		}
 
 		return "%s-%s".formatted(extension.getZomboidProvider().gameVersion(), extension.getMappingConfiguration().mappingsIdentifier());

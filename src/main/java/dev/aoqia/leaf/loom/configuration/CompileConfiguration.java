@@ -37,9 +37,12 @@ import java.util.function.Consumer;
 
 import javax.inject.Inject;
 
-import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.processors.JsrAnnotationRemapperProcessor;
 import dev.aoqia.leaf.loom.configuration.processors.speccontext.DebofConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.NoRemapMappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.IntermediaryZomboidProvider;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.NamedZomboidProvider;
 import dev.aoqia.leaf.loom.util.Constants;
 
 import org.gradle.api.Action;
@@ -74,8 +77,6 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidMetadataProvid
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.AbstractMappedZomboidProvider;
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.IntermediaryZomboidProvider;
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.NamedZomboidProvider;
 import dev.aoqia.leaf.loom.extension.MixinExtension;
 import dev.aoqia.leaf.loom.task.service.ClasspathGroupService;
 import dev.aoqia.leaf.loom.util.Checksum;
@@ -86,8 +87,6 @@ import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 import dev.aoqia.leaf.loom.util.gradle.daemon.DaemonUtils;
 import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
-
-import org.jetbrains.annotations.Nullable;
 
 public abstract class CompileConfiguration implements Runnable {
 	private static final Object GLOBAL_LOCK = "leaf.loom.internal.global.lock".intern();
@@ -126,14 +125,14 @@ public abstract class CompileConfiguration implements Runnable {
 			}
 
 			try {
-				final MinecraftMetadataProvider metadataProvider = MinecraftMetadataProvider.create(configContext);
+				final ZomboidMetadataProvider metadataProvider = ZomboidMetadataProvider.create(configContext);
 				extension.setMetadataProvider(metadataProvider);
-				final MinecraftProvider minecraftProvider;
+				final ZomboidProvider gameProvider;
 				final MappingConfigurationSetup mappingConfigurationSetup;
 
 				synchronized (getGlobalLockObject()) {
-					minecraftProvider = createMinecraftProvider(configContext, metadataProvider);
-					mappingConfigurationSetup = provideMinecraft(configContext, minecraftProvider);
+					gameProvider = createZomboidProvider(configContext, metadataProvider);
+					mappingConfigurationSetup = provideZomboid(configContext, gameProvider);
 				}
 
 				if (mappingConfigurationSetup != null) {
@@ -141,13 +140,13 @@ public abstract class CompileConfiguration implements Runnable {
 					mappingConfigurationSetup.mappingConfiguration().applyToProject(getProject(), mappingConfigurationSetup.dependencyInfo());
 				}
 
-				createMappedMinecraftProviders(configContext);
+				createMappedZomboidProviders(configContext);
 				registerGameProcessors(configContext);
-				final MinecraftJarProcessorManager minecraftJarProcessorManager = MinecraftJarProcessorManager.create(getProject());
-				createProcessedNamedMinecraftProvider(configContext, minecraftJarProcessorManager);
+				final ZomboidJarProcessorManager zomboidJarProcessorManager = ZomboidJarProcessorManager.create(getProject());
+				createProcessedNamedZomboidProvider(configContext, zomboidJarProcessorManager);
 
 				synchronized (getGlobalLockObject()) {
-					provideMappedMinecraft(configContext);
+					provideMappedZomboid(configContext);
 				}
 
                 var dependencyManager = new LoomDependencyManager(getProject(), serviceFactory, extension);
@@ -193,23 +192,22 @@ public abstract class CompileConfiguration implements Runnable {
 		}
 	}
 
-	private MinecraftProvider createMinecraftProvider(ConfigContext configContext, MinecraftMetadataProvider metadataProvider) {
+	private ZomboidProvider createZomboidProvider(ConfigContext configContext, ZomboidMetadataProvider metadataProvider) {
 		final LoomGradleExtension extension = configContext.extension();
-		final MinecraftProvider minecraftProvider = extension.getMinecraftJarConfiguration().get().createMinecraftProvider(metadataProvider, configContext);
-		extension.setMinecraftProvider(minecraftProvider);
-		return minecraftProvider;
+		final ZomboidProvider gameProvider = extension.getZomboidJarConfiguration().get().createZomboidProvider(metadataProvider, configContext);
+		extension.setZomboidProvider(gameProvider);
+		return gameProvider;
 	}
 
 	@Nullable
-	private MappingConfigurationSetup provideMinecraft(ConfigContext configContext, MinecraftProvider minecraftProvider) throws Exception {
+	private MappingConfigurationSetup provideZomboid(ConfigContext configContext, ZomboidProvider gameProvider) throws Exception {
 		final Project project = configContext.project();
 		final LoomGradleExtension extension = configContext.extension();
 
-		// Provide the vanilla mc jars
-		minecraftProvider.provide();
+		gameProvider.provide();
 
         if (GradleUtils.getBooleanProperty(getProject(), Constants.Properties.MINIMAL_SETUP)) {
-            return;
+            return null;
         }
 
 		if (!extension.disableObfuscation()) {
@@ -221,14 +219,14 @@ public abstract class CompileConfiguration implements Runnable {
 
 			// Resolve the mapping files from the configuration
 			final DependencyInfo mappingsDep = DependencyInfo.create(getProject(), Configurations.MAPPINGS);
-		    final MappingConfiguration mappingConfiguration = RemapMappingConfiguration.create(getProject(), configContext.serviceFactory(), mappingsDep, zomboidProvider);
+		    final MappingConfiguration mappingConfiguration = RemapMappingConfiguration.create(getProject(), configContext.serviceFactory(), mappingsDep, gameProvider);
 			return new MappingConfigurationSetup(mappingConfiguration, mappingsDep);
 		} else {
 			var annotations = project.getConfigurations().getByName(Configurations.ANNOTATIONS);
 
 			if (!annotations.getDependencies().isEmpty()) {
 				final DependencyInfo annotationsDep = DependencyInfo.create(getProject(), annotations);
-				final MappingConfiguration mappingConfiguration = NoRemapMappingConfiguration.create(getProject(), annotationsDep, minecraftProvider);
+				final MappingConfiguration mappingConfiguration = NoRemapMappingConfiguration.create(getProject(), annotationsDep, gameProvider);
 				return new MappingConfigurationSetup(mappingConfiguration, annotationsDep);
 			}
 		}
@@ -239,43 +237,43 @@ public abstract class CompileConfiguration implements Runnable {
 	private record MappingConfigurationSetup(MappingConfiguration mappingConfiguration, DependencyInfo dependencyInfo) {
 	}
 
-	private void createMappedMinecraftProviders(ConfigContext configContext) {
+	private void createMappedZomboidProviders(ConfigContext configContext) {
 		final Project project = configContext.project();
 		final LoomGradleExtension extension = configContext.extension();
-		final var jarConfiguration = extension.getMinecraftJarConfiguration().get();
-		IntermediaryMinecraftProvider<?> intermediaryMinecraftProvider = extension.disableObfuscation() ? null : jarConfiguration.createIntermediaryMinecraftProvider(project);
-		NamedMinecraftProvider<?> namedMinecraftProvider = jarConfiguration.createNamedMinecraftProvider(project);
+		final var jarConfiguration = extension.getZomboidJarConfiguration().get();
+		IntermediaryZomboidProvider<?> intermediaryZomboidProvider = extension.disableObfuscation() ? null : jarConfiguration.createIntermediaryZomboidProvider(project);
+		NamedZomboidProvider<?> namedZomboidProvider = jarConfiguration.createNamedZomboidProvider(project);
 
-		if (intermediaryMinecraftProvider != null) {
-			extension.setIntermediaryMinecraftProvider(intermediaryMinecraftProvider);
+		if (intermediaryZomboidProvider != null) {
+			extension.setIntermediaryZomboidProvider(intermediaryZomboidProvider);
 		}
 
-		extension.setNamedMinecraftProvider(namedMinecraftProvider);
+		extension.setNamedZomboidProvider(namedZomboidProvider);
 	}
 
-	private void createProcessedNamedMinecraftProvider(ConfigContext configContext, @Nullable MinecraftJarProcessorManager minecraftJarProcessorManager) {
-		if (minecraftJarProcessorManager == null) {
+	private void createProcessedNamedZomboidProvider(ConfigContext configContext, @Nullable ZomboidJarProcessorManager zomboidJarProcessorManager) {
+		if (zomboidJarProcessorManager == null) {
 			return;
 		}
 
 		final LoomGradleExtension extension = configContext.extension();
-		final var jarConfiguration = extension.getMinecraftJarConfiguration().get();
-		final NamedMinecraftProvider<?> namedMinecraftProvider = jarConfiguration.createProcessedNamedMinecraftProvider(extension.getNamedMinecraftProvider(), minecraftJarProcessorManager);
-		extension.setNamedMinecraftProvider(namedMinecraftProvider);
+		final var jarConfiguration = extension.getZomboidJarConfiguration().get();
+		final NamedZomboidProvider<?> namedZomboidProvider = jarConfiguration.createProcessedNamedZomboidProvider(extension.getNamedZomboidProvider(), zomboidJarProcessorManager);
+		extension.setNamedZomboidProvider(namedZomboidProvider);
 	}
 
-	private void provideMappedMinecraft(ConfigContext configContext) throws Exception {
+	private void provideMappedZomboid(ConfigContext configContext) throws Exception {
 		final LoomGradleExtension extension = configContext.extension();
-		final IntermediaryMinecraftProvider<?> intermediaryMinecraftProvider = extension.disableObfuscation() ? null : extension.getIntermediaryMinecraftProvider();
-		final NamedMinecraftProvider<?> namedMinecraftProvider = extension.getNamedMinecraftProvider();
+		final IntermediaryZomboidProvider<?> intermediaryZomboidProvider = extension.disableObfuscation() ? null : extension.getIntermediaryZomboidProvider();
+		final NamedZomboidProvider<?> namedZomboidProvider = extension.getNamedZomboidProvider();
 
 		final var provideContext = new AbstractMappedZomboidProvider.ProvideContext(true, extension.refreshDeps(), configContext);
 
-		if (intermediaryMinecraftProvider != null) {
-			intermediaryMinecraftProvider.provide(provideContext);
+		if (intermediaryZomboidProvider != null) {
+			intermediaryZomboidProvider.provide(provideContext);
 		}
 
-		namedMinecraftProvider.provide(provideContext);
+		namedZomboidProvider.provide(provideContext);
 	}
 
 	private void registerGameProcessors(ConfigContext configContext) {

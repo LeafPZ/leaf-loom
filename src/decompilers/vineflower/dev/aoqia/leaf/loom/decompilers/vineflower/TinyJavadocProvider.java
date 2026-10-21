@@ -38,7 +38,7 @@ import org.jetbrains.java.decompiler.struct.StructRecordComponent;
 
 import net.fabricmc.fernflower.api.FabricJavadocStyle;
 import net.fabricmc.fernflower.api.IFabricJavadocProvider;
-import net.fabricmc.loom.api.decompilers.JavadocStyle;
+import dev.aoqia.leaf.loom.api.decompilers.JavadocStyle;
 import net.fabricmc.mappingio.MappingReader;
 import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch;
 import net.fabricmc.mappingio.tree.MappingTree;
