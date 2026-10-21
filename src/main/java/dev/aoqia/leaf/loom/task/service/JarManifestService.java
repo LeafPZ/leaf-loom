@@ -50,9 +50,9 @@ public abstract class JarManifestService implements BuildService<JarManifestServ
 		Property<String> getGradleVersion();
 		Property<String> getLoomVersion();
 		Property<String> getMCEVersion();
-		Property<String> getMinecraftVersion();
+		Property<String> getGameVersion();
 		Property<String> getTinyRemapperVersion();
-		Property<String> getFabricLoaderVersion();
+		Property<String> getLoaderVersion();
 		Property<MixinVersion> getMixinVersion();
 	}
 
@@ -65,9 +65,9 @@ public abstract class JarManifestService implements BuildService<JarManifestServ
 				params.getGradleVersion().set(GradleVersion.current().getVersion());
 				params.getLoomVersion().set(LoomGradlePlugin.LOOM_VERSION);
 				params.getMCEVersion().set(LoomVersions.MIXIN_COMPILE_EXTENSIONS.version());
-				params.getMinecraftVersion().set(project.provider(() -> extension.getZomboidProvider().gameVersion()));
+				params.getGameVersion().set(project.provider(() -> extension.getZomboidProvider().gameVersion()));
 				params.getTinyRemapperVersion().set(tinyRemapperVersion.orElse("unknown"));
-				params.getFabricLoaderVersion().set(project.provider(() -> Optional.ofNullable(extension.getInstallerData()).map(InstallerData::version).orElse("unknown")));
+				params.getLoaderVersion().set(project.provider(() -> Optional.ofNullable(extension.getInstallerData()).map(InstallerData::version).orElse("unknown")));
 				params.getMixinVersion().set(getMixinVersion(project));
 			});
 		});
@@ -92,9 +92,9 @@ public abstract class JarManifestService implements BuildService<JarManifestServ
 		attributes.putValue(Constants.Manifest.GRADLE_VERSION, p.getGradleVersion().get());
 		attributes.putValue(Constants.Manifest.LOOM_VERSION, p.getLoomVersion().get());
 		attributes.putValue(Constants.Manifest.MIXIN_COMPILE_EXTENSIONS_VERSION, p.getMCEVersion().get());
-		attributes.putValue(Constants.Manifest.ZOMBOID_VERSION, p.getMinecraftVersion().get());
+		attributes.putValue(Constants.Manifest.ZOMBOID_VERSION, p.getGameVersion().get());
 		attributes.putValue(Constants.Manifest.TINY_REMAPPER_VERSION, p.getTinyRemapperVersion().get());
-		attributes.putValue(Constants.Manifest.LEAF_LOADER_VERSION, p.getFabricLoaderVersion().get());
+		attributes.putValue(Constants.Manifest.LEAF_LOADER_VERSION, p.getLoaderVersion().get());
 
 		// This can be overridden by mods if required
 		if (!attributes.containsKey(Constants.Manifest.MIXIN_VERSION)) {
