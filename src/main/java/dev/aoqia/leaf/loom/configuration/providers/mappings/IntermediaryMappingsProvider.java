@@ -47,6 +47,7 @@ import org.slf4j.LoggerFactory;
 
 import dev.aoqia.leaf.loom.api.mappings.intermediate.IntermediateMappingsProvider;
 import dev.aoqia.leaf.loom.extension.LoomGradleExtensionApiImpl;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.tiny.TinyJarInfo;
 import dev.aoqia.leaf.loom.util.Checksum;
 
 @ApiStatus.Internal
@@ -103,7 +104,7 @@ public abstract class IntermediaryMappingsProvider extends IntermediateMappingsP
 					.downloadPath(intermediaryJarPath);
 		}
 
-		MappingConfiguration.extractMappings(intermediaryJarPath, tinyMappings);
+		TinyJarInfo.extractMappings(intermediaryJarPath, tinyMappings);
 	}
 
 	@Override

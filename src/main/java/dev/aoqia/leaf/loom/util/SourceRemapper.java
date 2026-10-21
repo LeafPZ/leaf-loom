@@ -45,7 +45,7 @@ import org.slf4j.Logger;
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.RemapConfigurationSettings;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.task.service.LorenzMappingService;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
@@ -164,7 +164,7 @@ public class SourceRemapper {
 		}
 
 		LoomGradleExtension extension = LoomGradleExtension.get(project);
-		MappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
+		RemapMappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
 		MappingsNamespace prodNamespace = extension.getProductionNamespaceEnum().get();
 
 		LorenzMappingService lorenzMappingService = serviceFactory.get(LorenzMappingService.createOptions(

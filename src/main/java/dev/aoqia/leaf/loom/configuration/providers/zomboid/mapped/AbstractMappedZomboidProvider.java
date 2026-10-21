@@ -30,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -46,6 +47,7 @@ import dev.aoqia.leaf.loom.configuration.ConfigContext;
 import dev.aoqia.leaf.loom.configuration.mods.dependency.LocalMavenHelper;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.IntermediaryMappingsProvider;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.annotations.AnnotationsData;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.AnnotationsApplyVisitor;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
@@ -55,6 +57,7 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.SignatureFixerApplyVi
 import dev.aoqia.leaf.loom.extension.LoomFiles;
 import dev.aoqia.leaf.loom.util.SidedClassVisitor;
 import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
+import dev.aoqia.leaf.loom.util.ZipUtils;
 import net.fabricmc.tinyremapper.OutputConsumerPath;
 import net.fabricmc.tinyremapper.TinyRemapper;
 
@@ -204,7 +207,13 @@ public abstract class AbstractMappedZomboidProvider<M extends ZomboidProvider> i
 
 	protected String getVersion() {
 		if (extension.disableObfuscation()) {
-			return extension.getZomboidProvider().gameVersion();
+			MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
+
+			if (mappingConfiguration == null) {
+				return extension.getZomboidProvider().gameVersion();
+			}
+
+			return "%s-%s".formatted(extension.getMinecraftProvider().minecraftVersion(), mappingConfiguration.mappingsIdentifier());
 		}
 
 		return "%s-%s".formatted(extension.getZomboidProvider().gameVersion(), extension.getMappingConfiguration().mappingsIdentifier());
@@ -256,14 +265,30 @@ public abstract class AbstractMappedZomboidProvider<M extends ZomboidProvider> i
 
 	protected void remapJar(RemappedJars remappedJars, ConfigContext configContext) throws IOException {
 		if (extension.disableObfuscation()) {
-			// TODO debof - can we skip this?
 			Files.createDirectories(remappedJars.outputJarPath().getParent());
 			Files.copy(remappedJars.inputJar(), remappedJars.outputJarPath(), StandardCopyOption.REPLACE_EXISTING);
+
+			MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
+
+			if (mappingConfiguration != null) {
+				AnnotationsData annotationsData = AnnotationsData.getRemappedAnnotations(
+						MappingsNamespace.OFFICIAL,
+						mappingConfiguration,
+						getProject(),
+						configContext.serviceFactory(),
+						MappingsNamespace.OFFICIAL.toString()
+				);
+
+				if (annotationsData != null) {
+					applyAnnotations(remappedJars.outputJarPath(), annotationsData);
+				}
+			}
+
 			getMavenHelper(remappedJars.type()).savePom();
 			return;
 		}
 
-		final MappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
+		final RemapMappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
 		final String fromM = remappedJars.sourceNamespace().toString();
 		final String toM = getTargetNamespace().toString();
 
@@ -299,6 +324,15 @@ public abstract class AbstractMappedZomboidProvider<M extends ZomboidProvider> i
 		}
 
 		getMavenHelper(remappedJars.type()).savePom();
+	}
+
+	private static void applyAnnotations(Path jar, AnnotationsData annotationsData) throws IOException {
+		Map<String, ZipUtils.UnsafeUnaryOperator<byte[]>> transforms = new HashMap<>();
+		annotationsData.classes().forEach((className, classData) -> transforms.put(
+				className + ".class",
+				(ZipUtils.AsmClassOperator) classVisitor -> new AnnotationsApplyVisitor.AnnotationsApplyClassVisitor(classVisitor, classData)
+		));
+		ZipUtils.transform(jar, transforms);
 	}
 
 	protected void configureRemapper(RemappedJars remappedJars, TinyRemapper.Builder tinyRemapperBuilder) {

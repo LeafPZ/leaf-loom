@@ -39,11 +39,12 @@ import java.util.stream.Stream;
 
 import org.gradle.api.Project;
 import org.gradle.api.plugins.JavaPlugin;
-import org.jspecify.annotations.Nullable;
 import org.jetbrains.annotations.VisibleForTesting;
+import org.jspecify.annotations.Nullable;
 
-import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.api.RemapConfigurationSettings;
+import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
+import dev.aoqia.leaf.loom.api.processor.MarkdownJavadocOption;
 import dev.aoqia.leaf.loom.api.processor.SpecContext;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
 import dev.aoqia.leaf.loom.util.AsyncCache;
@@ -207,6 +208,11 @@ public record RemappedSpecContext(
 				.filter(modHolder -> !modHolder.common())
 				.map(ModHolder::mod)
 				.toList();
+	}
+
+	@Override
+	public MarkdownJavadocOption markdownJavadocOption() {
+		return MarkdownJavadocOption.UNSUPPORTED;
 	}
 
 	private record ModHolder(LeafModJson mod, boolean common) {

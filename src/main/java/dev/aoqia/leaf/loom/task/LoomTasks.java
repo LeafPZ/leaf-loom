@@ -202,7 +202,7 @@ public abstract class LoomTasks implements Runnable {
 
 			runTask.configure(t -> {
 				t.setDescription("Starts the '" + config.getName() + "' run configuration");
-				t.dependsOn("configureLaunch");
+				t.dependsOn(config.getRuntimeEnvironment().map(env -> env.equals("client") ? "configureClientLaunch" : "configureLaunch"));
 			});
 
 			if (config.getName().equals("client") && renderDocSupported) {
@@ -296,6 +296,10 @@ public abstract class LoomTasks implements Runnable {
 	}
 
 	public static Provider<Task> getIDELaunchConfigureTaskName(Project project) {
-		return project.provider(() -> project.getTasks().getByName("configureLaunch"));
+		return project.provider(() -> {
+			final MinecraftJarConfiguration jarConfiguration = LoomGradleExtension.get(project).getMinecraftJarConfiguration().get();
+			final String name = jarConfiguration == MinecraftJarConfiguration.SERVER_ONLY ? "configureLaunch" : "configureClientLaunch";
+			return project.getTasks().getByName(name);
+		});
 	}
 }

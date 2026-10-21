@@ -47,8 +47,8 @@ import org.gradle.process.ExecOperations;
 import org.jetbrains.annotations.ApiStatus;
 
 import dev.aoqia.leaf.loom.task.AbstractLoomTask;
-import dev.aoqia.leaf.loom.util.LoomProblems;
 import dev.aoqia.leaf.loom.util.LoomVersions;
+import dev.aoqia.leaf.loom.util.problem.LoomProblems;
 
 /**
  * Add this task to a mod development environment to use Enigma against the game jars.

@@ -37,6 +37,7 @@ import org.gradle.api.file.FileCollection;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Provider;
 import org.jetbrains.annotations.ApiStatus;
+import org.jspecify.annotations.Nullable;
 
 import dev.aoqia.leaf.loom.api.LoomGradleExtensionAPI;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
@@ -76,7 +77,10 @@ public interface LoomGradleExtension extends LoomGradleExtensionAPI {
 
 	void setZomboidProvider(ZomboidProvider zomboidProvider);
 
-	MappingConfiguration getMappingConfiguration();
+	RemapMappingConfiguration getMappingConfiguration();
+
+	@Nullable
+	MappingConfiguration getMappingConfigurationOrNull();
 
 	void setMappingConfiguration(MappingConfiguration mappingConfiguration);
 

@@ -42,7 +42,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.task.AbstractRemapJarTask;
 import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
 import dev.aoqia.leaf.loom.util.service.Service;
@@ -96,7 +96,7 @@ public final class MappingsService extends Service<MappingsService.Options> impl
 	 * Returns options for creating a new mappings service, using the mappings as specified in the project's mapping configuration.
 	 */
 	public static Provider<Options> createOptionsWithProjectMappings(Project project, Provider<String> from, Provider<String> to) {
-		final MappingConfiguration mappingConfiguration = LoomGradleExtension.get(project).getMappingConfiguration();
+		final RemapMappingConfiguration mappingConfiguration = LoomGradleExtension.get(project).getMappingConfiguration();
 		return createOptions(project, mappingConfiguration.tinyMappings, from, to, true);
 	}
 

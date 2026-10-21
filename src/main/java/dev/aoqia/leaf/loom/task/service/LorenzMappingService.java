@@ -35,7 +35,7 @@ import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.Nested;
 
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.util.Lazy;
 import dev.aoqia.leaf.loom.util.service.Service;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
@@ -50,7 +50,7 @@ public final class LorenzMappingService extends Service<LorenzMappingService.Opt
 		Property<MappingsService.Options> getMappings();
 	}
 
-	public static Provider<Options> createOptions(Project project, MappingConfiguration mappingConfiguration, MappingsNamespace from, MappingsNamespace to) {
+	public static Provider<Options> createOptions(Project project, RemapMappingConfiguration mappingConfiguration, MappingsNamespace from, MappingsNamespace to) {
 		return TYPE.create(project, options -> options.getMappings().set(
 			MappingsService.createOptions(
 				project,

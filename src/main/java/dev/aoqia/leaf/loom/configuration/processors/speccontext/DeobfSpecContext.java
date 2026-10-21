@@ -234,4 +234,9 @@ public record DeobfSpecContext(List<LeafModJson> modDependencies,
 	public MappingsNamespace productionNamespace() {
 		return MappingsNamespace.OFFICIAL;
 	}
+
+	@Override
+	public MarkdownJavadocOption markdownJavadocOption() {
+		return MarkdownJavadocOption.REQUIRED;
+	}
 }

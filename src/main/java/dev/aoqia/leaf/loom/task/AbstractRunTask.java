@@ -44,6 +44,7 @@ import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
@@ -52,11 +53,13 @@ import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.JavaExec;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.options.Option;
 import org.gradle.process.CommandLineArgumentProvider;
 import org.gradle.process.ExecOperations;
 import org.gradle.work.DisableCachingByDefault;
@@ -197,6 +200,7 @@ public abstract class AbstractRunTask extends JavaExec {
 	public void exec() {
 		if (getUseArgFile().get()) {
 			LOGGER.debug("Using arg file for {}", getName());
+			writeArgFile();
 			// We're using an arg file, pass an empty classpath to the super JavaExec.
 			super.setClasspath(getObjectFactory().fileCollection());
 		} else {
@@ -281,23 +285,26 @@ public abstract class AbstractRunTask extends JavaExec {
 		final List<String> args = new ArrayList<>();
 
 		if (getUseArgFile().get()) {
-			final String content = "-classpath\n" + this.getInternalClasspath().getFiles().stream()
-					.map(File::getAbsolutePath)
-					.map(AbstractRunTask::quoteArg)
-					.collect(Collectors.joining(File.pathSeparator));
-
-			try {
-				final Path argsFile = Paths.get(getArgFilePath().get());
-				Files.createDirectories(argsFile.getParent());
-				Files.writeString(argsFile, content, StandardCharsets.UTF_8);
-				args.add("@" + argsFile.toAbsolutePath());
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to create classpath file", e);
-			}
+			args.add("@" + Paths.get(getArgFilePath().get()).toAbsolutePath());
 		}
 
 		args.addAll(getInternalJvmArgs().get());
 		return args;
+	}
+
+	private void writeArgFile() {
+		final String content = "-classpath\n" + this.getInternalClasspath().getFiles().stream()
+				.map(File::getAbsolutePath)
+				.map(AbstractRunTask::quoteArg)
+				.collect(Collectors.joining(File.pathSeparator));
+
+		try {
+			final Path argsFile = Paths.get(getArgFilePath().get());
+			Files.createDirectories(argsFile.getParent());
+			Files.writeString(argsFile, content, StandardCharsets.UTF_8);
+		} catch (IOException e) {
+			throw new UncheckedIOException("Failed to create classpath file", e);
+		}
 	}
 
 	// Based off https://github.com/JetBrains/intellij-community/blob/295dd68385a458bdfde638152e36d19bed18b666/platform/util/src/com/intellij/execution/CommandLineWrapperUtil.java#L87

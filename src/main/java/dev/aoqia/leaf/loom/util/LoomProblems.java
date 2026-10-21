@@ -1,7 +1,7 @@
 /*
  * This file is part of fabric-loom, licensed under the MIT License (MIT).
  *
- * Copyright (c) 2025 FabricMC
+ * Copyright (c) 2025-2026 FabricMC
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,11 +22,18 @@
  * SOFTWARE.
  */
 
+<<<<<<<< HEAD:src/main/java/dev/aoqia/leaf/loom/util/LoomProblems.java
 package dev.aoqia.leaf.loom.util;
+========
+package net.fabricmc.loom.util.problem;
+>>>>>>>> upstream/dev/1.18:src/main/java/dev/aoqia/leaf/loom/util/problem/LoomProblems.java
 
 import org.gradle.api.problems.ProblemGroup;
 import org.gradle.api.problems.ProblemId;
 
+/**
+ * Contains the Loom problem group for the Gradle Problem API.
+ */
 public final class LoomProblems {
 	public static final ProblemGroup PROBLEM_GROUP = ProblemGroup.create("loom", "Loom");
 

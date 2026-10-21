@@ -32,7 +32,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -57,6 +56,7 @@ import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.compile.JavaCompile;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.api.tasks.testing.Test;
+import org.jspecify.annotations.Nullable;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.InterfaceInjectionExtensionAPI;
@@ -90,7 +90,7 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import org.jetbrains.annotations.Nullable;
 
 public abstract class CompileConfiguration implements Runnable {
-	private static final String LOCK_PROPERTY_KEY = "leaf.loom.internal.global.lock";
+	private static final Object GLOBAL_LOCK = "leaf.loom.internal.global.lock".intern();
 
 	@Inject
 	protected abstract Project getProject();
@@ -126,10 +126,28 @@ public abstract class CompileConfiguration implements Runnable {
 			}
 
 			try {
-				// Setting up loom across Gradle projects is not thread safe, synchronize it here to ensure that multiple projects cannot use it.
-				// There is no easy way around this, as we want to use the same global cache for downloaded or generated files.
+				final MinecraftMetadataProvider metadataProvider = MinecraftMetadataProvider.create(configContext);
+				extension.setMetadataProvider(metadataProvider);
+				final MinecraftProvider minecraftProvider;
+				final MappingConfigurationSetup mappingConfigurationSetup;
+
 				synchronized (getGlobalLockObject()) {
-					setupZomboid(configContext);
+					minecraftProvider = createMinecraftProvider(configContext, metadataProvider);
+					mappingConfigurationSetup = provideMinecraft(configContext, minecraftProvider);
+				}
+
+				if (mappingConfigurationSetup != null) {
+					extension.setMappingConfiguration(mappingConfigurationSetup.mappingConfiguration());
+					mappingConfigurationSetup.mappingConfiguration().applyToProject(getProject(), mappingConfigurationSetup.dependencyInfo());
+				}
+
+				createMappedMinecraftProviders(configContext);
+				registerGameProcessors(configContext);
+				final MinecraftJarProcessorManager minecraftJarProcessorManager = MinecraftJarProcessorManager.create(getProject());
+				createProcessedNamedMinecraftProvider(configContext, minecraftJarProcessorManager);
+
+				synchronized (getGlobalLockObject()) {
+					provideMappedMinecraft(configContext);
 				}
 
                 var dependencyManager = new LoomDependencyManager(getProject(), serviceFactory, extension);
@@ -175,19 +193,20 @@ public abstract class CompileConfiguration implements Runnable {
 		}
 	}
 
-	private void setupZomboid(ConfigContext configContext) throws Exception {
+	private MinecraftProvider createMinecraftProvider(ConfigContext configContext, MinecraftMetadataProvider metadataProvider) {
+		final LoomGradleExtension extension = configContext.extension();
+		final MinecraftProvider minecraftProvider = extension.getMinecraftJarConfiguration().get().createMinecraftProvider(metadataProvider, configContext);
+		extension.setMinecraftProvider(minecraftProvider);
+		return minecraftProvider;
+	}
+
+	@Nullable
+	private MappingConfigurationSetup provideMinecraft(ConfigContext configContext, MinecraftProvider minecraftProvider) throws Exception {
 		final Project project = configContext.project();
 		final LoomGradleExtension extension = configContext.extension();
 
-		final ZomboidMetadataProvider metadataProvider = ZomboidMetadataProvider.create(configContext);
-		extension.setMetadataProvider(metadataProvider);
-
-		var jarConfiguration = extension.getZomboidJarConfiguration().get();
-
-		// Provide the zomboid jars
-		final ZomboidProvider zomboidProvider = jarConfiguration.createZomboidProvider(metadataProvider, configContext);
-		extension.setZomboidProvider(zomboidProvider);
-		zomboidProvider.provide();
+		// Provide the vanilla mc jars
+		minecraftProvider.provide();
 
         if (GradleUtils.getBooleanProperty(getProject(), Constants.Properties.MINIMAL_SETUP)) {
             return;
@@ -202,32 +221,61 @@ public abstract class CompileConfiguration implements Runnable {
 
 			// Resolve the mapping files from the configuration
 			final DependencyInfo mappingsDep = DependencyInfo.create(getProject(), Configurations.MAPPINGS);
-		    final MappingConfiguration mappingConfiguration = MappingConfiguration.create(getProject(), configContext.serviceFactory(), mappingsDep, zomboidProvider);
-			extension.setMappingConfiguration(mappingConfiguration);
-			mappingConfiguration.applyToProject(getProject(), mappingsDep);
+		    final MappingConfiguration mappingConfiguration = RemapMappingConfiguration.create(getProject(), configContext.serviceFactory(), mappingsDep, zomboidProvider);
+			return new MappingConfigurationSetup(mappingConfiguration, mappingsDep);
+		} else {
+			var annotations = project.getConfigurations().getByName(Configurations.ANNOTATIONS);
+
+			if (!annotations.getDependencies().isEmpty()) {
+				final DependencyInfo annotationsDep = DependencyInfo.create(getProject(), annotations);
+				final MappingConfiguration mappingConfiguration = NoRemapMappingConfiguration.create(getProject(), annotationsDep, minecraftProvider);
+				return new MappingConfigurationSetup(mappingConfiguration, annotationsDep);
+			}
 		}
 
-		// Provide the remapped jars
-		@Nullable IntermediaryZomboidProvider<?> intermediaryZomboidProvider = extension.disableObfuscation() ? null : jarConfiguration.createIntermediaryZomboidProvider(project);
-		NamedZomboidProvider<?> namedZomboidProvider = jarConfiguration.createNamedZomboidProvider(project);
+		return null;
+	}
 
-		registerGameProcessors(configContext);
-		ZomboidJarProcessorManager zomboidJarProcessorManager = ZomboidJarProcessorManager.create(getProject());
+	private record MappingConfigurationSetup(MappingConfiguration mappingConfiguration, DependencyInfo dependencyInfo) {
+	}
 
-		if (zomboidJarProcessorManager != null) {
-			// Wrap the named MC provider for one that will provide the processed jars
-			namedZomboidProvider = jarConfiguration.createProcessedNamedZomboidProvider(namedZomboidProvider, zomboidJarProcessorManager);
+	private void createMappedMinecraftProviders(ConfigContext configContext) {
+		final Project project = configContext.project();
+		final LoomGradleExtension extension = configContext.extension();
+		final var jarConfiguration = extension.getMinecraftJarConfiguration().get();
+		IntermediaryMinecraftProvider<?> intermediaryMinecraftProvider = extension.disableObfuscation() ? null : jarConfiguration.createIntermediaryMinecraftProvider(project);
+		NamedMinecraftProvider<?> namedMinecraftProvider = jarConfiguration.createNamedMinecraftProvider(project);
+
+		if (intermediaryMinecraftProvider != null) {
+			extension.setIntermediaryMinecraftProvider(intermediaryMinecraftProvider);
 		}
+
+		extension.setNamedMinecraftProvider(namedMinecraftProvider);
+	}
+
+	private void createProcessedNamedMinecraftProvider(ConfigContext configContext, @Nullable MinecraftJarProcessorManager minecraftJarProcessorManager) {
+		if (minecraftJarProcessorManager == null) {
+			return;
+		}
+
+		final LoomGradleExtension extension = configContext.extension();
+		final var jarConfiguration = extension.getMinecraftJarConfiguration().get();
+		final NamedMinecraftProvider<?> namedMinecraftProvider = jarConfiguration.createProcessedNamedMinecraftProvider(extension.getNamedMinecraftProvider(), minecraftJarProcessorManager);
+		extension.setNamedMinecraftProvider(namedMinecraftProvider);
+	}
+
+	private void provideMappedMinecraft(ConfigContext configContext) throws Exception {
+		final LoomGradleExtension extension = configContext.extension();
+		final IntermediaryMinecraftProvider<?> intermediaryMinecraftProvider = extension.disableObfuscation() ? null : extension.getIntermediaryMinecraftProvider();
+		final NamedMinecraftProvider<?> namedMinecraftProvider = extension.getNamedMinecraftProvider();
 
 		final var provideContext = new AbstractMappedZomboidProvider.ProvideContext(true, extension.refreshDeps(), configContext);
 
-		if (intermediaryZomboidProvider != null) {
-			extension.setIntermediaryZomboidProvider(intermediaryZomboidProvider);
-			intermediaryZomboidProvider.provide(provideContext);
+		if (intermediaryMinecraftProvider != null) {
+			intermediaryMinecraftProvider.provide(provideContext);
 		}
 
-		extension.setNamedZomboidProvider(namedZomboidProvider);
-		namedZomboidProvider.provide(provideContext);
+		namedMinecraftProvider.provide(provideContext);
 	}
 
 	private void registerGameProcessors(ConfigContext configContext) {
@@ -503,17 +551,9 @@ public abstract class CompileConfiguration implements Runnable {
 		});
 	}
 
-	// This is a nasty piece of work, but seems to work quite nicely.
 	// We need a lock that works across classloaders, a regular synchronized method will not work here.
-	// We can abuse system properties as a shared object store that we know for sure will be on the same classloader regardless of what Gradle does to loom.
-	// This allows us to ensure that all instances of loom regardless of classloader get the same object to lock on.
+	// Interned strings are shared across classloaders, ensuring that all instances of loom use the same lock.
 	private static Object getGlobalLockObject() {
-		if (!System.getProperties().contains(LOCK_PROPERTY_KEY)) {
-			// The .intern resolves a possible race where two difference value objects (remember not the same classloader) are set.
-			//noinspection StringOperationCanBeSimplified
-			System.getProperties().setProperty(LOCK_PROPERTY_KEY, LOCK_PROPERTY_KEY.intern());
-		}
-
-		return Objects.requireNonNull(System.getProperty(LOCK_PROPERTY_KEY));
+		return GLOBAL_LOCK;
 	}
 }
