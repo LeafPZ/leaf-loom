@@ -3,7 +3,6 @@
 import groovy.json.JsonOutput
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import java.net.URI
 import java.util.Properties
 
 val isCiBuild = providers.environmentVariable("CI").map { it.toBoolean() }.orElse(false).get()
@@ -115,8 +114,6 @@ dependencies {
         isTransitive = false
     }
 
-    implementation(libs.fabric.loom.nativelib)
-
     // decompilers
     "cfrCompileOnly"(runtimeLibs.cfr)
     "cfrCompileOnly"(libs.fabric.mapping.io)
@@ -162,6 +159,8 @@ dependencies {
     testImplementation(testLibs.bcutil)
     testImplementation(testLibs.bcpkix)
     testImplementation(testLibs.fabric.loader)
+    testImplementation(runtimeLibs.cfr)
+    testImplementation(runtimeLibs.vineflower)
 
     compileOnly(runtimeLibs.jetbrains.annotations)
     testCompileOnly(runtimeLibs.jetbrains.annotations)
@@ -175,19 +174,19 @@ java {
     withSourcesJar()
     withJavadocJar()
 
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 kotlin {
     compilerOptions {
-        jvmTarget = JvmTarget.JVM_21
+        jvmTarget = JvmTarget.JVM_25
     }
 }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.release = 21
+    options.release = 25
 }
 
 // The publish tasks appear to write to the same files, so we need to ensure they don't run in parallel.
@@ -313,6 +312,7 @@ tasks.register("writeActionsTestMatrix") {
 // Workaround https://github.com/gradle/gradle/issues/25898
 tasks.withType<Test>().configureEach {
     jvmArgs = listOf(
+        "--enable-native-access=ALL-UNNAMED",
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--add-opens=java.base/java.util=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
