@@ -225,27 +225,12 @@ tasks.wrapper {
     distributionType = Wrapper.DistributionType.ALL
 }
 
-tasks.register("downloadGradleSources") {
+tasks.register<DownloadGradleSources>("downloadGradleSources") {
     description = "Downloads the Gradle API sources next to the API jar." +
-        "May require you to manually attach the sources jar."
-    // TODO(aoqia): Implement in Kotlin
+        " May require you to manually attach the sources jar."
 
-    doLast {
-        // Awful hack to find the gradle api location
-        val gradleApiFile = project.configurations.detachedConfiguration(dependencies.gradleApi()).files.find {
-            it.name.startsWith("gradle-api")
-        }
-
-        val gradleApiSources = File(gradleApiFile!!.absolutePath.replace(".jar", "-sources.jar"))
-        val url = "https://services.gradle.org/distributions/gradle-${GradleVersion.current().version}-src.zip"
-
-        gradleApiSources.delete()
-
-        println("Downloading (${url}) to (${gradleApiSources})")
-        gradleApiSources.outputStream().use { out ->
-            URI.create(url).toURL().openStream().use { it.copyTo(out) }
-        }
-    }
+    gradleApi.from(configurations.detachedConfiguration(dependencies.gradleApi()))
+	gradleVersion.set(GradleVersion.current().version)
 }
 
 tasks.named<Test>("test") {
