@@ -1,9 +1,11 @@
 @file:Suppress("AvoidDuplicateDependencies")
 
+import com.diffplug.spotless.LineEnding
 import groovy.json.JsonOutput
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import java.util.Properties
+import java.nio.charset.Charset
+import java.util.*
 
 val isCiBuild = providers.environmentVariable("CI").map { it.toBoolean() }.orElse(false).get()
 val isSnapshot = providers.gradleProperty("isSnapshot").map { it.toBoolean() }.orElse(false).get()
@@ -38,9 +40,10 @@ plugins {
     idea
     eclipse
     groovy
-//    checkstyle
+    checkstyle
+
     alias(libs.plugins.kotlin)
-//    alias(libs.plugins.spotless)
+    alias(libs.plugins.spotless)
     alias(libs.plugins.retry)
 
     // Generating the Gradle plugin marker POM
@@ -228,7 +231,7 @@ tasks.register<DownloadGradleSources>("downloadGradleSources") {
         " May require you to manually attach the sources jar."
 
     gradleApi.from(configurations.detachedConfiguration(dependencies.gradleApi()))
-	gradleVersion.set(GradleVersion.current().version)
+    gradleVersion.set(GradleVersion.current().version)
 }
 
 tasks.named<Test>("test") {
@@ -319,64 +322,73 @@ tasks.withType<Test>().configureEach {
     )
 }
 
-//spotless {
-//    setLineEndings(LineEnding.UNIX)
+spotless {
+    setEncoding(Charset.forName("UTF-8"))
+    setLineEndings(LineEnding.UNIX)
+
+    java {
+        targetExclude("**/generated/**")
+
+//        importOrder("java|javax", "", "net.fabricmc", "\\#net.fabricmc", "$group", "\\#", "\\#$group")
 //
-//    java {
-//        targetExclude("**/generated/**")
-//
-//        importOrder("java|javax", "", "\\#", "$group", "\\#$group")
 //        removeUnusedImports()
 //        forbidWildcardImports()
+//        forbidModuleImports()
 //
 //        cleanthat()
-//        eclipse().configFile(file("eclipse-formatter.xml"))
-//        // NOTE(aoqia): It's a nice feature but it causes some issues, so it will remain disabled for now.
+////        eclipse().configFile(file("eclipse-formatter.xml"))
 ////            .sortMembersEnabled(true)
+//
 //        formatAnnotations()
 //
 //        trimTrailingWhitespace()
 //        endWithNewline()
-//        licenseHeaderFile(file("HEADER")).yearSeparator("-")
-//    }
-//
-//    groovy {
-//        importOrder("java|javax", "groovy", "", "\\#", "$group", "\\#$group")
-//
-//        trimTrailingWhitespace()
-//        endWithNewline()
-//        licenseHeaderFile(file("HEADER")).yearSeparator("-")
-//        removeSemicolons()
-//
-//        greclipse()
-//    }
-//
-//    groovyGradle {
-//        target("src/**/*.gradle", "*.gradle")
-//        // Exclude build.gradle because it keeps pestering me about it!
-//        targetExclude("**/build.gradle")
-//
-//        trimTrailingWhitespace()
-//        endWithNewline()
-//        greclipse()
-//    }
-//
-//    kotlin {
-//        targetExclude("**/build.gradle.kts")
-//        targetExclude("src/test/resources/projects/*/**")
-//
-//        ktlint()
-//
-//        trimTrailingWhitespace()
-//        endWithNewline()
-//        licenseHeaderFile(file("HEADER")).yearSeparator("-")
-//    }
-//}
 
+        toggleOffOn()
+        licenseHeaderFile(file("HEADER")).yearSeparator("-").onlyIfContentMatches("^[^/]{2}")
+    }
 
-// checkstyle {
-//     configFile = file("checkstyle.xml")
-// }
+    groovy {
+        importOrder("java|javax", "groovy", "", "net.fabricmc", "\\#net.fabricmc", "$group", "\\#", "\\#$group")
+
+        removeSemicolons()
+        greclipse()
+
+        trimTrailingWhitespace()
+        endWithNewline()
+
+        licenseHeaderFile(file("HEADER")).yearSeparator("-").updateYearWithLatest(true)
+    }
+
+    groovyGradle {
+        target("src/**/*.gradle", "*.gradle")
+        targetExclude("**/build.gradle")
+
+        greclipse()
+
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+
+    kotlin {
+        targetExclude("src/test/resources/projects/*/**")
+
+        ktlint()
+
+        trimTrailingWhitespace()
+        endWithNewline()
+
+        licenseHeaderFile(file("HEADER")).yearSeparator("-").updateYearWithLatest(true)
+    }
+
+    kotlinGradle {
+        ktlint()
+    }
+}
+
+checkstyle {
+    configFile = file("checkstyle.xml")
+}
 
 gradlePlugin {
     website = property("url").toString()
