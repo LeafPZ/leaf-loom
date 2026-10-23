@@ -171,7 +171,6 @@ ij_java_prefer_longer_names = true
 ij_java_prefer_parameters_wrap = false
 ij_java_preserve_module_imports = true
 ij_java_record_components_wrap = on_every_item
-ij_java_repeat_annotations =
 ij_java_repeat_synchronized = true
 ij_java_replace_instanceof_and_cast = false
 ij_java_replace_null_check = true
@@ -288,7 +287,6 @@ ij_java_wrap_long_lines = true
 ij_java_wrap_semicolon_after_call_chain = false
 
 [{*.kt,*.kts}]
-ij_visual_guides =
 ij_kotlin_align_in_columns_case_branch = false
 ij_kotlin_align_multiline_binary_operation = false
 ij_kotlin_align_multiline_extends_list = false
