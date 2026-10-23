@@ -43,11 +43,12 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 
+import net.fabricmc.tinyremapper.TinyRemapper;
+
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.ConfigContext;
 import dev.aoqia.leaf.loom.util.LazyCloseable;
 import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
-import net.fabricmc.tinyremapper.TinyRemapper;
 
 public final class ContextImplHelper {
 	private ContextImplHelper() {

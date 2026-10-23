@@ -43,12 +43,13 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.function.Predicate;
 
-import dev.aoqia.leaf.loom.configuration.mods.ArtifactMetadata;
-import dev.aoqia.leaf.loom.configuration.mods.dependency.ModDependency;
-import dev.aoqia.leaf.loom.configuration.mods.dependency.refmap.MixinRefmapInliner;
 import net.fabricmc.tinyremapper.InputTag;
 import net.fabricmc.tinyremapper.TinyRemapper;
 import net.fabricmc.tinyremapper.extension.mixin.MixinExtension;
+
+import dev.aoqia.leaf.loom.configuration.mods.ArtifactMetadata;
+import dev.aoqia.leaf.loom.configuration.mods.dependency.ModDependency;
+import dev.aoqia.leaf.loom.configuration.mods.dependency.refmap.MixinRefmapInliner;
 
 final class MixinRemap implements ModProcessorExtension {
 	static final MixinRemap INSTANCE = new MixinRemap();

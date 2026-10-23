@@ -54,6 +54,11 @@ import org.gradle.api.artifacts.Dependency;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.fabricmc.mappingio.adapter.MappingDstNsReorder;
+import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch;
+import net.fabricmc.mappingio.format.tiny.Tiny2FileWriter;
+import net.fabricmc.mappingio.tree.MemoryMappingTree;
+
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingContext;
@@ -67,10 +72,6 @@ import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.unpick.Unpick
 import dev.aoqia.leaf.loom.configuration.providers.mappings.unpick.UnpickMetadata;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.utils.AddConstructorMappingVisitor;
 import dev.aoqia.leaf.loom.util.ZipUtils;
-import net.fabricmc.mappingio.adapter.MappingDstNsReorder;
-import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch;
-import net.fabricmc.mappingio.format.tiny.Tiny2FileWriter;
-import net.fabricmc.mappingio.tree.MemoryMappingTree;
 
 public record LayeredMappingsFactory(LayeredMappingSpec spec) {
 	private static final String GROUP = "loom";

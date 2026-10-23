@@ -51,7 +51,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-
 import javax.inject.Inject;
 
 import com.google.gson.JsonElement;
@@ -60,16 +59,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
 
-import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
-import dev.aoqia.leaf.loom.api.processor.MarkdownJavadocOption;
-import dev.aoqia.leaf.loom.api.processor.ZomboidJarProcessor;
-import dev.aoqia.leaf.loom.api.processor.ProcessorContext;
-import dev.aoqia.leaf.loom.api.processor.SpecContext;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
-import dev.aoqia.leaf.loom.util.Checksum;
-import dev.aoqia.leaf.loom.util.Constants;
-import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
-import dev.aoqia.leaf.loom.util.fmj.LeafModJsonSource;
 import net.fabricmc.mappingio.MappedElementKind;
 import net.fabricmc.mappingio.MappingReader;
 import net.fabricmc.mappingio.MappingUtil;
@@ -79,6 +68,17 @@ import net.fabricmc.mappingio.adapter.MappingNsRenamer;
 import net.fabricmc.mappingio.tree.MappingTree;
 import net.fabricmc.mappingio.tree.MappingTreeView;
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
+
+import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
+import dev.aoqia.leaf.loom.api.processor.MarkdownJavadocOption;
+import dev.aoqia.leaf.loom.api.processor.ProcessorContext;
+import dev.aoqia.leaf.loom.api.processor.SpecContext;
+import dev.aoqia.leaf.loom.api.processor.ZomboidJarProcessor;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
+import dev.aoqia.leaf.loom.util.Checksum;
+import dev.aoqia.leaf.loom.util.Constants;
+import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
+import dev.aoqia.leaf.loom.util.fmj.LeafModJsonSource;
 
 public abstract class ModJavadocProcessor implements ZomboidJarProcessor<ModJavadocProcessor.Spec> {
 	private static final Logger LOGGER = LoggerFactory.getLogger(ModJavadocProcessor.class);

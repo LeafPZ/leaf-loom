@@ -42,16 +42,16 @@ package dev.aoqia.leaf.loom.api.mappings.layered;
 import java.nio.file.Path;
 import java.util.function.Supplier;
 
-import dev.aoqia.leaf.loom.util.copygamefile.CopyGameFileBuilder;
-
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.MinimalExternalModuleDependency;
 import org.gradle.api.logging.Logger;
 import org.jetbrains.annotations.ApiStatus;
 
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
-import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
+
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
+import dev.aoqia.leaf.loom.util.copygamefile.CopyGameFileBuilder;
+import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
 
 @ApiStatus.Experimental /* Very Experimental and not cleanly separated from the impl atm */
 public interface MappingContext {

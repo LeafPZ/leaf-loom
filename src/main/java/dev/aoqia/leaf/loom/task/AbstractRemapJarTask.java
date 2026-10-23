@@ -51,7 +51,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Action;

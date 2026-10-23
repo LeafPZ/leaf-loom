@@ -42,7 +42,6 @@ package dev.aoqia.leaf.loom.task.launch;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-
 import javax.inject.Inject;
 
 import org.gradle.api.UncheckedIOException;

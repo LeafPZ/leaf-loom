@@ -39,10 +39,10 @@
 
 package dev.aoqia.leaf.loom.util;
 
+import java.nio.file.Path;
+
 import org.jetbrains.annotations.ApiStatus;
 import org.objectweb.asm.Opcodes;
-
-import java.nio.file.Path;
 
 public class Constants {
     public static final String VERSION_MANIFESTS = "https://raw.githubusercontent.com/LeafPZ/leaf/refs/heads/main/dist/manifests";

@@ -41,7 +41,6 @@ package dev.aoqia.leaf.loom.task;
 
 import java.net.URISyntaxException;
 import java.time.Duration;
-
 import javax.inject.Inject;
 
 import org.gradle.api.DefaultTask;

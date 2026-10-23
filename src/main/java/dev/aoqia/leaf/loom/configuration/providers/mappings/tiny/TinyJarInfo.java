@@ -50,9 +50,10 @@ import java.nio.file.StandardCopyOption;
 import java.util.Optional;
 import java.util.jar.Manifest;
 
-import dev.aoqia.leaf.loom.util.FileSystemUtil;
 import net.fabricmc.mappingio.MappingReader;
 import net.fabricmc.mappingio.format.MappingFormat;
+
+import dev.aoqia.leaf.loom.util.FileSystemUtil;
 
 public record TinyJarInfo(boolean v2, Optional<String> gameVersionId) {
 	public static final String MAPPINGS_PATH = "mappings/mappings.tiny";

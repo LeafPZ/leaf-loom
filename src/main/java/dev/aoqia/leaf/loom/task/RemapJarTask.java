@@ -45,7 +45,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 import java.util.stream.Stream;
-
 import javax.inject.Inject;
 
 import com.google.gson.JsonObject;

@@ -56,6 +56,10 @@ import org.gradle.api.tasks.PathSensitivity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.fabricmc.mappingio.MappingReader;
+import net.fabricmc.mappingio.tree.MemoryMappingTree;
+import net.fabricmc.tinyremapper.IMappingProvider;
+
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.task.AbstractRemapJarTask;
@@ -63,9 +67,6 @@ import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
 import dev.aoqia.leaf.loom.util.service.Service;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
-import net.fabricmc.mappingio.MappingReader;
-import net.fabricmc.mappingio.tree.MemoryMappingTree;
-import net.fabricmc.tinyremapper.IMappingProvider;
 
 /**
  * A service that provides mappings for remapping.

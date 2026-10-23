@@ -39,11 +39,6 @@
 
 package dev.aoqia.leaf.loom.configuration.sandbox;
 
-import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.ParseException;
-import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.getJsonObject;
-import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readInt;
-import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readString;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
@@ -58,6 +53,11 @@ import com.google.gson.JsonObject;
 
 import dev.aoqia.leaf.loom.util.Platform;
 import dev.aoqia.leaf.loom.util.ZipUtils;
+
+import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.ParseException;
+import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.getJsonObject;
+import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readInt;
+import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readString;
 
 public sealed interface SandboxMetadata permits SandboxMetadata.V1 {
 	String SANDBOX_METADATA_FILENAME = "fabric-sandbox.json";

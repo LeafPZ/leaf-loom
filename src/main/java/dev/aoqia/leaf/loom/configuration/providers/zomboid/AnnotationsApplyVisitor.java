@@ -58,14 +58,15 @@ import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TypeAnnotationNode;
 
+import net.fabricmc.tinyremapper.TinyRemapper;
+import net.fabricmc.tinyremapper.api.TrClass;
+
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.annotations.AnnotationsData;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.annotations.ClassAnnotationData;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.annotations.GenericAnnotationData;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.annotations.MethodAnnotationData;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.annotations.TypeAnnotationKey;
 import dev.aoqia.leaf.loom.util.Constants;
-import net.fabricmc.tinyremapper.TinyRemapper;
-import net.fabricmc.tinyremapper.api.TrClass;
 
 public record AnnotationsApplyVisitor(AnnotationsData annotationsData) implements TinyRemapper.ApplyVisitorProvider {
 	@Override

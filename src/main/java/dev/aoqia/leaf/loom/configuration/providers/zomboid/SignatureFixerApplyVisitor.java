@@ -48,13 +48,14 @@ import org.gradle.api.Project;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.commons.Remapper;
 
+import net.fabricmc.tinyremapper.TinyRemapper;
+import net.fabricmc.tinyremapper.api.TrClass;
+
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
-import net.fabricmc.tinyremapper.TinyRemapper;
-import net.fabricmc.tinyremapper.api.TrClass;
 
 public record SignatureFixerApplyVisitor(Map<String, String> signatureFixes) implements TinyRemapper.ApplyVisitorProvider {
 	@Override

@@ -44,9 +44,10 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Predicate;
 
-import dev.aoqia.leaf.loom.configuration.mods.dependency.ModDependency;
 import net.fabricmc.tinyremapper.InputTag;
 import net.fabricmc.tinyremapper.TinyRemapper;
+
+import dev.aoqia.leaf.loom.configuration.mods.dependency.ModDependency;
 
 /**
  * An interface to aid with applying mod-specific remapping extensions.

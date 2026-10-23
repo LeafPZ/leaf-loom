@@ -59,7 +59,6 @@ import java.util.Objects;
 import java.util.StringJoiner;
 import java.util.UUID;
 import java.util.stream.Collectors;
-
 import javax.inject.Inject;
 
 import org.gradle.api.file.ConfigurableFileCollection;

@@ -41,7 +41,6 @@ package dev.aoqia.leaf.loom.task;
 
 import java.io.File;
 import java.util.Objects;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Project;
@@ -52,7 +51,6 @@ import org.gradle.api.tasks.Sync;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskOutputs;
 import org.gradle.api.tasks.TaskProvider;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

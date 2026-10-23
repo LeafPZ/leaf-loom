@@ -45,7 +45,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Action;
@@ -61,8 +60,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.aoqia.leaf.loom.api.mappings.intermediate.IntermediateMappingsProvider;
-import dev.aoqia.leaf.loom.extension.LoomGradleExtensionApiImpl;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.tiny.TinyJarInfo;
+import dev.aoqia.leaf.loom.extension.LoomGradleExtensionApiImpl;
 import dev.aoqia.leaf.loom.util.Checksum;
 
 @ApiStatus.Internal

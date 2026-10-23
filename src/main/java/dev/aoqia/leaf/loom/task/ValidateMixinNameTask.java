@@ -49,7 +49,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-
 import javax.inject.Inject;
 
 import org.gradle.api.GradleException;
@@ -75,8 +74,9 @@ import org.objectweb.asm.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import dev.aoqia.leaf.loom.util.Constants;
 import net.fabricmc.tinyremapper.extension.mixin.common.data.Constant;
+
+import dev.aoqia.leaf.loom.util.Constants;
 
 /**
  * Task to validate mixin names.

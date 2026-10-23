@@ -60,11 +60,12 @@ import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.TypeAnnotationNode;
 
+import net.fabricmc.tinyremapper.TinyRemapper;
+
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
 import dev.aoqia.leaf.loom.task.service.TinyRemapperService;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
-import net.fabricmc.tinyremapper.TinyRemapper;
 
 public record AnnotationsData(Map<String, ClassAnnotationData> classes, String namespace) {
 	public static final Gson GSON = new GsonBuilder()

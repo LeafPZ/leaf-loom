@@ -43,10 +43,6 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 
-import dev.aoqia.leaf.loom.configuration.mods.ArtifactMetadata;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
-import dev.aoqia.leaf.loom.util.copygamefile.CopyGameFileBuilder;
-
 import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
@@ -59,8 +55,10 @@ import dev.aoqia.leaf.loom.api.LoomGradleExtensionAPI;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.InstallerData;
 import dev.aoqia.leaf.loom.configuration.accesswidener.AccessWidenerFile;
+import dev.aoqia.leaf.loom.configuration.mods.ArtifactMetadata;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.LayeredMappingsFactory;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidMetadataProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.library.LibraryProcessorManager;
@@ -69,6 +67,7 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.NamedZomboidPr
 import dev.aoqia.leaf.loom.extension.LoomFiles;
 import dev.aoqia.leaf.loom.extension.MixinExtension;
 import dev.aoqia.leaf.loom.extension.RemapperExtensionHolder;
+import dev.aoqia.leaf.loom.util.copygamefile.CopyGameFileBuilder;
 import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
 
 @ApiStatus.Internal

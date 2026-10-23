@@ -40,7 +40,6 @@
 package dev.aoqia.leaf.loom.api;
 
 import java.util.Set;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Named;

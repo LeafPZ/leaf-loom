@@ -43,7 +43,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Map;
-
 import javax.inject.Inject;
 
 import org.gradle.api.NamedDomainObjectProvider;

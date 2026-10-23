@@ -43,13 +43,14 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.function.Predicate;
 
+import net.fabricmc.tinyremapper.InputTag;
+import net.fabricmc.tinyremapper.TinyRemapper;
+
 import dev.aoqia.leaf.loom.configuration.mods.ArtifactMetadata;
 import dev.aoqia.leaf.loom.configuration.mods.dependency.ModDependency;
 import dev.aoqia.leaf.loom.configuration.mods.dependency.refmap.MixinReferenceRemapper;
 import dev.aoqia.leaf.loom.configuration.mods.dependency.refmap.MixinRefmapInliner;
 import dev.aoqia.leaf.loom.configuration.mods.dependency.refmap.MixinRefmapInlinerApplyVisitorProvider;
-import net.fabricmc.tinyremapper.InputTag;
-import net.fabricmc.tinyremapper.TinyRemapper;
 
 final class InlineRefmap implements ModProcessorExtension {
 	static final InlineRefmap INSTANCE = new InlineRefmap();

@@ -47,10 +47,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.assets.AssetIndex;
-
-import dev.aoqia.leaf.loom.util.Platform;
-
 import org.gradle.api.Project;
 import org.gradle.api.provider.Property;
 import org.jspecify.annotations.Nullable;
@@ -60,7 +56,9 @@ import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.configuration.ConfigContext;
 import dev.aoqia.leaf.loom.configuration.DependencyInfo;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ManifestLocations.ManifestLocation;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.assets.AssetIndex;
 import dev.aoqia.leaf.loom.util.Constants;
+import dev.aoqia.leaf.loom.util.Platform;
 import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
 
 public final class ZomboidMetadataProvider {

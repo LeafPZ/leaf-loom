@@ -42,18 +42,18 @@ package dev.aoqia.leaf.loom.configuration.processors;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
-
 import javax.inject.Inject;
 
 import org.jspecify.annotations.Nullable;
 
-import dev.aoqia.leaf.loom.api.processor.ZomboidJarProcessor;
-import dev.aoqia.leaf.loom.api.processor.ProcessorContext;
-import dev.aoqia.leaf.loom.api.processor.SpecContext;
-import dev.aoqia.leaf.loom.util.TinyRemapperLoggerAdapter;
 import net.fabricmc.tinyremapper.IMappingProvider;
 import net.fabricmc.tinyremapper.OutputConsumerPath;
 import net.fabricmc.tinyremapper.TinyRemapper;
+
+import dev.aoqia.leaf.loom.api.processor.ProcessorContext;
+import dev.aoqia.leaf.loom.api.processor.SpecContext;
+import dev.aoqia.leaf.loom.api.processor.ZomboidJarProcessor;
+import dev.aoqia.leaf.loom.util.TinyRemapperLoggerAdapter;
 
 public class JsrAnnotationRemapperProcessor implements ZomboidJarProcessor<JsrAnnotationRemapperProcessor.Spec> {
 	private static final Map<String, String> JETBRAINS_TO_JSR = Map.of(

@@ -46,7 +46,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Project;

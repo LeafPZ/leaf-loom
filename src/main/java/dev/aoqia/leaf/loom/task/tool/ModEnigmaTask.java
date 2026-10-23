@@ -41,7 +41,6 @@ package dev.aoqia.leaf.loom.task.tool;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Project;

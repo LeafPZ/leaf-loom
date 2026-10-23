@@ -65,10 +65,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import dev.aoqia.leaf.loom.LoomGradleExtension;
-import dev.aoqia.leaf.loom.util.Constants;
-import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
-
 import org.gradle.api.JavaVersion;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
@@ -76,8 +72,11 @@ import org.objectweb.asm.tree.InnerClassNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.util.CompletableFutureCollector;
+import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;
+import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public final class JarWalker {
 	private static final Logger LOGGER = LoggerFactory.getLogger(JarWalker.class);

@@ -50,8 +50,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 
-import org.jspecify.annotations.Nullable;
 import org.jetbrains.annotations.VisibleForTesting;
+import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.TypePath;

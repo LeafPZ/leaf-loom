@@ -40,7 +40,6 @@
 package dev.aoqia.leaf.loom.task;
 
 import java.io.File;
-
 import javax.inject.Inject;
 
 import org.gradle.api.tasks.Sync;

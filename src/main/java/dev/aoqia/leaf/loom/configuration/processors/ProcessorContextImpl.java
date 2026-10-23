@@ -41,6 +41,9 @@ package dev.aoqia.leaf.loom.configuration.processors;
 
 import java.util.Objects;
 
+import net.fabricmc.mappingio.tree.MemoryMappingTree;
+import net.fabricmc.tinyremapper.TinyRemapper;
+
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.api.processor.ProcessorContext;
@@ -49,8 +52,6 @@ import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJarConfiguration;
 import dev.aoqia.leaf.loom.util.LazyCloseable;
-import net.fabricmc.mappingio.tree.MemoryMappingTree;
-import net.fabricmc.tinyremapper.TinyRemapper;
 
 public record ProcessorContextImpl(ConfigContext configContext, ZomboidJar minecraftJar) implements ProcessorContext {
 	@Override

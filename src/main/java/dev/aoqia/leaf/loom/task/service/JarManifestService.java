@@ -53,12 +53,13 @@ import org.gradle.api.services.BuildService;
 import org.gradle.api.services.BuildServiceParameters;
 import org.gradle.util.GradleVersion;
 
+import net.fabricmc.tinyremapper.TinyRemapper;
+
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.configuration.InstallerData;
 import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.LoomVersions;
-import net.fabricmc.tinyremapper.TinyRemapper;
 
 public abstract class JarManifestService implements BuildService<JarManifestService.Params> {
 	interface Params extends BuildServiceParameters {

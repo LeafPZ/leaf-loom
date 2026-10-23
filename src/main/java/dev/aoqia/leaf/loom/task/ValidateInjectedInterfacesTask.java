@@ -50,7 +50,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Action;
@@ -86,6 +85,7 @@ import org.slf4j.LoggerFactory;
 
 import net.fabricmc.classtweaker.api.ClassTweakerReader;
 import net.fabricmc.classtweaker.api.visitor.ClassTweakerVisitor;
+
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.configuration.ifaceinject.InterfaceInjectionProcessor;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;

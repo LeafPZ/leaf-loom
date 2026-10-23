@@ -42,7 +42,6 @@ package dev.aoqia.leaf.loom.task;
 import java.io.File;
 import java.io.Serializable;
 import java.util.Set;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Action;

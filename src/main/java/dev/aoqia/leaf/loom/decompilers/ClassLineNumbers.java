@@ -39,8 +39,6 @@
 
 package dev.aoqia.leaf.loom.decompilers;
 
-import static java.text.MessageFormat.format;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Writer;
@@ -50,6 +48,8 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.jspecify.annotations.Nullable;
+
+import static java.text.MessageFormat.format;
 
 public record ClassLineNumbers(Map<String, ClassLineNumbers.Entry> lineMap) {
 	public ClassLineNumbers {

@@ -40,7 +40,6 @@
 package dev.aoqia.leaf.loom.extension;
 
 import java.lang.reflect.Constructor;
-
 import javax.inject.Inject;
 
 import org.gradle.api.provider.Property;
@@ -50,12 +49,13 @@ import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.commons.Remapper;
 
+import net.fabricmc.tinyremapper.TinyRemapper;
+import net.fabricmc.tinyremapper.api.TrClass;
+
 import dev.aoqia.leaf.loom.api.remapping.RemapperContext;
 import dev.aoqia.leaf.loom.api.remapping.RemapperExtension;
 import dev.aoqia.leaf.loom.api.remapping.RemapperParameters;
 import dev.aoqia.leaf.loom.api.remapping.TinyRemapperExtension;
-import net.fabricmc.tinyremapper.TinyRemapper;
-import net.fabricmc.tinyremapper.api.TrClass;
 
 public abstract class RemapperExtensionHolder {
 	@Inject

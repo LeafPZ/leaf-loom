@@ -48,6 +48,13 @@ import java.util.Map;
 
 import org.jspecify.annotations.Nullable;
 
+import net.fabricmc.mappingio.MappingReader;
+import net.fabricmc.mappingio.MappingUtil;
+import net.fabricmc.mappingio.MappingVisitor;
+import net.fabricmc.mappingio.adapter.MappingNsRenamer;
+import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch;
+import net.fabricmc.mappingio.format.MappingFormat;
+
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingLayer;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.annotations.AnnotationsData;
@@ -57,12 +64,6 @@ import dev.aoqia.leaf.loom.configuration.providers.mappings.intermediary.Interme
 import dev.aoqia.leaf.loom.configuration.providers.mappings.unpick.UnpickMetadata;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;
 import dev.aoqia.leaf.loom.util.ZipUtils;
-import net.fabricmc.mappingio.MappingReader;
-import net.fabricmc.mappingio.MappingUtil;
-import net.fabricmc.mappingio.MappingVisitor;
-import net.fabricmc.mappingio.adapter.MappingNsRenamer;
-import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch;
-import net.fabricmc.mappingio.format.MappingFormat;
 
 public record FileMappingsLayer(
 		Path path, String mappingPath,

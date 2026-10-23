@@ -48,9 +48,9 @@ import org.gradle.api.Project;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
 
+import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.LoomGradleExtensionAPI;
 import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
-import dev.aoqia.leaf.loom.LoomGradleExtension;
 
 public class LeafModJsonHelpers {
 	/**

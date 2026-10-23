@@ -40,7 +40,6 @@
 package dev.aoqia.leaf.loom.util;
 
 import java.io.OutputStream;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Project;

@@ -39,16 +39,16 @@
 
 package dev.aoqia.leaf.loom.util.fmj;
 
-import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readString;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import org.jspecify.annotations.Nullable;
 import org.jetbrains.annotations.VisibleForTesting;
+import org.jspecify.annotations.Nullable;
+
+import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readString;
 
 public abstract sealed class LeafModJson permits LeafModJsonV1, LeafModJsonV2, LeafModJson.Mockable {
 	protected final JsonObject jsonObject;

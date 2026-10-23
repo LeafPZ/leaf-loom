@@ -53,11 +53,12 @@ import org.jetbrains.java.decompiler.struct.StructRecordComponent;
 
 import net.fabricmc.fernflower.api.FabricJavadocStyle;
 import net.fabricmc.fernflower.api.IFabricJavadocProvider;
-import dev.aoqia.leaf.loom.api.decompilers.JavadocStyle;
 import net.fabricmc.mappingio.MappingReader;
 import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch;
 import net.fabricmc.mappingio.tree.MappingTree;
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
+
+import dev.aoqia.leaf.loom.api.decompilers.JavadocStyle;
 
 public class TinyJavadocProvider implements IFabricJavadocProvider {
 	private static final int ACC_STATIC = 0x0008;

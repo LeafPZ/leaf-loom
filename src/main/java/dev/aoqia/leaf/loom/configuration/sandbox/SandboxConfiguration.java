@@ -41,7 +41,6 @@ package dev.aoqia.leaf.loom.configuration.sandbox;
 
 import java.nio.file.Path;
 import java.util.Objects;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Project;

@@ -49,8 +49,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 
-import dev.aoqia.leaf.loom.LoomRemapGradlePlugin;
-
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.file.ConfigurableFileCollection;
@@ -66,6 +64,7 @@ import org.slf4j.LoggerFactory;
 import net.fabricmc.tinyremapper.IMappingProvider;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
+import dev.aoqia.leaf.loom.LoomRemapGradlePlugin;
 import dev.aoqia.leaf.loom.build.mixin.AnnotationProcessorInvoker;
 import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;

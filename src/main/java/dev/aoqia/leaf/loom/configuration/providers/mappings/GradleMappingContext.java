@@ -45,8 +45,6 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.function.Supplier;
 
-import dev.aoqia.leaf.loom.util.copygamefile.CopyGameFileBuilder;
-
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.Dependency;
@@ -54,13 +52,15 @@ import org.gradle.api.artifacts.MinimalExternalModuleDependency;
 import org.gradle.api.artifacts.ResolutionStrategy;
 import org.gradle.api.logging.Logger;
 
+import net.fabricmc.mappingio.tree.MemoryMappingTree;
+
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingContext;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
+import dev.aoqia.leaf.loom.util.copygamefile.CopyGameFileBuilder;
 import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
-import net.fabricmc.mappingio.tree.MemoryMappingTree;
 
 public class GradleMappingContext implements MappingContext {
 	private final Project project;

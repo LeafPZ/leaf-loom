@@ -41,7 +41,6 @@ package dev.aoqia.leaf.loom.configuration.ide.idea;
 
 import java.io.IOException;
 import java.io.StringReader;
-
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 

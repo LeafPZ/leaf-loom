@@ -39,8 +39,6 @@
 
 package dev.aoqia.leaf.loom.configuration;
 
-import static dev.aoqia.leaf.loom.util.Constants.Configurations;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -49,16 +47,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.function.Consumer;
-
 import javax.inject.Inject;
-
-import dev.aoqia.leaf.loom.configuration.processors.JsrAnnotationRemapperProcessor;
-import dev.aoqia.leaf.loom.configuration.processors.speccontext.DebofConfiguration;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.NoRemapMappingConfiguration;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.IntermediaryZomboidProvider;
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.NamedZomboidProvider;
-import dev.aoqia.leaf.loom.util.Constants;
 
 import org.gradle.api.Action;
 import org.gradle.api.GradleException;
@@ -84,17 +73,24 @@ import dev.aoqia.leaf.loom.build.mixin.KaptApInvoker;
 import dev.aoqia.leaf.loom.build.mixin.ScalaApInvoker;
 import dev.aoqia.leaf.loom.configuration.accesswidener.AccessWidenerJarProcessor;
 import dev.aoqia.leaf.loom.configuration.ifaceinject.InterfaceInjectionProcessor;
-import dev.aoqia.leaf.loom.configuration.processors.ZomboidJarProcessorManager;
+import dev.aoqia.leaf.loom.configuration.processors.JsrAnnotationRemapperProcessor;
 import dev.aoqia.leaf.loom.configuration.processors.ModJavadocProcessor;
+import dev.aoqia.leaf.loom.configuration.processors.ZomboidJarProcessorManager;
+import dev.aoqia.leaf.loom.configuration.processors.speccontext.DebofConfiguration;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.LayeredMappingsFactory;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.NoRemapMappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidMetadataProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.AbstractMappedZomboidProvider;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.IntermediaryZomboidProvider;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.NamedZomboidProvider;
 import dev.aoqia.leaf.loom.extension.MixinExtension;
 import dev.aoqia.leaf.loom.task.service.ClasspathGroupService;
 import dev.aoqia.leaf.loom.util.Checksum;
+import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.ExceptionUtil;
 import dev.aoqia.leaf.loom.util.ProcessUtil;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
@@ -102,6 +98,8 @@ import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 import dev.aoqia.leaf.loom.util.gradle.daemon.DaemonUtils;
 import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
+
+import static dev.aoqia.leaf.loom.util.Constants.Configurations;
 
 public abstract class CompileConfiguration implements Runnable {
 	private static final Object GLOBAL_LOCK = "leaf.loom.internal.global.lock".intern();

@@ -49,13 +49,14 @@ import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.Nested;
 
+import net.fabricmc.lorenztiny.TinyMappingsReader;
+
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.util.Lazy;
 import dev.aoqia.leaf.loom.util.service.Service;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
-import net.fabricmc.lorenztiny.TinyMappingsReader;
 
 public final class LorenzMappingService extends Service<LorenzMappingService.Options> {
 	public static final ServiceType<Options, LorenzMappingService> TYPE = new ServiceType<>(Options.class, LorenzMappingService.class);

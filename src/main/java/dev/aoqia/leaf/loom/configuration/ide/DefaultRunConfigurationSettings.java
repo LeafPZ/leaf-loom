@@ -41,9 +41,6 @@ package dev.aoqia.leaf.loom.configuration.ide;
 
 import java.util.Locale;
 
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidVersionMeta;
-import dev.aoqia.leaf.loom.util.MirrorUtil;
-
 import org.gradle.api.JavaVersion;
 import org.gradle.api.Project;
 import org.gradle.api.tasks.SourceSet;
@@ -51,8 +48,10 @@ import org.gradle.api.tasks.SourceSet;
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.RunConfiguration;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidVersionMeta;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.library.LibraryContext;
 import dev.aoqia.leaf.loom.util.Constants;
+import dev.aoqia.leaf.loom.util.MirrorUtil;
 import dev.aoqia.leaf.loom.util.Platform;
 import dev.aoqia.leaf.loom.util.Strings;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;

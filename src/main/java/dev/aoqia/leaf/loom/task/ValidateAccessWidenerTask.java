@@ -46,7 +46,6 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.concurrent.atomic.AtomicBoolean;
-
 import javax.inject.Inject;
 
 import org.gradle.api.DefaultTask;

@@ -42,7 +42,6 @@ package dev.aoqia.leaf.loom.configuration.providers.zomboid.verify;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.function.Function;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Project;

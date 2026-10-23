@@ -42,4 +42,3 @@ package dev.aoqia.leaf.loom.test.unit.processor.classes;
 public class ClassWithGenericParams<@AnnPresent T, U> {
 	public <@AnnPresent V> void methodWithTypeParam() { }
 }
-

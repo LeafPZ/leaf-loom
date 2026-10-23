@@ -39,8 +39,6 @@
 
 package dev.aoqia.leaf.loom.util.fmj;
 
-import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readInt;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
@@ -54,8 +52,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import org.gradle.api.Project;
 import org.gradle.api.tasks.SourceSet;
-import org.jspecify.annotations.Nullable;
 import org.jetbrains.annotations.VisibleForTesting;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,6 +61,8 @@ import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;
 import dev.aoqia.leaf.loom.util.ZipUtils;
 import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
+
+import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readInt;
 
 public final class LeafModJsonFactory {
 	public static final String LEAF_MOD_JSON = "leaf.mod.json";

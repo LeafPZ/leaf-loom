@@ -45,9 +45,10 @@ import java.util.Map;
 
 import org.jetbrains.annotations.ApiStatus;
 
+import net.fabricmc.mappingio.MappingVisitor;
+
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingLayer;
 import dev.aoqia.leaf.loom.util.ZipUtils;
-import net.fabricmc.mappingio.MappingVisitor;
 
 @ApiStatus.Experimental
 public record SignatureFixesLayerImpl(Path mappingsFile) implements MappingLayer, SignatureFixesLayer {

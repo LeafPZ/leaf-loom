@@ -39,8 +39,8 @@
 
 package dev.aoqia.leaf.loom.util.nativeplatform;
 
-import java.lang.foreign.Arena;
 import java.lang.foreign.AddressLayout;
+import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.foreign.MemoryLayout;

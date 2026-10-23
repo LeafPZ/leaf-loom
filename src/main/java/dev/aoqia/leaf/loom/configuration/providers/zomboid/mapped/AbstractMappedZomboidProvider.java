@@ -56,6 +56,9 @@ import org.gradle.api.Project;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.fabricmc.tinyremapper.OutputConsumerPath;
+import net.fabricmc.tinyremapper.TinyRemapper;
+
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.ConfigContext;
@@ -65,16 +68,14 @@ import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration
 import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.annotations.AnnotationsData;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.AnnotationsApplyVisitor;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.SignatureFixerApplyVisitor;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.SignatureFixerApplyVisitor;
 import dev.aoqia.leaf.loom.extension.LoomFiles;
 import dev.aoqia.leaf.loom.util.SidedClassVisitor;
 import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
 import dev.aoqia.leaf.loom.util.ZipUtils;
-import net.fabricmc.tinyremapper.OutputConsumerPath;
-import net.fabricmc.tinyremapper.TinyRemapper;
 
 public abstract class AbstractMappedZomboidProvider<M extends ZomboidProvider> implements MappedZomboidProvider.ProviderImpl {
 	private static final Logger LOGGER = LoggerFactory.getLogger(AbstractMappedZomboidProvider.class);

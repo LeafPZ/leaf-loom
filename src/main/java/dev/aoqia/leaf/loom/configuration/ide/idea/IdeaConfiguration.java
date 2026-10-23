@@ -41,7 +41,6 @@ package dev.aoqia.leaf.loom.configuration.ide.idea;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.inject.Inject;
 
 import org.gradle.StartParameter;

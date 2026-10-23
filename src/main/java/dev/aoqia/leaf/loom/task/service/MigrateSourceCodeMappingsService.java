@@ -61,6 +61,8 @@ import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 
+import net.fabricmc.lorenztiny.TinyMappingsJoiner;
+
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.TinyMappingsService;
 import dev.aoqia.leaf.loom.util.DeletingFileVisitor;
@@ -68,8 +70,6 @@ import dev.aoqia.leaf.loom.util.ExceptionUtil;
 import dev.aoqia.leaf.loom.util.service.Service;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
-
-import net.fabricmc.lorenztiny.TinyMappingsJoiner;
 
 public final class MigrateSourceCodeMappingsService extends Service<MigrateSourceCodeMappingsService.Options> {
 	private static final ServiceType<Options, MigrateSourceCodeMappingsService> TYPE = new ServiceType<>(Options.class, MigrateSourceCodeMappingsService.class);

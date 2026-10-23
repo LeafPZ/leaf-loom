@@ -56,6 +56,12 @@ import org.gradle.api.Project;
 import org.gradle.api.provider.Provider;
 import org.jspecify.annotations.Nullable;
 
+import net.fabricmc.mappingio.MappingReader;
+import net.fabricmc.mappingio.format.MappingFormat;
+import net.fabricmc.mappingio.tree.MemoryMappingTree;
+import net.fabricmc.stitch.Command;
+import net.fabricmc.stitch.commands.CommandProposeFieldNames;
+
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.api.decompilers.JavadocStyle;
@@ -69,11 +75,6 @@ import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.DeletingFileVisitor;
 import dev.aoqia.leaf.loom.util.ZipUtils;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
-import net.fabricmc.mappingio.MappingReader;
-import net.fabricmc.mappingio.format.MappingFormat;
-import net.fabricmc.mappingio.tree.MemoryMappingTree;
-import net.fabricmc.stitch.Command;
-import net.fabricmc.stitch.commands.CommandProposeFieldNames;
 
 public final class RemapMappingConfiguration extends MappingConfiguration {
 	private final ServiceFactory serviceFactory;

@@ -40,7 +40,6 @@
 package dev.aoqia.leaf.loom.util.download;
 
 import java.net.URISyntaxException;
-
 import javax.inject.Inject;
 
 import org.gradle.api.Project;

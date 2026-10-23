@@ -43,11 +43,12 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.function.Supplier;
 
-import dev.aoqia.leaf.loom.api.mappings.layered.MappingLayer;
-import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import net.fabricmc.mappingio.MappingVisitor;
 import net.fabricmc.mappingio.adapter.MappingNsCompleter;
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
+
+import dev.aoqia.leaf.loom.api.mappings.layered.MappingLayer;
+import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 
 public record IntermediaryMappingLayer(Supplier<MemoryMappingTree> memoryMappingTree) implements MappingLayer {
 	@Override

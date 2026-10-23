@@ -48,6 +48,9 @@ import java.util.Map;
 
 import org.jspecify.annotations.Nullable;
 
+import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch;
+import net.fabricmc.mappingio.tree.MemoryMappingTree;
+
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingContext;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingLayer;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
@@ -57,8 +60,6 @@ import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.annotations.A
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.signatures.SignatureFixesLayer;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.unpick.UnpickLayer;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.unpick.UnpickMetadata;
-import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch;
-import net.fabricmc.mappingio.tree.MemoryMappingTree;
 
 public class LayeredMappingsProcessor {
 	private final LayeredMappingSpec layeredMappingSpec;

@@ -46,13 +46,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.assets.AssetIndex;
-import dev.aoqia.leaf.loom.util.Constants;
-import dev.aoqia.leaf.loom.util.MirrorUtil;
-
-import dev.aoqia.leaf.loom.util.Platform;
-import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
-
 import org.apache.commons.io.FilenameUtils;
 import org.gradle.api.JavaVersion;
 import org.gradle.api.Project;
@@ -60,7 +53,12 @@ import org.gradle.api.Project;
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.ConfigContext;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.assets.AssetIndex;
 import dev.aoqia.leaf.loom.util.Check;
+import dev.aoqia.leaf.loom.util.Constants;
+import dev.aoqia.leaf.loom.util.MirrorUtil;
+import dev.aoqia.leaf.loom.util.Platform;
+import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public class ZomboidProvider {
 	private final ZomboidMetadataProvider metadataProvider;

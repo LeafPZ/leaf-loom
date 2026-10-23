@@ -47,7 +47,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-
 import javax.inject.Inject;
 
 import groovy.util.Node;

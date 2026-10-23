@@ -50,12 +50,12 @@ import java.util.stream.Collectors;
 
 import dev.aoqia.leaf.loom.configuration.ConfigContext;
 import dev.aoqia.leaf.loom.configuration.mods.dependency.LocalMavenHelper;
-import dev.aoqia.leaf.loom.configuration.processors.ZomboidJarProcessorManager;
 import dev.aoqia.leaf.loom.configuration.processors.ProcessorContextImpl;
+import dev.aoqia.leaf.loom.configuration.processors.ZomboidJarProcessorManager;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.SingleJarEnvType;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.SingleJarEnvType;
 
 public abstract class ProcessedNamedZomboidProvider<M extends ZomboidProvider, P extends NamedZomboidProvider<M>> extends NamedZomboidProvider<M> {
 	private final P parentProvider;

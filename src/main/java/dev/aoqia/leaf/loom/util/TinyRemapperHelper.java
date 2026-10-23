@@ -47,14 +47,15 @@ import java.util.regex.Pattern;
 
 import org.gradle.api.Project;
 
-import dev.aoqia.leaf.loom.LoomGradleExtension;
-import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
-import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import net.fabricmc.mappingio.MappingReader;
 import net.fabricmc.mappingio.tree.MappingTree;
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
 import net.fabricmc.tinyremapper.IMappingProvider;
 import net.fabricmc.tinyremapper.TinyRemapper;
+
+import dev.aoqia.leaf.loom.LoomGradleExtension;
+import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
+import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 /**
  * Contains shortcuts to create tiny remappers using the mappings accessibly to the project.

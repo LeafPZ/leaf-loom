@@ -39,11 +39,6 @@
 
 package dev.aoqia.leaf.loom.util.fmj.gen;
 
-import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.add;
-import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.addArray;
-import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.addRequired;
-import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.addStringOrArray;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -56,6 +51,11 @@ import com.google.gson.JsonPrimitive;
 
 import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.api.fmj.LeafModJsonV1Spec;
+
+import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.add;
+import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.addArray;
+import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.addRequired;
+import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.addStringOrArray;
 
 // Opposite of https://github.com/FabricMC/fabric-loader/blob/master/src/main/java/net/fabricmc/loader/impl/metadata/V1ModMetadataParser.java
 public final class LeafModJsonV1Generator implements LeafModJsonGenerator<LeafModJsonV1Spec> {

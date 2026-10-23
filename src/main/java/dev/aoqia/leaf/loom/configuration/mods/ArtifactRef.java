@@ -39,9 +39,6 @@
 
 package dev.aoqia.leaf.loom.configuration.mods;
 
-import static dev.aoqia.leaf.loom.configuration.mods.ModConfigurationRemapper.MISSING_GROUP;
-import static dev.aoqia.leaf.loom.configuration.mods.ModConfigurationRemapper.replaceIfNullOrEmpty;
-
 import java.nio.file.Path;
 
 import org.gradle.api.NamedDomainObjectProvider;
@@ -54,6 +51,9 @@ import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.jspecify.annotations.Nullable;
 
 import dev.aoqia.leaf.loom.util.Checksum;
+
+import static dev.aoqia.leaf.loom.configuration.mods.ModConfigurationRemapper.MISSING_GROUP;
+import static dev.aoqia.leaf.loom.configuration.mods.ModConfigurationRemapper.replaceIfNullOrEmpty;
 
 public interface ArtifactRef {
 	Path path();

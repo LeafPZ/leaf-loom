@@ -39,9 +39,9 @@
 
 package dev.aoqia.leaf.loom.util;
 
-import org.gradle.api.plugins.ExtensionAware;
-
 import java.nio.file.Path;
+
+import org.gradle.api.plugins.ExtensionAware;
 
 public class MirrorUtil {
     public static Path getGamePath(ExtensionAware aware) {
