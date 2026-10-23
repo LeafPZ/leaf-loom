@@ -71,8 +71,7 @@ public class JarSplitter {
 		this.inputJar = inputJar;
 	}
 
-	@Nullable
-	public Target analyseTarget() {
+	@Nullable public Target analyseTarget() {
 		try (FileSystemUtil.Delegate input = FileSystemUtil.getJarFileSystem(inputJar)) {
 			final Manifest manifest = input.fromInputStream(Manifest::new, Constants.Manifest.PATH);
 

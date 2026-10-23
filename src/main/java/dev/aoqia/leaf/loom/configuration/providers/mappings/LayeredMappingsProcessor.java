@@ -143,8 +143,7 @@ public class LayeredMappingsProcessor {
 		return result;
 	}
 
-	@Nullable
-	public Map<String, String> getSignatureFixes(List<MappingLayer> layers) {
+	@Nullable public Map<String, String> getSignatureFixes(List<MappingLayer> layers) {
 		Map<String, String> signatureFixes = new HashMap<>();
 
 		for (MappingLayer layer : layers) {

@@ -162,7 +162,7 @@ public abstract class ValidateMixinNameTask extends SourceTask {
 	}
 
 	private static String toSimpleName(String internalName) {
-		return internalName.substring(internalName.lastIndexOf("/") + 1);
+		return internalName.substring(internalName.lastIndexOf('/') + 1);
 	}
 
 	@VisibleForTesting
@@ -172,8 +172,7 @@ public abstract class ValidateMixinNameTask extends SourceTask {
 		}
 	}
 
-	@Nullable
-	private static Mixin getMixin(File file) {
+	@Nullable private static Mixin getMixin(File file) {
 		try (InputStream is = new FileInputStream(file)) {
 			return getMixin(is);
 		} catch (IOException e) {
@@ -181,8 +180,7 @@ public abstract class ValidateMixinNameTask extends SourceTask {
 		}
 	}
 
-	@Nullable
-	@VisibleForTesting
+	@Nullable @VisibleForTesting
 	public static Mixin getMixin(InputStream is) throws IOException {
 		final ClassReader reader = new ClassReader(is);
 

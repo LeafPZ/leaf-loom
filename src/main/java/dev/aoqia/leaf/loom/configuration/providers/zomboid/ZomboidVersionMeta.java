@@ -164,8 +164,7 @@ public record ZomboidVersionMeta(
 			return isValidForOS(platform);
 		}
 
-		@Nullable
-		public Download classifierForOS(Platform platform) {
+		@Nullable public Download classifierForOS(Platform platform) {
 			String classifier = natives.get(OS_NAMES.get(platform.getOperatingSystem()));
 
 			if (classifier == null) {
@@ -197,8 +196,7 @@ public record ZomboidVersionMeta(
 	}
 
 	public record Downloads(Download artifact, Map<String, Download> classifiers) {
-		@Nullable
-		public Download classifier(String os) {
+		@Nullable public Download classifier(String os) {
 			return classifiers.get(os);
 		}
 	}

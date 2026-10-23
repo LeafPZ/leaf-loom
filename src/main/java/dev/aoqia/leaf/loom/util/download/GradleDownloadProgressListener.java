@@ -51,8 +51,7 @@ public class GradleDownloadProgressListener implements DownloadProgressListener 
 
 	private static final long REPORT_INTERVAL_MS = 500;
 
-	@Nullable
-	private ProgressLogger progressLogger;
+	@Nullable private ProgressLogger progressLogger;
 	private long lastReportTime = 0;
 
 	public GradleDownloadProgressListener(String name, Function<String, ProgressLogger> progressLoggerFactory) {

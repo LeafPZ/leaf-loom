@@ -335,14 +335,11 @@ spotless {
         forbidWildcardImports()
         forbidModuleImports()
 
-//        cleanthat()
-////        eclipse().configFile(file("eclipse-formatter.xml"))
-////            .sortMembersEnabled(true)
-//
-//        formatAnnotations()
-//
-//        trimTrailingWhitespace()
-//        endWithNewline()
+        cleanthat()
+        formatAnnotations()
+
+        trimTrailingWhitespace()
+        endWithNewline()
 
         toggleOffOn()
         licenseHeaderFile(file("HEADER")).yearSeparator("-").onlyIfContentMatches("^[^/]{2}")

@@ -133,8 +133,7 @@ public record ClassLineNumbers(Map<String, ClassLineNumbers.Entry> lineMap) {
 	/**
 	 * Merge two ClassLineNumbers together, throwing an exception if there are any duplicate class line mappings.
 	 */
-	@Nullable
-	public static ClassLineNumbers merge(@Nullable ClassLineNumbers a, @Nullable ClassLineNumbers b) {
+	@Nullable public static ClassLineNumbers merge(@Nullable ClassLineNumbers a, @Nullable ClassLineNumbers b) {
 		if (a == null) {
 			return b;
 		} else if (b == null) {

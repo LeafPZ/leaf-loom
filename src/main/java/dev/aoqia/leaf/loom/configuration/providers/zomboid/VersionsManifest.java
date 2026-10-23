@@ -50,8 +50,7 @@ public record VersionsManifest(Map<String, Version> versions, Map<String, String
         }
 	}
 
-	@Nullable
-	public Version getVersion(String id) {
+	@Nullable public Version getVersion(String id) {
 		return versions.getOrDefault(id, null);
 	}
 }

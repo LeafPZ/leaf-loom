@@ -144,8 +144,7 @@ public class MixinAPMappingService extends Service<MixinAPMappingService.Options
 		return thisProject.provider(() -> providers.stream().map(Provider::get).toList());
 	}
 
-	@Nullable
-	public static Provider<Options> createOptions(Project project, SourceSet sourceSet, Provider<String> from, Provider<String> to) {
+	@Nullable public static Provider<Options> createOptions(Project project, SourceSet sourceSet, Provider<String> from, Provider<String> to) {
 		final File mixinMappings = AnnotationProcessorInvoker.getMixinMappingsForSourceSet(project, sourceSet);
 		final Task compileTask = project.getTasks().findByName(sourceSet.getCompileJavaTaskName()); // TODO what about other languages?
 
@@ -182,8 +181,7 @@ public class MixinAPMappingService extends Service<MixinAPMappingService.Options
 		super(options, serviceFactory);
 	}
 
-	@Nullable
-	public IMappingProvider getMappingsProvider() {
+	@Nullable public IMappingProvider getMappingsProvider() {
 		if (!exists) {
 			return null;
 		}

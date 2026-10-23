@@ -56,8 +56,7 @@ public final class Lazy {
 		final Supplier<T> supplier;
 
 		volatile boolean initialized = false;
-		@Nullable
-		T value = null;
+		@Nullable T value = null;
 
 		private Impl(Supplier<T> supplier) {
 			this.supplier = supplier;

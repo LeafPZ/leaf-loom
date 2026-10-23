@@ -65,8 +65,7 @@ public interface ServiceFactory {
 	 * @param <S> The service type.
 	 * @return The service instance, or null if the options are not present.
 	 */
-	@Nullable
-	default <O extends Service.Options, S extends Service<O>> S getOrNull(Provider<O> options) {
+	@Nullable default <O extends Service.Options, S extends Service<O>> S getOrNull(Provider<O> options) {
 		if (options.isPresent()) {
 			return get(options);
 		} else {

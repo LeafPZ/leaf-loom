@@ -57,8 +57,7 @@ public abstract sealed class ModDependency permits SplitModDependency, SimpleMod
 	private final String group;
 	private final String name;
 	private final String version;
-	@Nullable
-	private final String classifier;
+	@Nullable private final String classifier;
 	private final ModDependencyOptions options;
 
 	public ModDependency(ArtifactRef artifact, ArtifactMetadata metadata, ModDependencyOptions options) {

@@ -94,8 +94,7 @@ public interface LoomGradleExtension extends LoomGradleExtensionAPI {
 
 	RemapMappingConfiguration getMappingConfiguration();
 
-	@Nullable
-	MappingConfiguration getMappingConfigurationOrNull();
+	@Nullable MappingConfiguration getMappingConfigurationOrNull();
 
 	void setMappingConfiguration(MappingConfiguration mappingConfiguration);
 

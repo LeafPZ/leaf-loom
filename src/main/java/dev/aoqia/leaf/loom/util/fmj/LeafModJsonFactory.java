@@ -113,8 +113,7 @@ public final class LeafModJsonFactory {
         return create(jsonObject, new LeafModJsonSource.ZipSource(zipPath));
 	}
 
-	@Nullable
-	public static LeafModJson createFromZipNullable(Path zipPath) {
+	@Nullable public static LeafModJson createFromZipNullable(Path zipPath) {
 		JsonObject jsonObject;
 
 		try {
@@ -151,8 +150,7 @@ public final class LeafModJsonFactory {
 		return create(modJson, new LeafModJsonSource.DirectorySource(file.toPath().getParent()));
 	}
 
-	@Nullable
-	public static LeafModJson createFromSourceSetsNullable(Project project, SourceSet... sourceSets) {
+	@Nullable public static LeafModJson createFromSourceSetsNullable(Project project, SourceSet... sourceSets) {
 		File file = SourceSetHelper.findFirstFileInResource(LEAF_MOD_JSON, project, sourceSets);
         if (file == null) {
             file = SourceSetHelper.findFirstFileInResource(FABRIC_MOD_JSON, project, sourceSets);

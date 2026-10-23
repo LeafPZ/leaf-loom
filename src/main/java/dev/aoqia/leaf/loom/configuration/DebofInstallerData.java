@@ -78,8 +78,7 @@ public class DebofInstallerData {
 		LOGGER.info("No installer data found in any configuration.");
 	}
 
-	@Nullable
-	private static InstallerData getInstaller(File file) {
+	@Nullable private static InstallerData getInstaller(File file) {
 		try {
 			byte[] installerData = ZipUtils.unpackNullable(file.toPath(), InstallerData.INSTALLER_PATH);
 

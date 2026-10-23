@@ -74,12 +74,10 @@ public abstract sealed class MappingConfiguration permits RemapMappingConfigurat
 	public final String mappingsIdentifier;
 
 	private final Path inputJar;
-	@Nullable
-	private byte[] unpickDefinitions;
+	@Nullable private byte[] unpickDefinitions;
 
 	private List<AnnotationsData> annotationsData = List.of();
-	@Nullable
-	private UnpickMetadata unpickMetadata;
+	@Nullable private UnpickMetadata unpickMetadata;
 
 	protected MappingConfiguration(String mappingsIdentifier, Path inputJar) {
 		this.mappingsIdentifier = mappingsIdentifier;

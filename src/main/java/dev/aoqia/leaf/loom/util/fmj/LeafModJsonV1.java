@@ -64,8 +64,7 @@ public final class LeafModJsonV1 extends LeafModJson {
 	}
 
 	@Override
-	@Nullable
-	public JsonElement getCustom(String key) {
+	@Nullable public JsonElement getCustom(String key) {
 		return getCustom(jsonObject, key);
 	}
 

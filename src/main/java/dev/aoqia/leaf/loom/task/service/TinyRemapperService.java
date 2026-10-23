@@ -185,8 +185,7 @@ public class TinyRemapperService extends Service<TinyRemapperService.Options> im
 	}
 
 	private TinyRemapper tinyRemapper;
-	@Nullable
-	private KotlinRemapperClassloader kotlinRemapperClassloader;
+	@Nullable private KotlinRemapperClassloader kotlinRemapperClassloader;
 	private final Map<String, InputTag> inputTagMap = new HashMap<>();
 	private final HashSet<Path> classpath = new HashSet<>();
 	// Set to true once remapping has started, once set no inputs can be read.

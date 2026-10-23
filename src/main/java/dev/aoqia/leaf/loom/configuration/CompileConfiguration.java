@@ -212,8 +212,7 @@ public abstract class CompileConfiguration implements Runnable {
 		return gameProvider;
 	}
 
-	@Nullable
-	private MappingConfigurationSetup provideZomboid(ConfigContext configContext, ZomboidProvider gameProvider) throws Exception {
+	@Nullable private MappingConfigurationSetup provideZomboid(ConfigContext configContext, ZomboidProvider gameProvider) throws Exception {
 		final Project project = configContext.project();
 		final LoomGradleExtension extension = configContext.extension();
 

@@ -179,13 +179,11 @@ public record ClassAnnotationData(
 		return access;
 	}
 
-	@Nullable
-	public GenericAnnotationData getFieldData(String fieldName, String fieldDesc) {
+	@Nullable public GenericAnnotationData getFieldData(String fieldName, String fieldDesc) {
 		return fields.get(fieldName + ":" + fieldDesc);
 	}
 
-	@Nullable
-	public MethodAnnotationData getMethodData(String methodName, String methodDesc) {
+	@Nullable public MethodAnnotationData getMethodData(String methodName, String methodDesc) {
 		return methods.get(methodName + methodDesc);
 	}
 }

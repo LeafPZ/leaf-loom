@@ -137,8 +137,7 @@ public final class GradleUtils {
 		return getBooleanPropertyProvider(project, key).getOrElse(defaultValue);
 	}
 
-	@Nullable
-	public static Object getProperty(Project project, String key) {
+	@Nullable public static Object getProperty(Project project, String key) {
 		LoomGradleExtension extension = LoomGradleExtension.get(project);
 
 		if (extension.isProjectIsolationActive()) {

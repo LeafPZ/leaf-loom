@@ -217,8 +217,7 @@ public record AnnotationsData(Map<String, ClassAnnotationData> classes, String n
 		return result;
 	}
 
-	@Nullable
-	public static AnnotationsData getRemappedAnnotations(MappingsNamespace targetNamespace, MappingConfiguration mappingConfiguration, Project project, ServiceFactory serviceFactory, String newNamespace) {
+	@Nullable public static AnnotationsData getRemappedAnnotations(MappingsNamespace targetNamespace, MappingConfiguration mappingConfiguration, Project project, ServiceFactory serviceFactory, String newNamespace) {
 		List<AnnotationsData> datas = mappingConfiguration.getAnnotationsData();
 
 		if (datas.isEmpty()) {

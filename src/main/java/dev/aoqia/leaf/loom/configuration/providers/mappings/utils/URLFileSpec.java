@@ -70,6 +70,6 @@ public record URLFileSpec(String url) implements FileSpec {
 	@Override
 	public int hashCode() {
 		// URL performs DNS requests if you .hashCode it (:
-		return Objects.hash(url.toString());
+		return Objects.hash(url);
 	}
 }

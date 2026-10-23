@@ -133,8 +133,7 @@ public class ZipUtils {
 		return LoomGradlePlugin.GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), clazz);
 	}
 
-	@Nullable
-	public static <T> T unpackGsonNullable(Path zip, String path, Class<T> clazz) throws IOException {
+	@Nullable public static <T> T unpackGsonNullable(Path zip, String path, Class<T> clazz) throws IOException {
 		try {
 			return unpackGson(zip, path, clazz);
 		} catch (NoSuchFileException e) {

@@ -232,8 +232,7 @@ public abstract class InterfaceInjectionProcessor implements ZomboidJarProcessor
 		};
 	}
 
-	@Nullable
-	@Contract("!null, _ -> !null")
+	@Nullable @Contract("!null, _ -> !null")
 	private static String appendComment(@Nullable String comment, List<InjectedInterface> injectedInterfaces) {
 		if (injectedInterfaces.isEmpty()) {
 			return comment;
@@ -279,8 +278,8 @@ public abstract class InterfaceInjectionProcessor implements ZomboidJarProcessor
 					String generics = null;
 
 					if (ifaceInfo.contains("<") && ifaceInfo.contains(">")) {
-						name = ifaceInfo.substring(0, ifaceInfo.indexOf("<"));
-						generics = ifaceInfo.substring(ifaceInfo.indexOf("<"));
+						name = ifaceInfo.substring(0, ifaceInfo.indexOf('<'));
+						generics = ifaceInfo.substring(ifaceInfo.indexOf('<'));
 
 						// First Generics Check, if there are generics, are they correctly written?
 						SignatureReader reader = new SignatureReader("Ljava/lang/Object" + generics + ";");

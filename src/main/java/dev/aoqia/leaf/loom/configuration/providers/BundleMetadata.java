@@ -61,8 +61,7 @@ public record BundleMetadata(List<Entry> libraries, List<Entry> versions, String
 	private static final String VERSIONS_LIST_PATH = "META-INF/versions.list";
 	private static final String MAINCLASS_PATH = "META-INF/main-class";
 
-	@Nullable
-	public static BundleMetadata fromJar(Path jar) throws IOException {
+	@Nullable public static BundleMetadata fromJar(Path jar) throws IOException {
 		final List<Entry> libraries;
 		final List<Entry> versions;
 		final String mainClass;

@@ -48,6 +48,5 @@ import org.jspecify.annotations.Nullable;
 public interface AnnotationsLayer {
 	String ANNOTATIONS_PATH = "extras/annotations.json";
 
-	@Nullable
-	AnnotationsData getAnnotationsData() throws IOException;
+	@Nullable AnnotationsData getAnnotationsData() throws IOException;
 }

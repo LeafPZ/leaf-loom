@@ -162,8 +162,7 @@ public sealed interface UnpickMetadata permits UnpickMetadata.V1, UnpickMetadata
 		return jsonObject.get(key).getAsString();
 	}
 
-	@Nullable
-	private static String getOptionalString(JsonObject jsonObject, String key) {
+	@Nullable private static String getOptionalString(JsonObject jsonObject, String key) {
 		return jsonObject.has(key) ? jsonObject.get(key).getAsString() : null;
 	}
 }

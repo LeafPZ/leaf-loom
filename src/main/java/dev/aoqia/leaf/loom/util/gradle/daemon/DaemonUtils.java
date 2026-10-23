@@ -113,8 +113,7 @@ public final class DaemonUtils {
 		return true;
 	}
 
-	@Nullable
-	private static DaemonInfo findCurrentDaemon(DaemonUtils.Context context) {
+	@Nullable private static DaemonInfo findCurrentDaemon(DaemonUtils.Context context) {
 		// Gradle maintains a list of running daemons in a registry.bin file.
 		final Path registryBin = Path.of(context.getRegistryBin().get());
 		LOGGER.info("Looking for daemon in: {}", registryBin);

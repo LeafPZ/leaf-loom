@@ -135,8 +135,7 @@ public abstract class ModJavadocProcessor implements ZomboidJarProcessor<ModJava
 	}
 
 	public record ModJavadoc(String modId, MemoryMappingTree mappingTree, String mappingsHash) {
-		@Nullable
-		public static ModJavadoc create(LeafModJson leafModJson, MappingsNamespace productionNamespace, MarkdownJavadocOption markdownJavadocOption) {
+		@Nullable public static ModJavadoc create(LeafModJson leafModJson, MappingsNamespace productionNamespace, MarkdownJavadocOption markdownJavadocOption) {
 			final String modId = leafModJson.getId();
 			final boolean remoteMod = leafModJson.getSource() instanceof LeafModJsonSource.ZipSource;
 			final JsonElement customElement = leafModJson.getCustom(Constants.CustomModJsonKeys.PROVIDED_JAVADOC);

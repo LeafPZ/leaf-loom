@@ -65,8 +65,7 @@ public final class LeafModJsonV2 extends LeafModJson {
 	}
 
 	@Override
-	@Nullable
-	public JsonElement getCustom(String key) {
+	@Nullable public JsonElement getCustom(String key) {
 		return LeafModJsonV1.getCustom(jsonObject, key);
 	}
 
@@ -112,8 +111,7 @@ public final class LeafModJsonV2 extends LeafModJson {
 		return values;
 	}
 
-	@Nullable
-	private Pair<String, ModEnvironment> readConditionalConfig(JsonElement jsonElement) {
+	@Nullable private Pair<String, ModEnvironment> readConditionalConfig(JsonElement jsonElement) {
 		if (jsonElement instanceof JsonPrimitive jsonPrimitive && jsonPrimitive.isString()) {
 			return new Pair<>(jsonElement.getAsString(), ModEnvironment.UNIVERSAL);
 		} else if (jsonElement instanceof JsonObject jsonObject) {

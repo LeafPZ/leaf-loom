@@ -125,8 +125,7 @@ public final class SourceSetHelper {
 		return project;
 	}
 
-	@Nullable
-	private static Project getProjectFromSourceSetOutput(SourceSetOutput sourceSetOutput) {
+	@Nullable private static Project getProjectFromSourceSetOutput(SourceSetOutput sourceSetOutput) {
 		Set<? extends Task> dependencies = sourceSetOutput.getBuildDependencies().getDependencies(null);
 		Iterator<? extends Task> it = dependencies.iterator();
 		return it.hasNext() ? it.next().getProject() : null;
@@ -227,8 +226,7 @@ public final class SourceSetHelper {
 		);
 	}
 
-	@Nullable
-	private static String evaluateXpath(File file, @Language("xpath") String expression) {
+	@Nullable private static String evaluateXpath(File file, @Language("xpath") String expression) {
 		final XPath xpath = XPathFactory.newInstance().newXPath();
 
 		try (FileInputStream fis = new FileInputStream(file)) {
@@ -282,8 +280,7 @@ public final class SourceSetHelper {
 		return Collections.singletonList(new File(binDir, reference.sourceSet().getName()));
 	}
 
-	@Nullable
-	public static File findFileInResource(Project project, SourceSet sourceSet, String path) {
+	@Nullable public static File findFileInResource(Project project, SourceSet sourceSet, String path) {
 		Objects.requireNonNull(project);
 		Objects.requireNonNull(sourceSet);
 		Objects.requireNonNull(path);
@@ -312,8 +309,7 @@ public final class SourceSetHelper {
 		}
 	}
 
-	@Nullable
-	public static File findFirstFileInResource(String path, Project project, SourceSet... sourceSets) {
+	@Nullable public static File findFirstFileInResource(String path, Project project, SourceSet... sourceSets) {
 		for (SourceSet sourceSet : sourceSets) {
 			File file = findFileInResource(project, sourceSet, path);
 

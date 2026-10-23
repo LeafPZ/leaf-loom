@@ -457,8 +457,7 @@ public abstract class GenerateSourcesTask extends AbstractLoomTask {
 		return sj.toString();
 	}
 
-	@Nullable
-	private ClassLineNumbers runDecompileJob(Path inputJar, Path outputJar, @Nullable Path existingJar) throws IOException {
+	@Nullable private ClassLineNumbers runDecompileJob(Path inputJar, Path outputJar, @Nullable Path existingJar) throws IOException {
 		final Platform platform = Platform.CURRENT;
 		final Path lineMapFile = File.createTempFile("loom", "linemap").toPath();
 		Files.delete(lineMapFile);
@@ -661,8 +660,7 @@ public abstract class GenerateSourcesTask extends AbstractLoomTask {
 		return new File(path.substring(0, path.length() - 4) + suffix);
 	}
 
-	@Nullable
-	private static ClassLineNumbers readLineNumbers(Path linemapFile) throws IOException {
+	@Nullable private static ClassLineNumbers readLineNumbers(Path linemapFile) throws IOException {
 		if (Files.notExists(linemapFile)) {
 			return null;
 		}

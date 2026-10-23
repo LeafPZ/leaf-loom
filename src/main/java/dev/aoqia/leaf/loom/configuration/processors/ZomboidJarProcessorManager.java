@@ -75,8 +75,7 @@ public final class ZomboidJarProcessorManager {
 		this.jarProcessors = Collections.unmodifiableList(jarProcessors);
 	}
 
-	@Nullable
-	public static ZomboidJarProcessorManager create(Project project) {
+	@Nullable public static ZomboidJarProcessorManager create(Project project) {
 		final LoomGradleExtension extension = LoomGradleExtension.get(project);
 		List<ZomboidJarProcessor<?>> processors = new ArrayList<>(extension.getZomboidJarProcessors().get());
 
@@ -90,8 +89,7 @@ public final class ZomboidJarProcessorManager {
 		return ZomboidJarProcessorManager.create(processors, specContext);
 	}
 
-	@Nullable
-	public static ZomboidJarProcessorManager create(List<ZomboidJarProcessor<?>> processors, SpecContext context) {
+	@Nullable public static ZomboidJarProcessorManager create(List<ZomboidJarProcessor<?>> processors, SpecContext context) {
 		List<ProcessorEntry<?>> entries = new ArrayList<>();
 
 		for (ZomboidJarProcessor<?> processor : processors) {

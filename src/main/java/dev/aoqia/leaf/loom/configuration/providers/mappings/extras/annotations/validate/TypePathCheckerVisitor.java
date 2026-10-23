@@ -113,8 +113,7 @@ public final class TypePathCheckerVisitor extends SignatureVisitor {
 		}
 	}
 
-	@Nullable
-	public String getError() {
+	@Nullable public String getError() {
 		if (error != null) {
 			return error;
 		}

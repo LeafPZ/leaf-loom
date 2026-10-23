@@ -56,8 +56,7 @@ public interface AccessWidenerEntry {
 	/**
 	 * @return The mod id to be used in {@link TransitiveAccessWidenerMappingsProcessor} or null when this entry does not contain transitive entries.
 	 */
-	@Nullable
-	String mappingId();
+	@Nullable String mappingId();
 
 	String getSortKey();
 

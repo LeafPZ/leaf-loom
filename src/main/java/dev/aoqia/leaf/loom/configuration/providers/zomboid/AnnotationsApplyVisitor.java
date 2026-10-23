@@ -365,8 +365,7 @@ public record AnnotationsApplyVisitor(AnnotationsData annotationsData) implement
 	}
 
 	private abstract static class AbstractApplyMethodVisitor extends MethodVisitor {
-		@Nullable
-		protected final MethodAnnotationData methodData;
+		@Nullable protected final MethodAnnotationData methodData;
 		private final String descriptor;
 		private int syntheticParameterCount = 0;
 		private boolean visitedAnnotableParameterCount = false;
@@ -378,8 +377,7 @@ public record AnnotationsApplyVisitor(AnnotationsData annotationsData) implement
 			this.descriptor = descriptor;
 		}
 
-		@Nullable
-		protected abstract GenericAnnotationData getParameterData(int parameterIndex);
+		@Nullable protected abstract GenericAnnotationData getParameterData(int parameterIndex);
 
 		protected abstract boolean hasAnnotableParameters();
 
@@ -493,8 +491,7 @@ public record AnnotationsApplyVisitor(AnnotationsData annotationsData) implement
 		}
 
 		@Override
-		@Nullable
-		protected GenericAnnotationData getParameterData(int parameterIndex) {
+		@Nullable protected GenericAnnotationData getParameterData(int parameterIndex) {
 			return methodData == null ? null : methodData.parameters().get(parameterIndex);
 		}
 
@@ -520,8 +517,7 @@ public record AnnotationsApplyVisitor(AnnotationsData annotationsData) implement
 		}
 
 		@Override
-		@Nullable
-		protected GenericAnnotationData getParameterData(int parameterIndex) {
+		@Nullable protected GenericAnnotationData getParameterData(int parameterIndex) {
 			return parameterIndex >= 0 && parameterIndex < parameterData.size() ? parameterData.get(parameterIndex) : null;
 		}
 

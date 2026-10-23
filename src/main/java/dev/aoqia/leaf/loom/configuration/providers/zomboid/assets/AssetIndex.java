@@ -64,7 +64,7 @@ public record AssetIndex(Map<String, Entry> objects, boolean virtual, @Serialize
 		}
 
 		public String name() {
-			int end = path().lastIndexOf("/") + 1;
+			int end = path().lastIndexOf('/') + 1;
 
 			if (end > 0) {
 				return path().substring(end);

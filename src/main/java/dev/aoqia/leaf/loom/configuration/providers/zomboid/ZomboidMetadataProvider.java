@@ -157,8 +157,7 @@ public final class ZomboidMetadataProvider {
 		throw new RuntimeException("Failed to find Zomboid version: " + options.zomboidVersion());
 	}
 
-	@Nullable
-	private ManifestEntryLocation getManifestEntry(ManifestLocation location, boolean forceDownload) throws IOException {
+	@Nullable private ManifestEntryLocation getManifestEntry(ManifestLocation location, boolean forceDownload) throws IOException {
 		DownloadBuilder builder = download.apply(location.url());
 
 		if (forceDownload) {

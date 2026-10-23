@@ -77,8 +77,7 @@ import dev.aoqia.leaf.loom.util.Constants;
 public abstract class AnnotationsDataValidator {
 	private static final Logger LOGGER = LoggerFactory.getLogger(AnnotationsDataValidator.class);
 
-	@Nullable
-	protected abstract ClassNode getClass(String name, boolean includeLibraries);
+	@Nullable protected abstract ClassNode getClass(String name, boolean includeLibraries);
 
 	@VisibleForTesting
 	protected void error(String message, Object... args) {
@@ -727,8 +726,7 @@ public abstract class AnnotationsDataValidator {
 		return result;
 	}
 
-	@Nullable
-	private static FieldNode findField(ClassNode clazz, String nameAndDesc) {
+	@Nullable private static FieldNode findField(ClassNode clazz, String nameAndDesc) {
 		for (FieldNode field : clazz.fields) {
 			if (nameAndDesc.equals(field.name + ":" + field.desc)) {
 				return field;
@@ -738,8 +736,7 @@ public abstract class AnnotationsDataValidator {
 		return null;
 	}
 
-	@Nullable
-	private static MethodNode findMethod(ClassNode clazz, String nameAndDesc) {
+	@Nullable private static MethodNode findMethod(ClassNode clazz, String nameAndDesc) {
 		for (MethodNode method : clazz.methods) {
 			if (nameAndDesc.equals(method.name + method.desc)) {
 				return method;

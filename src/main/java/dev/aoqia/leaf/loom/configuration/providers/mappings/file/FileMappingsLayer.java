@@ -87,7 +87,7 @@ public record FileMappingsLayer(
 	}
 
 	private void visit(Path path, MappingVisitor mappingVisitor) throws IOException {
-		MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(mappingVisitor, mergeNamespace.toString());
+		MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(mappingVisitor, mergeNamespace);
 
 		// Replace the default fallback namespaces with
 		// our fallback namespaces if potentially needed.

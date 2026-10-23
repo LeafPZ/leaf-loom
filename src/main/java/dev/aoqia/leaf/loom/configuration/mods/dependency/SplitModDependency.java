@@ -59,10 +59,8 @@ public final class SplitModDependency extends ModDependency {
 	private final NamedDomainObjectProvider<? extends Configuration> targetCommonConfig;
 	private final NamedDomainObjectProvider<? extends Configuration> targetClientConfig;
 	private final JarSplitter.Target target;
-	@Nullable
-	private final LocalMavenHelper commonMaven;
-	@Nullable
-	private final LocalMavenHelper clientMaven;
+	@Nullable private final LocalMavenHelper commonMaven;
+	@Nullable private final LocalMavenHelper clientMaven;
 
 	public SplitModDependency(ArtifactRef artifact, ArtifactMetadata metadata, ModDependencyOptions options, NamedDomainObjectProvider<? extends Configuration> targetCommonConfig, NamedDomainObjectProvider<? extends Configuration> targetClientConfig, JarSplitter.Target target, Project project) {
 		super(artifact, metadata, options);

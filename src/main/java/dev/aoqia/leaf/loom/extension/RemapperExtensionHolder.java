@@ -135,8 +135,7 @@ public abstract class RemapperExtensionHolder {
 		private final String sourceNamespace;
 		private final String targetNamespace;
 
-		@Nullable
-		private RemapperContext context;
+		@Nullable private RemapperContext context;
 
 		private RemapperExtensionImpl(RemapperExtension<?> remapperExtension, String sourceNamespace, String targetNamespace) {
 			this.remapperExtension = remapperExtension;

@@ -73,8 +73,7 @@ public interface MixinExtension extends MixinExtensionAPI {
 	 */
 	record MixinInformationContainer(SourceSet sourceSet, Provider<String> refmapNameProvider, PatternSet mixinConfigPattern) { }
 
-	@Nullable
-	static MixinInformationContainer getMixinInformationContainer(SourceSet sourceSet) {
+	@Nullable static MixinInformationContainer getMixinInformationContainer(SourceSet sourceSet) {
 		ExtraPropertiesExtension extra = sourceSet.getExtensions().getExtraProperties();
 		return extra.has(MIXIN_INFORMATION_CONTAINER) ? (MixinInformationContainer) extra.get(MIXIN_INFORMATION_CONTAINER) : null;
 	}

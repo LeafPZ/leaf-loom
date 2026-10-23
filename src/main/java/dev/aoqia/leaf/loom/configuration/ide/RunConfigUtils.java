@@ -72,8 +72,7 @@ public class RunConfigUtils {
 		}
 	}
 
-	@Nullable
-	public static String getMainClass(String side, LoomGradleExtension extension) {
+	@Nullable public static String getMainClass(String side, LoomGradleExtension extension) {
 		InstallerData installerData = extension.getInstallerData();
 
 		if (installerData == null) {
@@ -103,8 +102,7 @@ public class RunConfigUtils {
 		return getDefaultMainClass(side);
 	}
 
-	@Nullable
-	private static String getDefaultMainClass(String side) {
+	@Nullable private static String getDefaultMainClass(String side) {
 		return switch (side) {
 		case "client" -> Constants.Knot.KNOT_CLIENT;
 		case "server" -> Constants.Knot.KNOT_SERVER;

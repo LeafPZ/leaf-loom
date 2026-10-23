@@ -69,8 +69,7 @@ public abstract sealed class LeafModJson permits LeafModJsonV1, LeafModJsonV2, L
 		return readString(jsonObject, "version");
 	}
 
-	@Nullable
-	public abstract JsonElement getCustom(String key);
+	@Nullable public abstract JsonElement getCustom(String key);
 
 	public abstract List<String> getMixinConfigurations();
 

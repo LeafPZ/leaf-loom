@@ -81,8 +81,7 @@ public final class RemapMappingConfiguration extends MappingConfiguration {
 	private final Path baseTinyMappings;
 	public final Path tinyMappings;
 	public final Path tinyMappingsJar;
-	@Nullable
-	private Map<String, String> signatureFixes;
+	@Nullable private Map<String, String> signatureFixes;
 
 	private RemapMappingConfiguration(String mappingsIdentifier, Path mappingsWorkingDir, Path inputJar, ServiceFactory serviceFactory) {
 		super(mappingsIdentifier, inputJar);
@@ -217,8 +216,7 @@ public final class RemapMappingConfiguration extends MappingConfiguration {
 		}
 	}
 
-	@Nullable
-	public Map<String, String> getSignatureFixes() {
+	@Nullable public Map<String, String> getSignatureFixes() {
 		return signatureFixes;
 	}
 

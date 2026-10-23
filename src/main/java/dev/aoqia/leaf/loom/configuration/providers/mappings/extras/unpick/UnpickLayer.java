@@ -50,11 +50,9 @@ import dev.aoqia.leaf.loom.configuration.providers.mappings.unpick.UnpickMetadat
 
 @ApiStatus.Experimental
 public interface UnpickLayer {
-	@Nullable
-	UnpickData getUnpickData() throws IOException;
+	@Nullable UnpickData getUnpickData() throws IOException;
 
-	@Nullable
-	String getFallbackConstants();
+	@Nullable String getFallbackConstants();
 
 	record UnpickData(UnpickMetadata metadata, byte[] definitions) {
 		public static UnpickData read(Path metadataPath, Path definitionPath) throws IOException {
