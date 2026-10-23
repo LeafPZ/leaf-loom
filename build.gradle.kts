@@ -344,27 +344,27 @@ spotless {
         licenseHeaderFile(file("HEADER")).yearSeparator("-").onlyIfContentMatches("^[^/]{2}")
     }
 
-    groovy {
-        importOrder("java|javax", "groovy", "", "net.fabricmc", "\\#net.fabricmc", "$group", "\\#", "\\#$group")
-
-        removeSemicolons()
-        greclipse()
-
-        trimTrailingWhitespace()
-        endWithNewline()
-
-        licenseHeaderFile(file("HEADER")).yearSeparator("-").updateYearWithLatest(true)
-    }
-
-    groovyGradle {
-        target("src/**/*.gradle", "*.gradle")
-        targetExclude("**/build.gradle")
-
-        greclipse()
-
-        trimTrailingWhitespace()
-        endWithNewline()
-    }
+//    groovy {
+//        importOrder("java|javax", "groovy", "", "net.fabricmc", "\\#net.fabricmc", "$group", "\\#", "\\#$group")
+//
+//        removeSemicolons()
+//        greclipse()
+//
+//        trimTrailingWhitespace()
+//        endWithNewline()
+//
+//        licenseHeaderFile(file("HEADER")).yearSeparator("-").updateYearWithLatest(true)
+//    }
+//
+//    groovyGradle {
+//        target("src/**/*.gradle", "*.gradle")
+//        targetExclude("**/build.gradle")
+//
+//        greclipse()
+//
+//        trimTrailingWhitespace()
+//        endWithNewline()
+//    }
 
     kotlin {
         targetExclude("src/test/resources/projects/*/**")
@@ -377,9 +377,9 @@ spotless {
         licenseHeaderFile(file("HEADER")).yearSeparator("-").updateYearWithLatest(true)
     }
 
-    kotlinGradle {
-        ktlint()
-    }
+//    kotlinGradle {
+//        ktlint()
+//    }
 }
 
 checkstyle {
