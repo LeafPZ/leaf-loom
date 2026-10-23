@@ -36,4 +36,5 @@ public record DecompilationMetadata(
     Collection<Path> libraries,
     IOStringConsumer logger,
     Map<String, String> options,
-    String runtimeNamespace) {}
+    String runtimeNamespace,
+    JavadocStyle javadocStyle) {}

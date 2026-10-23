@@ -32,15 +32,17 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
 
-import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.processors.JsrAnnotationRemapperProcessor;
 import dev.aoqia.leaf.loom.configuration.processors.speccontext.DebofConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.NoRemapMappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.IntermediaryZomboidProvider;
+import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.NamedZomboidProvider;
 import dev.aoqia.leaf.loom.util.Constants;
 
 import org.gradle.api.Action;
@@ -57,6 +59,7 @@ import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.compile.JavaCompile;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.api.tasks.testing.Test;
+import org.jspecify.annotations.Nullable;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.InterfaceInjectionExtensionAPI;
@@ -74,8 +77,6 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidMetadataProvid
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.AbstractMappedZomboidProvider;
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.IntermediaryZomboidProvider;
-import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.NamedZomboidProvider;
 import dev.aoqia.leaf.loom.extension.MixinExtension;
 import dev.aoqia.leaf.loom.task.service.ClasspathGroupService;
 import dev.aoqia.leaf.loom.util.Checksum;
@@ -87,10 +88,8 @@ import dev.aoqia.leaf.loom.util.gradle.daemon.DaemonUtils;
 import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
-import org.jetbrains.annotations.Nullable;
-
 public abstract class CompileConfiguration implements Runnable {
-	private static final String LOCK_PROPERTY_KEY = "leaf.loom.internal.global.lock";
+	private static final Object GLOBAL_LOCK = "leaf.loom.internal.global.lock".intern();
 
 	@Inject
 	protected abstract Project getProject();
@@ -126,10 +125,28 @@ public abstract class CompileConfiguration implements Runnable {
 			}
 
 			try {
-				// Setting up loom across Gradle projects is not thread safe, synchronize it here to ensure that multiple projects cannot use it.
-				// There is no easy way around this, as we want to use the same global cache for downloaded or generated files.
+				final ZomboidMetadataProvider metadataProvider = ZomboidMetadataProvider.create(configContext);
+				extension.setMetadataProvider(metadataProvider);
+				final ZomboidProvider gameProvider;
+				final MappingConfigurationSetup mappingConfigurationSetup;
+
 				synchronized (getGlobalLockObject()) {
-					setupZomboid(configContext);
+					gameProvider = createZomboidProvider(configContext, metadataProvider);
+					mappingConfigurationSetup = provideZomboid(configContext, gameProvider);
+				}
+
+				if (mappingConfigurationSetup != null) {
+					extension.setMappingConfiguration(mappingConfigurationSetup.mappingConfiguration());
+					mappingConfigurationSetup.mappingConfiguration().applyToProject(getProject(), mappingConfigurationSetup.dependencyInfo());
+				}
+
+				createMappedZomboidProviders(configContext);
+				registerGameProcessors(configContext);
+				final ZomboidJarProcessorManager zomboidJarProcessorManager = ZomboidJarProcessorManager.create(getProject());
+				createProcessedNamedZomboidProvider(configContext, zomboidJarProcessorManager);
+
+				synchronized (getGlobalLockObject()) {
+					provideMappedZomboid(configContext);
 				}
 
                 var dependencyManager = new LoomDependencyManager(getProject(), serviceFactory, extension);
@@ -175,22 +192,22 @@ public abstract class CompileConfiguration implements Runnable {
 		}
 	}
 
-	private void setupZomboid(ConfigContext configContext) throws Exception {
+	private ZomboidProvider createZomboidProvider(ConfigContext configContext, ZomboidMetadataProvider metadataProvider) {
+		final LoomGradleExtension extension = configContext.extension();
+		final ZomboidProvider gameProvider = extension.getZomboidJarConfiguration().get().createZomboidProvider(metadataProvider, configContext);
+		extension.setZomboidProvider(gameProvider);
+		return gameProvider;
+	}
+
+	@Nullable
+	private MappingConfigurationSetup provideZomboid(ConfigContext configContext, ZomboidProvider gameProvider) throws Exception {
 		final Project project = configContext.project();
 		final LoomGradleExtension extension = configContext.extension();
 
-		final ZomboidMetadataProvider metadataProvider = ZomboidMetadataProvider.create(configContext);
-		extension.setMetadataProvider(metadataProvider);
-
-		var jarConfiguration = extension.getZomboidJarConfiguration().get();
-
-		// Provide the zomboid jars
-		final ZomboidProvider zomboidProvider = jarConfiguration.createZomboidProvider(metadataProvider, configContext);
-		extension.setZomboidProvider(zomboidProvider);
-		zomboidProvider.provide();
+		gameProvider.provide();
 
         if (GradleUtils.getBooleanProperty(getProject(), Constants.Properties.MINIMAL_SETUP)) {
-            return;
+            return null;
         }
 
 		if (!extension.disableObfuscation()) {
@@ -202,31 +219,60 @@ public abstract class CompileConfiguration implements Runnable {
 
 			// Resolve the mapping files from the configuration
 			final DependencyInfo mappingsDep = DependencyInfo.create(getProject(), Configurations.MAPPINGS);
-		    final MappingConfiguration mappingConfiguration = MappingConfiguration.create(getProject(), configContext.serviceFactory(), mappingsDep, zomboidProvider);
-			extension.setMappingConfiguration(mappingConfiguration);
-			mappingConfiguration.applyToProject(getProject(), mappingsDep);
+		    final MappingConfiguration mappingConfiguration = RemapMappingConfiguration.create(getProject(), configContext.serviceFactory(), mappingsDep, gameProvider);
+			return new MappingConfigurationSetup(mappingConfiguration, mappingsDep);
+		} else {
+			var annotations = project.getConfigurations().getByName(Configurations.ANNOTATIONS);
+
+			if (!annotations.getDependencies().isEmpty()) {
+				final DependencyInfo annotationsDep = DependencyInfo.create(getProject(), annotations);
+				final MappingConfiguration mappingConfiguration = NoRemapMappingConfiguration.create(getProject(), annotationsDep, gameProvider);
+				return new MappingConfigurationSetup(mappingConfiguration, annotationsDep);
+			}
 		}
 
-		// Provide the remapped jars
-		@Nullable IntermediaryZomboidProvider<?> intermediaryZomboidProvider = extension.disableObfuscation() ? null : jarConfiguration.createIntermediaryZomboidProvider(project);
+		return null;
+	}
+
+	private record MappingConfigurationSetup(MappingConfiguration mappingConfiguration, DependencyInfo dependencyInfo) {
+	}
+
+	private void createMappedZomboidProviders(ConfigContext configContext) {
+		final Project project = configContext.project();
+		final LoomGradleExtension extension = configContext.extension();
+		final var jarConfiguration = extension.getZomboidJarConfiguration().get();
+		IntermediaryZomboidProvider<?> intermediaryZomboidProvider = extension.disableObfuscation() ? null : jarConfiguration.createIntermediaryZomboidProvider(project);
 		NamedZomboidProvider<?> namedZomboidProvider = jarConfiguration.createNamedZomboidProvider(project);
 
-		registerGameProcessors(configContext);
-		ZomboidJarProcessorManager zomboidJarProcessorManager = ZomboidJarProcessorManager.create(getProject());
-
-		if (zomboidJarProcessorManager != null) {
-			// Wrap the named MC provider for one that will provide the processed jars
-			namedZomboidProvider = jarConfiguration.createProcessedNamedZomboidProvider(namedZomboidProvider, zomboidJarProcessorManager);
+		if (intermediaryZomboidProvider != null) {
+			extension.setIntermediaryZomboidProvider(intermediaryZomboidProvider);
 		}
+
+		extension.setNamedZomboidProvider(namedZomboidProvider);
+	}
+
+	private void createProcessedNamedZomboidProvider(ConfigContext configContext, @Nullable ZomboidJarProcessorManager zomboidJarProcessorManager) {
+		if (zomboidJarProcessorManager == null) {
+			return;
+		}
+
+		final LoomGradleExtension extension = configContext.extension();
+		final var jarConfiguration = extension.getZomboidJarConfiguration().get();
+		final NamedZomboidProvider<?> namedZomboidProvider = jarConfiguration.createProcessedNamedZomboidProvider(extension.getNamedZomboidProvider(), zomboidJarProcessorManager);
+		extension.setNamedZomboidProvider(namedZomboidProvider);
+	}
+
+	private void provideMappedZomboid(ConfigContext configContext) throws Exception {
+		final LoomGradleExtension extension = configContext.extension();
+		final IntermediaryZomboidProvider<?> intermediaryZomboidProvider = extension.disableObfuscation() ? null : extension.getIntermediaryZomboidProvider();
+		final NamedZomboidProvider<?> namedZomboidProvider = extension.getNamedZomboidProvider();
 
 		final var provideContext = new AbstractMappedZomboidProvider.ProvideContext(true, extension.refreshDeps(), configContext);
 
 		if (intermediaryZomboidProvider != null) {
-			extension.setIntermediaryZomboidProvider(intermediaryZomboidProvider);
 			intermediaryZomboidProvider.provide(provideContext);
 		}
 
-		extension.setNamedZomboidProvider(namedZomboidProvider);
 		namedZomboidProvider.provide(provideContext);
 	}
 
@@ -503,17 +549,9 @@ public abstract class CompileConfiguration implements Runnable {
 		});
 	}
 
-	// This is a nasty piece of work, but seems to work quite nicely.
 	// We need a lock that works across classloaders, a regular synchronized method will not work here.
-	// We can abuse system properties as a shared object store that we know for sure will be on the same classloader regardless of what Gradle does to loom.
-	// This allows us to ensure that all instances of loom regardless of classloader get the same object to lock on.
+	// Interned strings are shared across classloaders, ensuring that all instances of loom use the same lock.
 	private static Object getGlobalLockObject() {
-		if (!System.getProperties().contains(LOCK_PROPERTY_KEY)) {
-			// The .intern resolves a possible race where two difference value objects (remember not the same classloader) are set.
-			//noinspection StringOperationCanBeSimplified
-			System.getProperties().setProperty(LOCK_PROPERTY_KEY, LOCK_PROPERTY_KEY.intern());
-		}
-
-		return Objects.requireNonNull(System.getProperty(LOCK_PROPERTY_KEY));
+		return GLOBAL_LOCK;
 	}
 }

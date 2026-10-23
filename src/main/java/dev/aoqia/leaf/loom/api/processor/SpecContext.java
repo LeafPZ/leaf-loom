@@ -30,6 +30,7 @@ import java.util.stream.Stream;
 
 import org.gradle.api.Project;
 import org.gradle.api.plugins.JavaPlugin;
+import org.jetbrains.annotations.ApiStatus;
 
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.processors.speccontext.ProjectView;
@@ -54,6 +55,9 @@ public interface SpecContext {
 	List<LeafModJson> modDependenciesCompileRuntimeClient();
 
 	MappingsNamespace productionNamespace();
+
+	@ApiStatus.Experimental
+	MarkdownJavadocOption markdownJavadocOption();
 
 	default List<LeafModJson> allMods() {
 		return Stream.concat(modDependencies().stream(), localMods().stream()).toList();

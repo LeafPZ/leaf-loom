@@ -28,8 +28,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Optional;
 import java.util.jar.Manifest;
 
@@ -37,16 +39,27 @@ import dev.aoqia.leaf.loom.util.FileSystemUtil;
 import net.fabricmc.mappingio.MappingReader;
 import net.fabricmc.mappingio.format.MappingFormat;
 
-public record TinyJarInfo(boolean v2, Optional<String> minecraftVersionId) {
+public record TinyJarInfo(boolean v2, Optional<String> gameVersionId) {
+	public static final String MAPPINGS_PATH = "mappings/mappings.tiny";
 	private static final String MANIFEST_PATH = "META-INF/MANIFEST.MF";
 	private static final String MANIFEST_VERSION_ID_ATTRIBUTE = "Leaf-Version-Id";
 
 	public static TinyJarInfo get(Path jar) {
 		try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(jar)) {
-			return new TinyJarInfo(doesJarContainV2Mappings(delegate), getMinecraftVersionId(delegate));
+			return new TinyJarInfo(doesJarContainV2Mappings(delegate), getGameVersionId(delegate));
 		} catch (IOException e) {
 			throw new UncheckedIOException("Failed to read tiny jar info", e);
 		}
+	}
+
+	public static void extractMappings(Path jar, Path extractTo) throws IOException {
+		try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(jar)) {
+			extractMappings(delegate.fs(), extractTo);
+		}
+	}
+
+	public static void extractMappings(FileSystem jar, Path extractTo) throws IOException {
+		Files.copy(jar.getPath(MAPPINGS_PATH), extractTo, StandardCopyOption.REPLACE_EXISTING);
 	}
 
 	private static boolean doesJarContainV2Mappings(FileSystemUtil.Delegate fs) throws IOException {
@@ -55,7 +68,7 @@ public record TinyJarInfo(boolean v2, Optional<String> minecraftVersionId) {
 		}
 	}
 
-	private static Optional<String> getMinecraftVersionId(FileSystemUtil.Delegate fs) throws IOException {
+	private static Optional<String> getGameVersionId(FileSystemUtil.Delegate fs) throws IOException {
 		final Path manifestPath = fs.getPath(MANIFEST_PATH);
 
 		if (Files.exists(manifestPath)) {
@@ -65,8 +78,8 @@ public record TinyJarInfo(boolean v2, Optional<String> minecraftVersionId) {
 				manifest.read(in);
 			}
 
-			final String minecraftVersionId = manifest.getMainAttributes().getValue(MANIFEST_VERSION_ID_ATTRIBUTE);
-			return Optional.ofNullable(minecraftVersionId);
+			final String versionId = manifest.getMainAttributes().getValue(MANIFEST_VERSION_ID_ATTRIBUTE);
+			return Optional.ofNullable(versionId);
 		}
 
 		return Optional.empty();

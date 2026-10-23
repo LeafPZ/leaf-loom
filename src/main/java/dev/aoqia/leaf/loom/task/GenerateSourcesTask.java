@@ -230,11 +230,12 @@ public abstract class GenerateSourcesTask extends AbstractLoomTask {
 
 		getMappings().set(SourceMappingsService.create(getProject()));
 
-		if (!LoomGradleExtension.get(getProject()).disableObfuscation()) {
-			getUnpickOptions().set(UnpickService.createOptions(this));
-			getRuntimeNamespace().set(MappingsNamespace.NAMED.toString());
-		} else {
+		getUnpickOptions().set(UnpickService.createOptions(this));
+
+		if (getExtension().disableObfuscation()) {
 			getRuntimeNamespace().set(MappingsNamespace.OFFICIAL.toString());
+		} else {
+			getRuntimeNamespace().set(MappingsNamespace.NAMED.toString());
 		}
 
 		getMaxCachedFiles().set(GradleUtils.getIntegerPropertyProvider(getProject(), Constants.Properties.DECOMPILE_CACHE_MAX_FILES).orElse(50_000));
@@ -610,7 +611,8 @@ public abstract class GenerateSourcesTask extends AbstractLoomTask {
 						getLibraries(),
 						logger,
 						decompilerOptions.options(),
-						getParameters().getRuntimeNamespace().get()
+						getParameters().getRuntimeNamespace().get(),
+						mappingsService.getJavadocStyle()
 				);
 
 				decompiler.decompile(

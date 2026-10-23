@@ -24,6 +24,7 @@
 
 package dev.aoqia.leaf.loom.api;
 
+import org.gradle.api.Action;
 import org.gradle.api.Named;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.provider.ListProperty;
@@ -31,6 +32,8 @@ import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.SourceSet;
 import org.jetbrains.annotations.ApiStatus;
+
+import dev.aoqia.leaf.loom.task.RunGameTask;
 
 /**
  * Represents a run configuration for Minecraft, these can presented via an IDE run configuration or a Gradle task.
@@ -42,7 +45,7 @@ public interface RunConfiguration extends Named {
 	/**
 	 * The full name of the run configuration, i.e. 'Minecraft Client'.
 	 *
-	 * <p>By default this is determined from the base name.
+	 * <p>By default, this is determined from the base name.
 	 *
 	 * <p>Note: unless the project is the root project (or {@link #getAppendProjectPathToDisplayName()} is disabled),
 	 * the project path will be appended automatically, e.g. 'Minecraft Client (:some:project)'.
@@ -166,4 +169,11 @@ public interface RunConfiguration extends Named {
 	default void server() {
 		getRuntimeEnvironment().set("server");
 	}
+
+	/**
+	 * Configures the Gradle task used to run this configuration.
+	 *
+	 * @param action The action used to configure the run task.
+	 */
+	void task(Action<RunGameTask> action);
 }

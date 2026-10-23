@@ -131,19 +131,6 @@ public abstract class LoomTasks implements Runnable {
 
 		registerIDETasks();
 		registerRunTasks();
-
-		// Must be done in afterEvaluate to allow time for the build script to configure the jar config.
-		GradleUtils.afterSuccessfulEvaluation(getProject(), () -> {
-			final ZomboidVersionMeta versionInfo = extension.getZomboidProvider().getVersionInfo();
-
-			if (versionInfo == null) {
-				// Something has gone wrong, don't register the task.
-                LOGGER.error("Version info is null in LoomTasks#run");
-				return;
-			}
-
-			registerClientSetupTasks(getTasks(), versionInfo.hasNativesToExtract());
-		});
 	}
 
 	private void registerMigrateMappingsTasks() {
@@ -273,25 +260,6 @@ public abstract class LoomTasks implements Runnable {
 
 		getTasks().withType(RenderDocRunTask.class).configureEach(task -> {
 			task.getRenderDocExecutable().fileProvider(renderDocCMD);
-		});
-	}
-
-	private static void registerClientSetupTasks(TaskContainer tasks, boolean extractNatives) {
-		if (extractNatives) {
-			tasks.register("extractNatives", ExtractNativesTask.class, t -> {
-				t.setDescription("Extracts the platform specific natives.");
-			});
-		}
-
-		tasks.register("configureClientLaunch", task -> {
-			task.dependsOn(tasks.named("configureLaunch"));
-
-			if (extractNatives) {
-				task.dependsOn(tasks.named("extractNatives"));
-			}
-
-			task.setDescription("Setup the required files to launch the Zomboid client");
-			task.setGroup(Constants.TaskGroup.LEAF);
 		});
 	}
 

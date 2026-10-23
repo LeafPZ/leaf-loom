@@ -26,66 +26,77 @@ package dev.aoqia.leaf.loom.configuration.ide;
 
 import javax.inject.Inject;
 
+import org.gradle.api.Action;
 import org.gradle.api.Named;
 import org.gradle.api.Project;
 import org.gradle.api.provider.Property;
 
 import dev.aoqia.leaf.loom.api.RunConfiguration;
+import dev.aoqia.leaf.loom.task.LoomTasks;
+import dev.aoqia.leaf.loom.task.RunGameTask;
 
 public abstract class RunConfigSettings implements Named, RunConfiguration, RunConfigurationInternal {
-	// The base name of the run configuration, which is the name it is created with, i.e. 'client'
-	private final String name;
-	private final Project project;
+    // The base name of the run configuration, which is the name it is created with, i.e. 'client'
+    private final String name;
+    private final Project project;
 
-	@Inject
-	public RunConfigSettings(Project project, String name) {
-		this.name = name;
-		this.project = project;
-		DefaultRunConfigurationSettings.configureDefaults(this, project);
-	}
+    @Inject
+    public RunConfigSettings(Project project, String name) {
+        this.name = name;
+        this.project = project;
+        DefaultRunConfigurationSettings.configureDefaults(this, project);
+    }
 
-	@Override
-	public String getName() {
-		return name;
-	}
+    @Override
+    public String getName() {
+        return name;
+    }
 
-	// Backwards compatibility shims:
+    @Override
+    public void task(Action<RunGameTask> action) {
+        String taskName = LoomTasks.getRunConfigTaskName(this);
 
-	// Note: Overridden for backwards compatibility
-	@Override
-	public abstract Property<Boolean> getAppendProjectPathToDisplayName();
+        project.getTasks().named(taskName::equals).withType(RunGameTask.class).configureEach(action);
+    }
 
-	// Note: Overridden for backwards compatibility
-	@Override
-	public abstract Property<String> getMainClass();
+    // Backwards compatibility shims:
 
-	// Note: Overridden for backwards compatibility
-	@Override
-	public void client() {
-		RunConfigurationInternal.super.client();
-	}
+    // Note: Overridden for backwards compatibility
+    @Override
+    public abstract Property<Boolean> getAppendProjectPathToDisplayName();
 
-	// Note: Overridden for backwards compatibility
-	@Override
-	public void server() {
-		RunConfigurationInternal.super.server();
-	}
+    // Note: Overridden for backwards compatibility
+    @Override
+    public abstract Property<String> getMainClass();
 
-	// Note: Overload method for backwards compatibility
-	public void inherit(RunConfigSettings parent) {
-		RunConfigurationInternal.super.inherit(parent);
-	}
+    // Note: Overridden for backwards compatibility
+    @Override
+    public void client() {
+        RunConfigurationInternal.super.client();
+    }
 
-	// Note: Overridden for backwards compatibility
-	@Override
-	public abstract Property<String> getIdeConfigFolder();
+    // Note: Overridden for backwards compatibility
+    @Override
+    public void server() {
+        RunConfigurationInternal.super.server();
+    }
 
-	// Deprecated methods:
+    // Note: Overload method for backwards compatibility
+    public void inherit(RunConfigSettings parent) {
+        RunConfigurationInternal.super.inherit(parent);
+    }
 
-	/**
-	 * Technically deprecated, but as it shadows the "project" property from the parent class, it reports as deprecated in IDEs, which is undesirable.
-	 */
-	public Project getProject() {
-		return project;
-	}
+    // Note: Overridden for backwards compatibility
+    @Override
+    public abstract Property<String> getIdeConfigFolder();
+
+    // Deprecated methods:
+
+    /**
+     * Technically deprecated, but as it shadows the "project" property from the parent class, it reports as
+     * deprecated in IDEs, which is undesirable.
+     */
+    public Project getProject() {
+        return project;
+    }
 }

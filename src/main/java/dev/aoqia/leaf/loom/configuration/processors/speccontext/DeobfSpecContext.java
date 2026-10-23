@@ -43,6 +43,7 @@ import org.gradle.api.Project;
 import org.gradle.api.file.FileCollection;
 
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
+import dev.aoqia.leaf.loom.api.processor.MarkdownJavadocOption;
 import dev.aoqia.leaf.loom.api.processor.SpecContext;
 import dev.aoqia.leaf.loom.util.AsyncCache;
 import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
@@ -233,5 +234,10 @@ public record DeobfSpecContext(List<LeafModJson> modDependencies,
 	@Override
 	public MappingsNamespace productionNamespace() {
 		return MappingsNamespace.OFFICIAL;
+	}
+
+	@Override
+	public MarkdownJavadocOption markdownJavadocOption() {
+		return MarkdownJavadocOption.REQUIRED;
 	}
 }

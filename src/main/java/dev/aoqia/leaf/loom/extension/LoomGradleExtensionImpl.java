@@ -41,6 +41,7 @@ import org.gradle.api.file.FileCollection;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
+import org.jspecify.annotations.Nullable;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.LoomRemapGradlePlugin;
@@ -53,6 +54,7 @@ import dev.aoqia.leaf.loom.configuration.mods.ArtifactMetadata;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.IntermediaryMappingsProvider;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.LayeredMappingsFactory;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidMetadataProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.library.LibraryProcessorManager;
@@ -135,10 +137,6 @@ public abstract class LoomGradleExtensionImpl extends LoomGradleExtensionApiImpl
 		if (refreshDeps) {
 			project.getLogger().lifecycle("Refresh dependencies is in use, loom will be significantly slower.");
 		}
-
-		if (isolatedProjectsActive) {
-			project.getLogger().lifecycle("Isolated projects is enabled, Loom support is highly experimental, not all features will be enabled.");
-		}
 	}
 
 	@Override
@@ -172,21 +170,22 @@ public abstract class LoomGradleExtensionImpl extends LoomGradleExtensionApiImpl
 	}
 
 	@Override
-	public MappingConfiguration getMappingConfiguration() {
+	public RemapMappingConfiguration getMappingConfiguration() {
 		if (disableObfuscation()) {
 			project.getLogger().lifecycle("help", new RuntimeException());
 			throw new UnsupportedOperationException("Cannot get mappings configuration in a non-obfuscated environment");
 		}
 
-		return Objects.requireNonNull(mappingConfiguration, "Cannot get MappingsProvider before it has been setup");
+		return (RemapMappingConfiguration) Objects.requireNonNull(mappingConfiguration, "Cannot get MappingsProvider before it has been setup");
+	}
+
+	@Override
+	public @Nullable MappingConfiguration getMappingConfigurationOrNull() {
+		return mappingConfiguration;
 	}
 
 	@Override
 	public void setMappingConfiguration(MappingConfiguration mappingConfiguration) {
-		if (disableObfuscation()) {
-			throw new UnsupportedOperationException("Cannot set mappings configuration in a non-obfuscated environment");
-		}
-
 		this.mappingConfiguration = mappingConfiguration;
 	}
 

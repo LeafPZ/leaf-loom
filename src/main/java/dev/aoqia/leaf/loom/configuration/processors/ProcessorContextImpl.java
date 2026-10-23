@@ -24,10 +24,13 @@
 
 package dev.aoqia.leaf.loom.configuration.processors;
 
+import java.util.Objects;
+
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.api.processor.ProcessorContext;
 import dev.aoqia.leaf.loom.configuration.ConfigContext;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJarConfiguration;
 import dev.aoqia.leaf.loom.util.LazyCloseable;
@@ -63,7 +66,8 @@ public record ProcessorContextImpl(ConfigContext configContext, ZomboidJar minec
 	@Override
 	public MemoryMappingTree getMappings() {
 		LoomGradleExtension extension = LoomGradleExtension.get(configContext().project());
-		return extension.getMappingConfiguration().getMappingsService(configContext().project(), configContext().serviceFactory()).getMappingTree();
+		MappingConfiguration mappingConfiguration = Objects.requireNonNull(extension.getMappingConfigurationOrNull(), "Mappings have not been configured");
+		return mappingConfiguration.getMappingsService(configContext().project(), configContext().serviceFactory()).getMappingTree();
 	}
 
 	@Override

@@ -29,6 +29,7 @@ import java.util.Collection;
 import java.util.List;
 
 import dev.aoqia.leaf.loom.configuration.mods.ArtifactMetadata;
+import dev.aoqia.leaf.loom.configuration.providers.mappings.RemapMappingConfiguration;
 import dev.aoqia.leaf.loom.util.copygamefile.CopyGameFileBuilder;
 
 import org.gradle.api.Project;
@@ -37,6 +38,7 @@ import org.gradle.api.file.FileCollection;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Provider;
 import org.jetbrains.annotations.ApiStatus;
+import org.jspecify.annotations.Nullable;
 
 import dev.aoqia.leaf.loom.api.LoomGradleExtensionAPI;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
@@ -76,7 +78,10 @@ public interface LoomGradleExtension extends LoomGradleExtensionAPI {
 
 	void setZomboidProvider(ZomboidProvider zomboidProvider);
 
-	MappingConfiguration getMappingConfiguration();
+	RemapMappingConfiguration getMappingConfiguration();
+
+	@Nullable
+	MappingConfiguration getMappingConfigurationOrNull();
 
 	void setMappingConfiguration(MappingConfiguration mappingConfiguration);
 
