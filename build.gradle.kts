@@ -1,6 +1,5 @@
 @file:Suppress("AvoidDuplicateDependencies")
 
-import com.diffplug.gradle.spotless.JavaExtension
 import com.diffplug.spotless.LineEnding
 import groovy.json.JsonOutput
 import org.gradle.api.tasks.testing.logging.TestLogEvent
