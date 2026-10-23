@@ -45,7 +45,6 @@ import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -72,11 +71,8 @@ import org.objectweb.asm.tree.InnerClassNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.util.CompletableFutureCollector;
-import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;
-import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public final class JarWalker {
 	private static final Logger LOGGER = LoggerFactory.getLogger(JarWalker.class);

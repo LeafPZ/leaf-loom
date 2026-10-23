@@ -75,7 +75,6 @@ import net.fabricmc.tinyremapper.TinyRemapper;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.build.nesting.JarNester;
-import dev.aoqia.leaf.loom.build.nesting.NestableJarGenerationTask;
 import dev.aoqia.leaf.loom.configuration.accesswidener.AccessWidenerFile;
 import dev.aoqia.leaf.loom.configuration.mods.ArtifactMetadata;
 import dev.aoqia.leaf.loom.task.service.ClientEntriesService;

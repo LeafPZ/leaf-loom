@@ -47,7 +47,6 @@ import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.configuration.ConfigContext;
 import dev.aoqia.leaf.loom.configuration.decompile.DecompileConfiguration;
 import dev.aoqia.leaf.loom.configuration.decompile.SingleJarDecompileConfiguration;
-import dev.aoqia.leaf.loom.configuration.decompile.SplitDecompileConfiguration;
 import dev.aoqia.leaf.loom.configuration.processors.ZomboidJarProcessorManager;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.IntermediaryZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.MappedZomboidProvider;

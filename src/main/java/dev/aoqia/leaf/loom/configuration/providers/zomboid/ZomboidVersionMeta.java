@@ -44,7 +44,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import com.google.gson.JsonElement;
 import org.jspecify.annotations.Nullable;
 
 import dev.aoqia.leaf.loom.util.Constants;

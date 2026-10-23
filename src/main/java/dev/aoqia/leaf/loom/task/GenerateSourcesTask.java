@@ -86,7 +86,6 @@ import org.jspecify.annotations.Nullable;
 
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
 
-import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.decompilers.DecompilationMetadata;
 import dev.aoqia.leaf.loom.api.decompilers.DecompilerOptions;
 import dev.aoqia.leaf.loom.api.decompilers.LoomDecompiler;

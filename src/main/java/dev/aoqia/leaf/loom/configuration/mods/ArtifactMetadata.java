@@ -53,7 +53,6 @@ import java.util.jar.Manifest;
 
 import org.jspecify.annotations.Nullable;
 
-import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.configuration.InstallerData;
 import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;

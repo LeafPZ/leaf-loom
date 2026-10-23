@@ -39,7 +39,6 @@
 
 package dev.aoqia.leaf.loom.configuration.ide.idea;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;

@@ -42,7 +42,6 @@ package dev.aoqia.leaf.loom.configuration.decompile;
 import org.gradle.api.Project;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.MappingConfiguration;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.MappedZomboidProvider;
 

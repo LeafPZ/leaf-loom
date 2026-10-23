@@ -57,7 +57,6 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.assets.AssetIndex;
 import dev.aoqia.leaf.loom.util.Check;
 import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.MirrorUtil;
-import dev.aoqia.leaf.loom.util.Platform;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public class ZomboidProvider {

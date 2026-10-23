@@ -54,9 +54,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.aoqia.leaf.loom.util.Check;
-import dev.aoqia.leaf.loom.util.Pair;
 import dev.aoqia.leaf.loom.util.ZipReprocessorUtil;
-import dev.aoqia.leaf.loom.util.ZipUtils;
 import dev.aoqia.leaf.loom.util.fmj.LeafModJsonFactory;
 
 public class JarNester {

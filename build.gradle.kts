@@ -331,11 +331,10 @@ spotless {
         targetExclude("**/generated/**")
 
         importOrder("java|javax", "", "net.fabricmc", "\\#net.fabricmc", "$group", "\\#", "\\#$group")
+        removeUnusedImports()
+        forbidWildcardImports()
+        forbidModuleImports()
 
-//        removeUnusedImports()
-//        forbidWildcardImports()
-//        forbidModuleImports()
-//
 //        cleanthat()
 ////        eclipse().configFile(file("eclipse-formatter.xml"))
 ////            .sortMembersEnabled(true)

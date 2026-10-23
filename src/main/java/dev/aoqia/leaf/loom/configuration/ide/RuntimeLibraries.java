@@ -52,9 +52,7 @@ import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.ResolvedArtifact;
 import org.gradle.api.artifacts.ResolvedModuleVersion;
 
-import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.RunConfiguration;
-import dev.aoqia.leaf.loom.configuration.providers.BundleMetadata;
 import dev.aoqia.leaf.loom.util.Constants;
 
 public class RuntimeLibraries {

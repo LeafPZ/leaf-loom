@@ -40,8 +40,6 @@
 package dev.aoqia.leaf.loom.task.service;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 
 import org.gradle.api.IllegalDependencyNotation;
 import org.gradle.api.Project;
@@ -58,8 +56,6 @@ import org.slf4j.LoggerFactory;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.LayeredMappingSpecBuilderImpl;
-import dev.aoqia.leaf.loom.configuration.providers.mappings.LayeredMappingsFactory;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.TinyMappingsService;
 import dev.aoqia.leaf.loom.util.service.Service;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
