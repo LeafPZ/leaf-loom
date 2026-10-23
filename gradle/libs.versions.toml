@@ -14,10 +14,8 @@ unpick = "3.0.0-beta.13"
 commons-io = "2.15.1"
 
 # Plugins
-spotless = "8.6.0"
+spotless = "8.10.4"
 test-retry = "1.6.5"
-# checkstyle = "13.4.1"
-# codenarc = "3.7.0"
 gradle-plugin-publish = "2.1.1"
 
 [libraries]
@@ -47,10 +45,10 @@ kotlin-metadata = { module = "org.jetbrains.kotlin:kotlin-metadata-jvm", version
 
 [plugins]
 
-kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
-retry = { id = "org.gradle.test-retry", version.ref = "test-retry" }
 gradle-plugin-publish = { id = "com.gradle.plugin-publish", version.ref = "gradle-plugin-publish" }
+kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+retry = { id = "org.gradle.test-retry", version.ref = "test-retry" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 
 [bundles]
 
