@@ -367,11 +367,6 @@ spotless {
 //    }
 
     kotlin {
-        suppressLintsFor {
-            step = "ktlint"
-            shortCode = "standard:no-consecutive-comments"
-        }
-
         targetExclude("src/test/resources/projects/*/**")
 
         ktlint()

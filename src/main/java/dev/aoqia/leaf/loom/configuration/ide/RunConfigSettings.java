@@ -1,4 +1,5 @@
 // spotless:off
+
 /*
  * Copyright 2026 aoqia
  *
@@ -35,6 +36,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 // spotless:on
 
 package dev.aoqia.leaf.loom.configuration.ide;
