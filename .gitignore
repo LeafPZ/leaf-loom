@@ -9,8 +9,10 @@
 !/.cliff.toml
 !/.gitattributes
 !/.gitignore
+!/AGENTS.md
 !/build.gradle.kts
 !/checkstyle.xml
+!/CLAUDE.md
 !/codenarc.groovy
 !/eclipse-formatter.xml
 !/gradle.properties
