@@ -1,28 +1,22 @@
 /*
- * This file is part of leaf-loom, licensed under the MIT License (MIT).
+ * Copyright $YEAR aoqia
  *
- * Copyright (c) $YEAR aoqia
+ * The terms "project", "repository", etc refer to the fork/derivation of the Apache-licensed code that was created by
+ * aoqia and is maintained by aoqia and public contributors unless stated otherwise; often by using "original",
+ * "upstream", or similar terms.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * This file was originally released under the MIT license - see below for the original header. The
+ * project has been relicensed to the GNU AGPLv3 license with additional terms; said terms are in the
+ * LICENSE_EXCEPTION.md file alongside LICENSE.
  *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
+ * All modifications made to this file after the original Apache-licensed version were created by us. These
+ * modifications are provided under the AGPLv3 license (including exception terms). The portions of this file that were
+ * not modified by us remain subject to the original copyright notice and the MIT license, and the
+ * original license text is retained in LICENSE_UPSTREAM located alongside LICENSE.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-
-/*
+ * The complete record of changes to this file is publicly available in the project's Git history, which anyone may view
+ * at any time for any reason.
+ *
  * This file is part of fabric-loom, licensed under the MIT License (MIT).
  *
  * Copyright (c) $YEAR FabricMC
