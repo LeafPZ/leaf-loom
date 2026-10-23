@@ -38,7 +38,6 @@ plugins {
     idea
     eclipse
     groovy
-//    codenarc
 //    checkstyle
     alias(libs.plugins.kotlin)
 //    alias(libs.plugins.spotless)
@@ -374,9 +373,6 @@ tasks.withType<Test>().configureEach {
 //    }
 //}
 
-// codenarc {
-//     configFile = file("codenarc.groovy")
-// }
 
 // checkstyle {
 //     configFile = file("checkstyle.xml")
