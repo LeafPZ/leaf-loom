@@ -37,7 +37,6 @@ public class Constants {
 	public static final String LEAF_SNAPSHOT_REPOSITORY = "https://maven.aoqia.dev/snapshots/";
 
 	public static final String DLI_ENTRYPOINT = "net.fabricmc.devlaunchinjector.Main";
-	public static final String MICROSOFT_CLIENT_ID = "f8ebf47c-dffd-4ee4-b27e-c293f3a887a8";
 
 	public static final int ASM_VERSION = Opcodes.ASM9;
 	public static final String RELEASE_TIME_41_78_19 = "2022-12-17T21:16:46Z";
