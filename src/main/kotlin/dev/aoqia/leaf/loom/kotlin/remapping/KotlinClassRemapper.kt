@@ -73,7 +73,7 @@ import kotlin.metadata.jvm.toJvmInternalName
 
 @OptIn(ExperimentalContextReceivers::class)
 class KotlinClassRemapper(
-    private val remapper: Remapper,
+    private val remapper: Remapper
 ) {
     fun remap(clazz: KmClass): KmClass {
         clazz.name = remap(clazz.name)
@@ -187,7 +187,7 @@ class KotlinClassRemapper(
             typeProjection.variance,
             typeProjection.type?.let {
                 remap(it)
-            },
+            }
         )
 
     private fun remap(flexibleTypeUpperBound: KmFlexibleTypeUpperBound): KmFlexibleTypeUpperBound =
@@ -199,7 +199,8 @@ class KotlinClassRemapper(
         return valueParameter
     }
 
-    private fun remap(annotation: KmAnnotation): KmAnnotation = KmAnnotation(remap(annotation.className), annotation.arguments)
+    private fun remap(annotation: KmAnnotation): KmAnnotation =
+        KmAnnotation(remap(annotation.className), annotation.arguments)
 
     private fun remap(signature: JvmMethodSignature): JvmMethodSignature =
         JvmMethodSignature(signature.name, remapper.mapMethodDesc(signature.descriptor))

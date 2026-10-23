@@ -51,7 +51,7 @@ import org.objectweb.asm.commons.Remapper
 
 class KotlinMetadataRemappingClassVisitor(
     private val remapper: Remapper,
-    next: ClassVisitor?,
+    next: ClassVisitor?
 ) : ClassVisitor(Opcodes.ASM9, next) {
     companion object {
         val ANNOTATION_DESCRIPTOR: String = Type.getDescriptor(Metadata::class.java)
@@ -62,7 +62,7 @@ class KotlinMetadataRemappingClassVisitor(
                 "kotlin/jvm/internal/PropertyReference2Impl",
                 "kotlin/jvm/internal/MutablePropertyReference0Impl",
                 "kotlin/jvm/internal/MutablePropertyReference1Impl",
-                "kotlin/jvm/internal/MutablePropertyReference2Impl",
+                "kotlin/jvm/internal/MutablePropertyReference2Impl"
             )
     }
 
@@ -75,7 +75,7 @@ class KotlinMetadataRemappingClassVisitor(
         name: String?,
         signature: String?,
         superName: String?,
-        interfaces: Array<out String>?,
+        interfaces: Array<out String>?
     ) {
         this.className = name
         this.propertyReferenceImpl = superName in KOTLIN_PROPERTY_REFERENCE_IMPLS
@@ -84,7 +84,7 @@ class KotlinMetadataRemappingClassVisitor(
 
     override fun visitAnnotation(
         descriptor: String,
-        visible: Boolean,
+        visible: Boolean
     ): AnnotationVisitor? {
         var result: AnnotationVisitor? = super.visitAnnotation(descriptor, visible)
 
@@ -104,7 +104,7 @@ class KotlinMetadataRemappingClassVisitor(
         name: String?,
         descriptor: String?,
         signature: String?,
-        exceptions: Array<out String>?,
+        exceptions: Array<out String>?
     ): MethodVisitor {
         val next = super.visitMethod(access, name, descriptor, signature, exceptions)
 

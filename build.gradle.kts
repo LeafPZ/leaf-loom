@@ -375,7 +375,7 @@ spotless {
         endWithNewline()
 
         toggleOffOn()
-        licenseHeaderFile(file("HEADER")).yearSeparator("-").updateYearWithLatest(true)
+        licenseHeaderFile(file("HEADER")).yearSeparator("-").onlyIfContentMatches("^[^/]{2}")
     }
 
 //    kotlinGradle {
