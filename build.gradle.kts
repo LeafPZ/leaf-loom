@@ -329,15 +329,36 @@ spotless {
     java {
         targetExclude("**/generated/**")
 
-        importOrder("java|javax", "", "net.fabricmc", "\\#net.fabricmc", "$group", "\\#", "\\#$group")
-        removeUnusedImports()
-        forbidWildcardImports()
-        forbidModuleImports()
+        eclipse().configFile(file("eclipse-formatter.xml"))
+            .sortMembersEnabled(true)
+            // SF,SI,SM,F,I,C,M,T = Static Fields, Static Initializers, Static Methods,
+            //   Fields, Initializers, Constructors, Methods, (Nested) Types
+            .sortMembersOrder("SF,F,SI,I,C,SM,M,T")
+            .sortMembersDoNotSortFields(true)
+            .sortMembersVisibilityOrderEnabled(true)
+            // B,R,D,V = Public, Protected, Package, Private
+            .sortMembersVisibilityOrder("B,R,D,V")
 
         cleanthat()
         formatAnnotations()
 
+        importOrder(
+            "java|javax",
+            "",
+            "net.fabricmc",
+            "\\#net.fabricmc",
+            "$group",
+            "\\#",
+            "\\#$group",
+            "zombie",
+            "\\#zombie"
+        )
+        removeUnusedImports()
+        forbidWildcardImports()
+        forbidModuleImports()
+
         trimTrailingWhitespace()
+        leadingTabsToSpaces()
         endWithNewline()
 
         toggleOffOn()
