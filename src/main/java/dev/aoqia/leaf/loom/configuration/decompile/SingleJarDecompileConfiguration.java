@@ -52,41 +52,42 @@ import dev.aoqia.leaf.loom.task.GenerateSourcesTask;
 import dev.aoqia.leaf.loom.util.Constants;
 
 public class SingleJarDecompileConfiguration extends DecompileConfiguration<MappedZomboidProvider> {
-	public SingleJarDecompileConfiguration(Project project, MappedZomboidProvider zomboidProvider) {
-		super(project, zomboidProvider);
-	}
+    public SingleJarDecompileConfiguration(Project project, MappedZomboidProvider zomboidProvider) {
+        super(project, zomboidProvider);
+    }
 
-	@Override
-	public String getTaskName(ZomboidJar.Type type) {
-		return "genSources";
-	}
+    @Override
+    public final void afterEvaluation() {
+        final List<ZomboidJar> zomboidJars = zomboidProvider.getZomboidJars();
+        assert zomboidJars.size() == 1;
+        final ZomboidJar zomboidJar = zomboidJars.get(0);
+        final String taskBaseName = getTaskName(zomboidJar.getType());
 
-	@Override
-	public final void afterEvaluation() {
-		final List<ZomboidJar> zomboidJars = zomboidProvider.getZomboidJars();
-		assert zomboidJars.size() == 1;
-		final ZomboidJar zomboidJar = zomboidJars.get(0);
-		final String taskBaseName = getTaskName(zomboidJar.getType());
+        LoomGradleExtension.get(project).getDecompilerOptions().forEach(options -> {
+            final String decompilerName = options.getFormattedName();
+            String taskName = "%sWith%s".formatted(taskBaseName, decompilerName);
+            // Decompiler will be passed to the constructor of GenerateSourcesTask
+            project.getTasks().register(taskName, GenerateSourcesTask.class, options).configure(task -> {
+                task.getInputJarName().set(zomboidJar.getName());
+                task.getSourcesOutputJar()
+                    .fileValue(GenerateSourcesTask.getJarFileWithSuffix("-sources.jar", zomboidJar.getPath()));
 
-		LoomGradleExtension.get(project).getDecompilerOptions().forEach(options -> {
-			final String decompilerName = options.getFormattedName();
-			String taskName = "%sWith%s".formatted(taskBaseName, decompilerName);
-			// Decompiler will be passed to the constructor of GenerateSourcesTask
-			project.getTasks().register(taskName, GenerateSourcesTask.class, options).configure(task -> {
-				task.getInputJarName().set(zomboidJar.getName());
-				task.getSourcesOutputJar().fileValue(GenerateSourcesTask.getJarFileWithSuffix("-sources.jar", zomboidJar.getPath()));
+                task.dependsOn(project.getTasks().named("validateAccessWidener"));
+                task.setDescription("Decompile PZ using %s.".formatted(decompilerName));
+                task.setGroup(Constants.TaskGroup.LEAF);
+            });
+        });
 
-				task.dependsOn(project.getTasks().named("validateAccessWidener"));
-				task.setDescription("Decompile PZ using %s.".formatted(decompilerName));
-				task.setGroup(Constants.TaskGroup.LEAF);
-			});
-		});
+        project.getTasks().register(taskBaseName, task -> {
+            task.setDescription("Decompile PZ using the default decompiler.");
+            task.setGroup(Constants.TaskGroup.LEAF);
 
-		project.getTasks().register(taskBaseName, task -> {
-			task.setDescription("Decompile PZ using the default decompiler.");
-			task.setGroup(Constants.TaskGroup.LEAF);
+            task.dependsOn(project.getTasks().named("genSourcesWith" + DecompileConfiguration.DEFAULT_DECOMPILER));
+        });
+    }
 
-			task.dependsOn(project.getTasks().named("genSourcesWith" + DecompileConfiguration.DEFAULT_DECOMPILER));
-		});
-	}
+    @Override
+    public String getTaskName(ZomboidJar.Type type) {
+        return "genSources";
+    }
 }

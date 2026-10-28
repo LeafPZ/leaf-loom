@@ -44,5 +44,5 @@ package dev.aoqia.leaf.loom.util;
 import java.io.IOException;
 
 public interface IOStringConsumer {
-	void accept(String data) throws IOException;
+    void accept(String data) throws IOException;
 }

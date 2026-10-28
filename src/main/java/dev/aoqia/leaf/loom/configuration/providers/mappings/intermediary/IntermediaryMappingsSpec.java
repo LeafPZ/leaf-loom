@@ -47,12 +47,12 @@ import dev.aoqia.leaf.loom.api.mappings.layered.spec.MappingsSpec;
 import dev.aoqia.leaf.loom.configuration.providers.mappings.NoOpMappingLayer;
 
 public record IntermediaryMappingsSpec() implements MappingsSpec<MappingLayer> {
-	@Override
-	public MappingLayer createLayer(MappingContext context) {
-		if (!context.isUsingIntermediateMappings()) {
-			return NoOpMappingLayer.INSTANCE;
-		}
+    @Override
+    public MappingLayer createLayer(MappingContext context) {
+        if (!context.isUsingIntermediateMappings()) {
+            return NoOpMappingLayer.INSTANCE;
+        }
 
-		return new IntermediaryMappingLayer(context.intermediaryTree());
-	}
+        return new IntermediaryMappingLayer(context.intermediaryTree());
+    }
 }

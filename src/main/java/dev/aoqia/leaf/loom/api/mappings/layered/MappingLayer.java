@@ -51,17 +51,19 @@ import net.fabricmc.mappingio.MappingVisitor;
 
 @ApiStatus.Experimental
 public interface MappingLayer {
-	void visit(MappingVisitor mappingVisitor) throws IOException;
+    /**
+     * Provides a list of layer classes that this mapping layer depends on. If such a layer is not present an
+     * Exception will be thrown when trying to resolve the layer.
+     *
+     * @return A list of MappingLayer classes to depend on.
+     */
+    default List<Class<? extends MappingLayer>> dependsOn() {
+        return Collections.emptyList();
+    }
 
-	default MappingsNamespace getSourceNamespace() {
-		return MappingsNamespace.NAMED;
-	}
+    default MappingsNamespace getSourceNamespace() {
+        return MappingsNamespace.NAMED;
+    }
 
-	/**
-	 * Provides a list of layer classes that this mapping layer depends on. If such a layer is not present an Exception will be thrown when trying to resolve the layer.
-	 * @return A list of MappingLayer classes to depend on.
-	 */
-	default List<Class<? extends MappingLayer>> dependsOn() {
-		return Collections.emptyList();
-	}
+    void visit(MappingVisitor mappingVisitor) throws IOException;
 }

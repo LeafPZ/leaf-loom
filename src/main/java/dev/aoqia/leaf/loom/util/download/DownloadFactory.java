@@ -54,39 +54,39 @@ import dev.aoqia.leaf.loom.LoomGradleExtension;
  * Can be used to create a {@link DownloadBuilder} with the correct settings for the project within a task.
  */
 public abstract class DownloadFactory {
-	@Input
-	protected abstract Property<Boolean> getIsOffline();
+    @Inject
+    public DownloadFactory() {
+        getIsOffline().set(getProject().getGradle().getStartParameter().isOffline());
+        getIsManualRefreshDependencies().set(LoomGradleExtension.get(getProject()).refreshDeps());
+    }
 
-	@Input
-	protected abstract Property<Boolean> getIsManualRefreshDependencies();
+    // Matches the logic in LoomGradleExtensionImpl
+    public DownloadBuilder download(String url) {
+        DownloadBuilder builder;
 
-	@Inject
-	public abstract Project getProject();
+        try {
+            builder = Download.create(url);
+        } catch (URISyntaxException e) {
+            throw new RuntimeException("Failed to create downloader for: " + e);
+        }
 
-	@Inject
-	public DownloadFactory() {
-		getIsOffline().set(getProject().getGradle().getStartParameter().isOffline());
-		getIsManualRefreshDependencies().set(LoomGradleExtension.get(getProject()).refreshDeps());
-	}
+        if (getIsOffline().get()) {
+            builder.offline();
+        }
 
-	// Matches the logic in LoomGradleExtensionImpl
-	public DownloadBuilder download(String url) {
-		DownloadBuilder builder;
+        if (getIsManualRefreshDependencies().get()) {
+            builder.forceDownload();
+        }
 
-		try {
-			builder = Download.create(url);
-		} catch (URISyntaxException e) {
-			throw new RuntimeException("Failed to create downloader for: " + e);
-		}
+        return builder;
+    }
 
-		if (getIsOffline().get()) {
-			builder.offline();
-		}
+    @Inject
+    public abstract Project getProject();
 
-		if (getIsManualRefreshDependencies().get()) {
-			builder.forceDownload();
-		}
+    @Input
+    protected abstract Property<Boolean> getIsManualRefreshDependencies();
 
-		return builder;
-	}
+    @Input
+    protected abstract Property<Boolean> getIsOffline();
 }

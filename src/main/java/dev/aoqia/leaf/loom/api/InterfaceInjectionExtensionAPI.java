@@ -44,18 +44,18 @@ package dev.aoqia.leaf.loom.api;
 import org.gradle.api.provider.Property;
 
 public interface InterfaceInjectionExtensionAPI {
-	/**
-	 * When true loom will inject interfaces declared in dependency mod manifests into the minecraft jar file.
-	 * This is used to expose interfaces that are implemented on Minecraft classes by mixins at runtime
-	 * in the dev environment.
-	 *
-	 * @return the property controlling interface injection.
-	 */
-	Property<Boolean> getEnableDependencyInterfaceInjection();
+    /**
+     * When true loom will inject interfaces declared in dependency mod manifests into the minecraft jar file.
+     * This is used to expose interfaces that are implemented on Minecraft classes by mixins at runtime
+     * in the dev environment.
+     *
+     * @return the property controlling interface injection.
+     */
+    Property<Boolean> getEnableDependencyInterfaceInjection();
 
-	Property<Boolean> getIsEnabled();
+    Property<Boolean> getIsEnabled();
 
-	default boolean isEnabled() {
-		return getIsEnabled().get();
-	}
+    default boolean isEnabled() {
+        return getIsEnabled().get();
+    }
 }

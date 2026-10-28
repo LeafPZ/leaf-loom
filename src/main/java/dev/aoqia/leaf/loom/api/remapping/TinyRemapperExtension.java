@@ -49,72 +49,73 @@ import net.fabricmc.tinyremapper.TinyRemapper;
 /**
  * A remapper extension, that has direct access to the TinyRemapper APIs.
  *
- * <p>This API is not stable and may change without notice.
+ * <p>
+ * This API is not stable and may change without notice.
  */
 @ApiStatus.Experimental
 public interface TinyRemapperExtension {
-	/**
-	 * See: {@link TinyRemapper.Builder#extraAnalyzeVisitor(TinyRemapper.AnalyzeVisitorProvider)}.
-	 *
-	 * @return A {@link TinyRemapper.AnalyzeVisitorProvider} or {@code null}.
-	 */
-	default TinyRemapper.@Nullable AnalyzeVisitorProvider getAnalyzeVisitorProvider(Context context) {
-		return getAnalyzeVisitorProvider();
-	}
+    /**
+     * @deprecated Use {@link #getAnalyzeVisitorProvider(Context)} instead.
+     */
+    @Deprecated(forRemoval = true)
+    default TinyRemapper.@Nullable AnalyzeVisitorProvider getAnalyzeVisitorProvider() {
+        return null;
+    }
 
-	/**
-	 * See: {@link TinyRemapper.Builder#extraPreApplyVisitor(TinyRemapper.ApplyVisitorProvider)}.
-	 *
-	 * @return A {@link TinyRemapper.ApplyVisitorProvider} or {@code null}.
-	 */
-	default TinyRemapper.@Nullable ApplyVisitorProvider getPreApplyVisitor(Context context) {
-		return getPreApplyVisitor();
-	}
+    /**
+     * See: {@link TinyRemapper.Builder#extraAnalyzeVisitor(TinyRemapper.AnalyzeVisitorProvider)}.
+     *
+     * @return A {@link TinyRemapper.AnalyzeVisitorProvider} or {@code null}.
+     */
+    default TinyRemapper.@Nullable AnalyzeVisitorProvider getAnalyzeVisitorProvider(Context context) {
+        return getAnalyzeVisitorProvider();
+    }
 
-	/**
-	 * See: {@link TinyRemapper.Builder#extraPostApplyVisitor(TinyRemapper.ApplyVisitorProvider)}.
-	 *
-	 * @return A {@link TinyRemapper.ApplyVisitorProvider} or {@code null}.
-	 */
-	default TinyRemapper.@Nullable ApplyVisitorProvider getPostApplyVisitor(Context context) {
-		return getPostApplyVisitor();
-	}
+    /**
+     * @deprecated Use {@link #getPostApplyVisitor(Context)} instead.
+     */
+    @Deprecated(forRemoval = true)
+    default TinyRemapper.@Nullable ApplyVisitorProvider getPostApplyVisitor() {
+        return null;
+    }
 
-	interface Context {
-		/**
-		 * @return The source namespace.
-		 */
-		String sourceNamespace();
+    /**
+     * See: {@link TinyRemapper.Builder#extraPostApplyVisitor(TinyRemapper.ApplyVisitorProvider)}.
+     *
+     * @return A {@link TinyRemapper.ApplyVisitorProvider} or {@code null}.
+     */
+    default TinyRemapper.@Nullable ApplyVisitorProvider getPostApplyVisitor(Context context) {
+        return getPostApplyVisitor();
+    }
 
-		/**
-		 * @return The target namespace.
-		 */
-		String targetNamespace();
-	}
+    // Deprecated, for removal in Loom 1.6:
 
-	// Deprecated, for removal in Loom 1.6:
+    /**
+     * @deprecated Use {@link #getPreApplyVisitor(Context)} instead.
+     */
+    @Deprecated(forRemoval = true)
+    default TinyRemapper.@Nullable ApplyVisitorProvider getPreApplyVisitor() {
+        return null;
+    }
 
-	/**
-	 * @deprecated Use {@link #getAnalyzeVisitorProvider(Context)} instead.
-	 */
-	@Deprecated(forRemoval = true)
-	default TinyRemapper.@Nullable AnalyzeVisitorProvider getAnalyzeVisitorProvider() {
-		return null;
-	}
+    /**
+     * See: {@link TinyRemapper.Builder#extraPreApplyVisitor(TinyRemapper.ApplyVisitorProvider)}.
+     *
+     * @return A {@link TinyRemapper.ApplyVisitorProvider} or {@code null}.
+     */
+    default TinyRemapper.@Nullable ApplyVisitorProvider getPreApplyVisitor(Context context) {
+        return getPreApplyVisitor();
+    }
 
-	/**
-	 * @deprecated Use {@link #getPreApplyVisitor(Context)} instead.
-	 */
-	@Deprecated(forRemoval = true)
-	default TinyRemapper.@Nullable ApplyVisitorProvider getPreApplyVisitor() {
-		return null;
-	}
+    interface Context {
+        /**
+         * @return The source namespace.
+         */
+        String sourceNamespace();
 
-	/**
-	 * @deprecated Use {@link #getPostApplyVisitor(Context)} instead.
-	 */
-	@Deprecated(forRemoval = true)
-	default TinyRemapper.@Nullable ApplyVisitorProvider getPostApplyVisitor() {
-		return null;
-	}
+        /**
+         * @return The target namespace.
+         */
+        String targetNamespace();
+    }
 }

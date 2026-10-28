@@ -57,94 +57,95 @@ import dev.aoqia.leaf.loom.util.Platform;
  * Utils to get the libraries for a given platform, no processing is applied.
  */
 public class ZomboidLibraryHelper {
-	private static final Pattern NATIVES_PATTERN = Pattern.compile("^(?<group>.*)/(.*?)/(?<version>.*)/((?<name>.*?)-(\\k<version>)-)(?<classifier>.*).jar$");
+    private static final Pattern NATIVES_PATTERN = Pattern
+        .compile("^(?<group>.*)/(.*?)/(?<version>.*)/((?<name>.*?)-(\\k<version>)-)(?<classifier>.*).jar$");
 
-	public static List<Library> getLibrariesForPlatform(ZomboidVersionMeta versionMeta, Platform platform) {
-		var libraries = new ArrayList<Library>();
+    public static List<Library> getAllLibraries(ZomboidVersionMeta versionMeta) {
+        var libraries = new ArrayList<Library>();
 
-		for (ZomboidVersionMeta.Library library : versionMeta.libraries()) {
-			if (!library.isValidForOS(platform)) {
-				continue;
-			}
+        for (ZomboidVersionMeta.Library library : versionMeta.libraries()) {
+            if (library.artifact() != null) {
+                Library mavenLib = Library.fromMaven(library.name(), Library.Target.COMPILE);
 
-			if (library.artifact() != null) {
-				Library mavenLib = Library.fromMaven(library.name(), Library.Target.COMPILE);
+                // Versions that have the natives on the classpath, attempt to target them as natives.
+                if (mavenLib.classifier() != null && mavenLib.classifier().startsWith("natives-")) {
+                    mavenLib = mavenLib.withTarget(Library.Target.NATIVES);
+                }
 
-				// Versions that have the natives on the classpath, attempt to target them as natives.
-				if (mavenLib.classifier() != null && mavenLib.classifier().startsWith("natives-")) {
-					mavenLib = mavenLib.withTarget(Library.Target.NATIVES);
-				}
+                libraries.add(mavenLib);
+            }
 
-				libraries.add(mavenLib);
-			}
+            Map<String, ZomboidVersionMeta.Download> classifiers = library.downloads().classifiers();
 
-			if (library.hasNativesForOS(platform)) {
-				final ZomboidVersionMeta.Download download = library.classifierForOS(platform);
+            if (classifiers == null) {
+                continue;
+            }
 
-				if (download != null) {
-					libraries.add(downloadToLibrary(download));
-				}
-			}
-		}
+            for (ZomboidVersionMeta.Download download : classifiers.values()) {
+                libraries.add(downloadToLibrary(download));
+            }
+        }
 
-		return Collections.unmodifiableList(libraries);
-	}
+        return Collections.unmodifiableList(libraries);
+    }
 
-	public static List<Library> getAllLibraries(ZomboidVersionMeta versionMeta) {
-		var libraries = new ArrayList<Library>();
+    public static List<Library> getLibrariesForPlatform(ZomboidVersionMeta versionMeta, Platform platform) {
+        var libraries = new ArrayList<Library>();
 
-		for (ZomboidVersionMeta.Library library : versionMeta.libraries()) {
-			if (library.artifact() != null) {
-				Library mavenLib = Library.fromMaven(library.name(), Library.Target.COMPILE);
+        for (ZomboidVersionMeta.Library library : versionMeta.libraries()) {
+            if (!library.isValidForOS(platform)) {
+                continue;
+            }
 
-				// Versions that have the natives on the classpath, attempt to target them as natives.
-				if (mavenLib.classifier() != null && mavenLib.classifier().startsWith("natives-")) {
-					mavenLib = mavenLib.withTarget(Library.Target.NATIVES);
-				}
+            if (library.artifact() != null) {
+                Library mavenLib = Library.fromMaven(library.name(), Library.Target.COMPILE);
 
-				libraries.add(mavenLib);
-			}
+                // Versions that have the natives on the classpath, attempt to target them as natives.
+                if (mavenLib.classifier() != null && mavenLib.classifier().startsWith("natives-")) {
+                    mavenLib = mavenLib.withTarget(Library.Target.NATIVES);
+                }
 
-			Map<String, ZomboidVersionMeta.Download> classifiers = library.downloads().classifiers();
+                libraries.add(mavenLib);
+            }
 
-			if (classifiers == null) {
-				continue;
-			}
+            if (library.hasNativesForOS(platform)) {
+                final ZomboidVersionMeta.Download download = library.classifierForOS(platform);
 
-			for (ZomboidVersionMeta.Download download : classifiers.values()) {
-				libraries.add(downloadToLibrary(download));
-			}
-		}
+                if (download != null) {
+                    libraries.add(downloadToLibrary(download));
+                }
+            }
+        }
 
-		return Collections.unmodifiableList(libraries);
-	}
+        return Collections.unmodifiableList(libraries);
+    }
 
-	private static Library downloadToLibrary(ZomboidVersionMeta.Download download) {
-		final String path = download.path();
-		final Matcher matcher = NATIVES_PATTERN.matcher(path);
+    public static List<Library> getServerLibraries(BundleMetadata bundleMetadata) {
+        Objects.requireNonNull(bundleMetadata);
 
-		if (!matcher.find()) {
-			throw new IllegalStateException("Failed to match regex for natives path : " + path);
-		}
+        var libraries = new ArrayList<Library>();
 
-		final String group = matcher.group("group").replace("/", ".");
-		final String name = matcher.group("name");
-		final String version = matcher.group("version");
-		final String classifier = matcher.group("classifier");
-		final String dependencyNotation = "%s:%s:%s:%s".formatted(group, name, version, classifier);
+        for (BundleMetadata.Entry library : bundleMetadata.libraries()) {
+            libraries.add(Library.fromMaven(library.name(), Library.Target.COMPILE));
+        }
 
-		return Library.fromMaven(dependencyNotation, Library.Target.NATIVES);
-	}
+        return libraries;
+    }
 
-	public static List<Library> getServerLibraries(BundleMetadata bundleMetadata) {
-		Objects.requireNonNull(bundleMetadata);
+    private static Library downloadToLibrary(ZomboidVersionMeta.Download download) {
+        final String path = download.path();
+        final Matcher matcher = NATIVES_PATTERN.matcher(path);
 
-		var libraries = new ArrayList<Library>();
+        if (!matcher.find()) {
+            throw new IllegalStateException("Failed to match regex for natives path : " + path);
+        }
 
-		for (BundleMetadata.Entry library : bundleMetadata.libraries()) {
-			libraries.add(Library.fromMaven(library.name(), Library.Target.COMPILE));
-		}
+        final String group = matcher.group("group").replace("/", ".");
+        final String name = matcher.group("name");
+        final String version = matcher.group("version");
+        final String classifier = matcher.group("classifier");
+        final String dependencyNotation = "%s:%s:%s:%s".formatted(group, name, version, classifier);
 
-		return libraries;
-	}
+        return Library.fromMaven(dependencyNotation, Library.Target.NATIVES);
+    }
 }

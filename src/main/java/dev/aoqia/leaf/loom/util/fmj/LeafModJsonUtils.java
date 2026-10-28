@@ -50,76 +50,77 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
 public final class LeafModJsonUtils {
-	private LeafModJsonUtils() {
-	}
+    private LeafModJsonUtils() {
+    }
 
-	public static String readString(JsonObject jsonObject, String key) {
-		final JsonElement element = getElement(jsonObject, key);
-		ensurePrimitive(element, JsonPrimitive::isString, key);
+    public static JsonObject getJsonObject(JsonObject jsonObject, String key) {
+        final JsonElement element = getElement(jsonObject, key);
 
-		return element.getAsString();
-	}
+        if (!element.isJsonObject()) {
+            throw new ParseException("Unexpected json object type for key (%s)", key);
+        }
 
-	public static int readInt(JsonObject jsonObject, String key) {
-		final JsonElement element = getElement(jsonObject, key);
-		ensurePrimitive(element, JsonPrimitive::isNumber, key);
+        return element.getAsJsonObject();
+    }
 
-		return element.getAsInt();
-	}
+    // Ensure that the schemaVersion json entry, is first in the json file
+    // This exercises an optimisation here:
+    // https://github.com/FabricMC/fabric-loader/blob/d69cb72d26497e3f387cf46f9b24340b402a4644/src/main/java/net/fabricmc/loader/impl/metadata/ModMetadataParser.java#L62
+    public static JsonObject optimizeFmj(JsonObject json) {
+        if (!json.has("schemaVersion")) {
+            // No schemaVersion, something will explode later?!
+            return json;
+        }
 
-	public static JsonObject getJsonObject(JsonObject jsonObject, String key) {
-		final JsonElement element = getElement(jsonObject, key);
+        // Create a new json object with the schemaVersion first
+        var out = new JsonObject();
+        out.add("schemaVersion", json.get("schemaVersion"));
 
-		if (!element.isJsonObject()) {
-			throw new ParseException("Unexpected json object type for key (%s)", key);
-		}
+        for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
+            if (entry.getKey().equals("schemaVersion")) {
+                continue;
+            }
 
-		return element.getAsJsonObject();
-	}
+            // Add all other entries
+            out.add(entry.getKey(), entry.getValue());
+        }
 
-	// Ensure that the schemaVersion json entry, is first in the json file
-	// This exercises an optimisation here: https://github.com/FabricMC/fabric-loader/blob/d69cb72d26497e3f387cf46f9b24340b402a4644/src/main/java/net/fabricmc/loader/impl/metadata/ModMetadataParser.java#L62
-	public static JsonObject optimizeFmj(JsonObject json) {
-		if (!json.has("schemaVersion")) {
-			// No schemaVersion, something will explode later?!
-			return json;
-		}
+        return out;
+    }
 
-		// Create a new json object with the schemaVersion first
-		var out = new JsonObject();
-		out.add("schemaVersion", json.get("schemaVersion"));
+    public static int readInt(JsonObject jsonObject, String key) {
+        final JsonElement element = getElement(jsonObject, key);
+        ensurePrimitive(element, JsonPrimitive::isNumber, key);
 
-		for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
-			if (entry.getKey().equals("schemaVersion")) {
-				continue;
-			}
+        return element.getAsInt();
+    }
 
-			// Add all other entries
-			out.add(entry.getKey(), entry.getValue());
-		}
+    public static String readString(JsonObject jsonObject, String key) {
+        final JsonElement element = getElement(jsonObject, key);
+        ensurePrimitive(element, JsonPrimitive::isString, key);
 
-		return out;
-	}
+        return element.getAsString();
+    }
 
-	private static JsonElement getElement(JsonObject jsonObject, String key) {
-		final JsonElement element = jsonObject.get(key);
+    private static void ensurePrimitive(JsonElement jsonElement, Predicate<JsonPrimitive> predicate, String key) {
+        if (!jsonElement.isJsonPrimitive() || !predicate.test(jsonElement.getAsJsonPrimitive())) {
+            throw new ParseException("Unexpected primitive type for key (%s)", key);
+        }
+    }
 
-		if (element == null) {
-			throw new ParseException("Unable to find json element for key (%s)", key);
-		}
+    private static JsonElement getElement(JsonObject jsonObject, String key) {
+        final JsonElement element = jsonObject.get(key);
 
-		return element;
-	}
+        if (element == null) {
+            throw new ParseException("Unable to find json element for key (%s)", key);
+        }
 
-	private static void ensurePrimitive(JsonElement jsonElement, Predicate<JsonPrimitive> predicate, String key) {
-		if (!jsonElement.isJsonPrimitive() || !predicate.test(jsonElement.getAsJsonPrimitive())) {
-			throw new ParseException("Unexpected primitive type for key (%s)", key);
-		}
-	}
+        return element;
+    }
 
-	public static class ParseException extends RuntimeException {
-		public ParseException(String message, Object... args) {
-			super(String.format(Locale.ROOT, message, args));
-		}
-	}
+    public static class ParseException extends RuntimeException {
+        public ParseException(String message, Object... args) {
+            super(String.format(Locale.ROOT, message, args));
+        }
+    }
 }

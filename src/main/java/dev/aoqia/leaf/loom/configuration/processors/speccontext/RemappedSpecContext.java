@@ -75,166 +75,170 @@ import dev.aoqia.leaf.loom.util.fmj.LeafModJsonHelpers;
  * @param compileRuntimeMods Dependent mods found in both the compile and runtime classpath.
  */
 public record RemappedSpecContext(
-		List<LeafModJson> modDependencies,
-		List<LeafModJson> localMods,
-		List<ModHolder> compileRuntimeMods,
-		MappingsNamespace productionNamespace) implements SpecContext {
-	public static RemappedSpecContext create(Project project) {
-		return create(new RemappedProjectView.Impl(project));
-	}
+    List<LeafModJson> modDependencies,
+    List<LeafModJson> localMods,
+    List<ModHolder> compileRuntimeMods,
+    MappingsNamespace productionNamespace
+) implements SpecContext
+{
+    public static RemappedSpecContext create(Project project) {
+        return create(new RemappedProjectView.Impl(project));
+    }
 
-	@VisibleForTesting
-	public static RemappedSpecContext create(RemappedProjectView projectView) {
-		AsyncCache<List<LeafModJson>> fmjCache = new AsyncCache<>();
-		return new RemappedSpecContext(
-				getDependentMods(projectView, fmjCache),
-				projectView.getMods(),
-				getCompileRuntimeMods(projectView, fmjCache),
-				projectView.getProductionNamespace()
-		);
-	}
+    @VisibleForTesting
+    public static RemappedSpecContext create(RemappedProjectView projectView) {
+        AsyncCache<List<LeafModJson>> fmjCache = new AsyncCache<>();
+        return new RemappedSpecContext(getDependentMods(projectView, fmjCache), projectView.getMods(),
+            getCompileRuntimeMods(projectView, fmjCache), projectView.getProductionNamespace());
+    }
 
-	// Returns a list of mods found on both the compile and/or runtime classpaths
-	private static List<LeafModJson> getDependentMods(RemappedProjectView projectView, AsyncCache<List<LeafModJson>> fmjCache) {
-		var futures = new ArrayList<CompletableFuture<List<LeafModJson>>>();
+    // Returns a list of mods found on both the compile and/or runtime classpaths
+    private static List<LeafModJson> getDependentMods(RemappedProjectView projectView,
+        AsyncCache<List<LeafModJson>> fmjCache)
+    {
+        var futures = new ArrayList<CompletableFuture<List<LeafModJson>>>();
 
-		for (RemapConfigurationSettings entry : projectView.getRemapConfigurations()) {
-			final Set<File> artifacts = entry.getSourceConfiguration().get().resolve();
+        for (RemapConfigurationSettings entry : projectView.getRemapConfigurations()) {
+            final Set<File> artifacts = entry.getSourceConfiguration().get().resolve();
 
-			for (File artifact : artifacts) {
-				futures.add(fmjCache.get(artifact.toPath().toAbsolutePath().toString(), () -> {
-					return LeafModJsonFactory.createFromZipOptional(artifact.toPath())
-							.map(List::of)
-							.orElseGet(List::of);
-				}));
-			}
-		}
+            for (File artifact : artifacts) {
+                futures.add(fmjCache.get(artifact.toPath().toAbsolutePath().toString(), () -> {
+                    return LeafModJsonFactory.createFromZipOptional(artifact.toPath())
+                        .map(List::of)
+                        .orElseGet(List::of);
+                }));
+            }
+        }
 
-		if (!projectView.disableProjectDependantMods()) {
-			// Add all the dependent projects
-			for (Project dependentProject : SpecContext.getDependentProjects(projectView).toList()) {
-				futures.add(fmjCache.get(dependentProject.getPath(), () -> LeafModJsonHelpers.getModsInProject(dependentProject)));
-			}
-		}
+        if (!projectView.disableProjectDependantMods()) {
+            // Add all the dependent projects
+            for (Project dependentProject : SpecContext.getDependentProjects(projectView).toList()) {
+                futures.add(fmjCache.get(dependentProject.getPath(),
+                    () -> LeafModJsonHelpers.getModsInProject(dependentProject)));
+            }
+        }
 
-		return SpecContext.distinctSorted(AsyncCache.joinList(futures));
-	}
+        return SpecContext.distinctSorted(AsyncCache.joinList(futures));
+    }
 
-	// Returns a list of mods that are on both to compile and runtime classpath
-	private static List<ModHolder> getCompileRuntimeMods(RemappedProjectView projectView, AsyncCache<List<LeafModJson>> fmjCache) {
-		var mods = new ArrayList<>(getCompileRuntimeModsFromRemapConfigs(projectView, fmjCache));
+    // Returns a list of mods that are on both to compile and runtime classpath
+    private static List<ModHolder> getCompileRuntimeMods(RemappedProjectView projectView,
+        AsyncCache<List<LeafModJson>> fmjCache)
+    {
+        var mods = new ArrayList<>(getCompileRuntimeModsFromRemapConfigs(projectView, fmjCache));
 
-		for (Project dependentProject : getCompileRuntimeProjectDependencies(projectView).toList()) {
-			List<LeafModJson> projectMods = fmjCache.getBlocking(dependentProject.getPath(), () -> {
-				return LeafModJsonHelpers.getModsInProject(dependentProject);
-			});
+        for (Project dependentProject : getCompileRuntimeProjectDependencies(projectView).toList()) {
+            List<LeafModJson> projectMods = fmjCache.getBlocking(dependentProject.getPath(), () -> {
+                return LeafModJsonHelpers.getModsInProject(dependentProject);
+            });
 
-			for (LeafModJson mod : projectMods) {
-				mods.add(new ModHolder(mod));
-			}
-		}
+            for (LeafModJson mod : projectMods) {
+                mods.add(new ModHolder(mod));
+            }
+        }
 
-		return Collections.unmodifiableList(mods);
-	}
+        return Collections.unmodifiableList(mods);
+    }
 
-	// Returns a list of jar mods that are found on the compile and runtime remapping configurations
-	private static List<ModHolder> getCompileRuntimeModsFromRemapConfigs(RemappedProjectView projectView, AsyncCache<List<LeafModJson>> fmjCache) {
-		// A set of mod ids from all remap configurations that are considered for dependency transforms.
-		final Set<String> runtimeModIds = getModIds(
-				ProjectView.ArtifactUsage.RUNTIME,
-				projectView,
-				fmjCache,
-				projectView.getRuntimeRemapConfigurations().stream()
-						.filter(settings -> settings.getApplyDependencyTransforms().get())
-		);
+    // Returns a list of jar mods that are found on the compile and runtime remapping configurations
+    private static List<ModHolder> getCompileRuntimeModsFromRemapConfigs(RemappedProjectView projectView,
+        AsyncCache<List<LeafModJson>> fmjCache)
+    {
+        // A set of mod ids from all remap configurations that are considered for dependency transforms.
+        final Set<String> runtimeModIds = getModIds(ProjectView.ArtifactUsage.RUNTIME, projectView, fmjCache,
+            projectView.getRuntimeRemapConfigurations()
+                .stream()
+                .filter(settings -> settings.getApplyDependencyTransforms().get()));
 
-		// A set of mod ids that are found on one or more remap configurations that target the common source set.
-		// Null when split source sets are not enabled, meaning all mods are common.
-		final Set<String> commonRuntimeModIds = projectView.areEnvironmentSourceSetsSplit() ? getModIds(
-				ProjectView.ArtifactUsage.RUNTIME,
-				projectView,
-				fmjCache,
-				projectView.getRuntimeRemapConfigurations().stream()
-						.filter(settings -> settings.getSourceSet().map(sourceSet -> !sourceSet.getName().equals(ZomboidSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME)).get())
-						.filter(settings -> settings.getApplyDependencyTransforms().get()))
-				: null;
+        // A set of mod ids that are found on one or more remap configurations that target the common source set.
+        // Null when split source sets are not enabled, meaning all mods are common.
+        final Set<String> commonRuntimeModIds = projectView.areEnvironmentSourceSetsSplit() ? getModIds(
+            ProjectView.ArtifactUsage.RUNTIME, projectView, fmjCache,
+            projectView.getRuntimeRemapConfigurations()
+                .stream()
+                .filter(settings -> settings.getSourceSet()
+                    .map(sourceSet -> !sourceSet.getName().equals(ZomboidSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME))
+                    .get())
+                .filter(settings -> settings.getApplyDependencyTransforms().get()))
+            : null;
 
-		Stream<LeafModJson> compileMods = getMods(
-				ProjectView.ArtifactUsage.COMPILE,
-				projectView,
-				fmjCache,
-				projectView.getCompileRemapConfigurations().stream()
-						.filter(settings -> settings.getApplyDependencyTransforms().get()));
+        Stream<LeafModJson> compileMods = getMods(ProjectView.ArtifactUsage.COMPILE, projectView, fmjCache,
+            projectView.getCompileRemapConfigurations()
+                .stream()
+                .filter(settings -> settings.getApplyDependencyTransforms().get()));
 
-		return compileMods
-				// Only check based on the modid, as there may be differing versions used between the compile and runtime classpath.
-				// We assume that the version used at runtime will be binary compatible with the version used to compile against.
-				// It's not perfect but better than silently not supplying the mod, and this could happen with regular API that you compile against anyway.
-				.filter(LeafModJson -> runtimeModIds.contains(LeafModJson.getId()))
-				.sorted(Comparator.comparing(LeafModJson::getId))
-				.map(LeafModJson -> new ModHolder(LeafModJson, commonRuntimeModIds == null || commonRuntimeModIds.contains(LeafModJson.getId())))
-				.toList();
-	}
+        return compileMods
+            // Only check based on the modid, as there may be differing versions used between the compile and runtime
+            // classpath.
+            // We assume that the version used at runtime will be binary compatible with the version used to compile
+            // against.
+            // It's not perfect but better than silently not supplying the mod, and this could happen with regular
+            // API that you compile against anyway.
+            .filter(LeafModJson -> runtimeModIds.contains(LeafModJson.getId()))
+            .sorted(Comparator.comparing(LeafModJson::getId))
+            .map(LeafModJson -> new ModHolder(LeafModJson,
+                commonRuntimeModIds == null || commonRuntimeModIds.contains(LeafModJson.getId())))
+            .toList();
+    }
 
-	private static Stream<LeafModJson> getMods(ProjectView.ArtifactUsage artifactUsage, RemappedProjectView projectView, AsyncCache<List<LeafModJson>> fmjCache, Stream<RemapConfigurationSettings> stream) {
-		return stream.flatMap(projectView.resolveArtifacts(artifactUsage))
-				.map(modFromZip(fmjCache))
-				.filter(Objects::nonNull);
-	}
+    private static Stream<LeafModJson> getMods(ProjectView.ArtifactUsage artifactUsage, RemappedProjectView projectView,
+        AsyncCache<List<LeafModJson>> fmjCache, Stream<RemapConfigurationSettings> stream)
+    {
+        return stream.flatMap(projectView.resolveArtifacts(artifactUsage))
+            .map(modFromZip(fmjCache))
+            .filter(Objects::nonNull);
+    }
 
-	private static Set<String> getModIds(ProjectView.ArtifactUsage artifactUsage, RemappedProjectView projectView, AsyncCache<List<LeafModJson>> fmjCache, Stream<RemapConfigurationSettings> stream) {
-		return getMods(artifactUsage, projectView, fmjCache, stream)
-				.map(LeafModJson::getId)
-				.collect(Collectors.toSet());
-	}
+    private static Set<String> getModIds(ProjectView.ArtifactUsage artifactUsage, RemappedProjectView projectView,
+        AsyncCache<List<LeafModJson>> fmjCache, Stream<RemapConfigurationSettings> stream)
+    {
+        return getMods(artifactUsage, projectView, fmjCache, stream).map(LeafModJson::getId)
+            .collect(Collectors.toSet());
+    }
 
-	private static Function<Path, @Nullable LeafModJson> modFromZip(AsyncCache<List<LeafModJson>> fmjCache) {
-		return zipPath -> {
-			final List<LeafModJson> list = fmjCache.getBlocking(zipPath.toAbsolutePath().toString(), () -> {
-				return LeafModJsonFactory.createFromZipOptional(zipPath)
-						.map(List::of)
-						.orElseGet(List::of);
-			});
-			return list.isEmpty() ? null : list.getFirst();
-		};
-	}
+    private static Function<Path, @Nullable LeafModJson> modFromZip(AsyncCache<List<LeafModJson>> fmjCache) {
+        return zipPath -> {
+            final List<LeafModJson> list = fmjCache.getBlocking(zipPath.toAbsolutePath().toString(), () -> {
+                return LeafModJsonFactory.createFromZipOptional(zipPath).map(List::of).orElseGet(List::of);
+            });
+            return list.isEmpty() ? null : list.getFirst();
+        };
+    }
 
-	// Returns a list of Loom Projects found in both the runtime and compile classpath
-	private static Stream<Project> getCompileRuntimeProjectDependencies(ProjectView projectView) {
-		if (projectView.disableProjectDependantMods()) {
-			return Stream.empty();
-		}
+    // Returns a list of Loom Projects found in both the runtime and compile classpath
+    private static Stream<Project> getCompileRuntimeProjectDependencies(ProjectView projectView) {
+        if (projectView.disableProjectDependantMods()) {
+            return Stream.empty();
+        }
 
-		final Stream<Project> runtimeProjects = projectView.getLoomProjectDependencies(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME);
-		final List<Project> compileProjects = projectView.getLoomProjectDependencies(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME).toList();
+        final Stream<Project> runtimeProjects = projectView
+            .getLoomProjectDependencies(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME);
+        final List<Project> compileProjects = projectView
+            .getLoomProjectDependencies(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME)
+            .toList();
 
-		return runtimeProjects
-				.filter(compileProjects::contains); // Use the intersection of the two configurations.
-	}
+        // Use the intersection of the two configurations.
+        return runtimeProjects.filter(compileProjects::contains);
+    }
 
-	@Override
-	public List<LeafModJson> modDependenciesCompileRuntime() {
-		return compileRuntimeMods.stream()
-				.map(ModHolder::mod)
-				.toList();
-	}
+    @Override
+    public List<LeafModJson> modDependenciesCompileRuntime() {
+        return compileRuntimeMods.stream().map(ModHolder::mod).toList();
+    }
 
-	@Override
-	public List<LeafModJson> modDependenciesCompileRuntimeClient() {
-		return compileRuntimeMods.stream()
-				.filter(modHolder -> !modHolder.common())
-				.map(ModHolder::mod)
-				.toList();
-	}
+    @Override
+    public List<LeafModJson> modDependenciesCompileRuntimeClient() {
+        return compileRuntimeMods.stream().filter(modHolder -> !modHolder.common()).map(ModHolder::mod).toList();
+    }
 
-	@Override
-	public MarkdownJavadocOption markdownJavadocOption() {
-		return MarkdownJavadocOption.UNSUPPORTED;
-	}
+    @Override
+    public MarkdownJavadocOption markdownJavadocOption() {
+        return MarkdownJavadocOption.UNSUPPORTED;
+    }
 
-	private record ModHolder(LeafModJson mod, boolean common) {
-		ModHolder(LeafModJson mod) {
-			this(mod, true);
-		}
-	}
+    private record ModHolder(LeafModJson mod, boolean common) {
+        ModHolder(LeafModJson mod) {
+            this(mod, true);
+        }
+    }
 }

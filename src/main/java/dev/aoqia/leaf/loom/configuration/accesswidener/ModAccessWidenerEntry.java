@@ -63,74 +63,77 @@ import dev.aoqia.leaf.loom.util.fmj.ModEnvironment;
 /**
  * {@link AccessWidenerEntry} implementation for a {@link LeafModJson}.
  */
-public record ModAccessWidenerEntry(LeafModJson mod, String path, ModEnvironment environment, boolean transitiveOnly) implements AccessWidenerEntry {
-	public static List<ModAccessWidenerEntry> readAll(LeafModJson modJson, boolean transitiveOnly) {
-		var entries = new ArrayList<ModAccessWidenerEntry>();
+public record ModAccessWidenerEntry(LeafModJson mod, String path, ModEnvironment environment, boolean transitiveOnly)
+    implements AccessWidenerEntry
+{
+    public static List<ModAccessWidenerEntry> readAll(LeafModJson modJson, boolean transitiveOnly) {
+        var entries = new ArrayList<ModAccessWidenerEntry>();
 
-		for (Map.Entry<String, ModEnvironment> entry : modJson.getClassTweakers().entrySet()) {
-			entries.add(new ModAccessWidenerEntry(modJson, entry.getKey(), entry.getValue(), transitiveOnly));
-		}
+        for (Map.Entry<String, ModEnvironment> entry : modJson.getClassTweakers().entrySet()) {
+            entries.add(new ModAccessWidenerEntry(modJson, entry.getKey(), entry.getValue(), transitiveOnly));
+        }
 
-		return Collections.unmodifiableList(entries);
-	}
+        return Collections.unmodifiableList(entries);
+    }
 
-	@Override
-	public @Nullable String mappingId() {
-		return transitiveOnly ? mod.getId() : null;
-	}
+    @Override
+    public @Nullable String mappingId() {
+        return transitiveOnly ? mod.getId() : null;
+    }
 
-	@Override
-	public String getSortKey() {
-		return mod.getId() + ":" + path;
-	}
+    @Override
+    public String getSortKey() {
+        return mod.getId() + ":" + path;
+    }
 
-	@Override
-	public void read(ClassTweakerVisitor visitor, LazyCloseable<TinyRemapper> remapper, MappingsNamespace productionNamespace) throws IOException {
-		if (transitiveOnly) {
-			// Filter for only transitive rules
-			visitor = new TransitiveOnlyFilter(visitor);
-		}
+    @Override
+    public void read(ClassTweakerVisitor visitor, LazyCloseable<TinyRemapper> remapper,
+        MappingsNamespace productionNamespace) throws IOException
+    {
+        if (transitiveOnly) {
+            // Filter for only transitive rules
+            visitor = new TransitiveOnlyFilter(visitor);
+        }
 
-		final byte[] data = readRaw();
-		final ClassTweakerReader.Header header = ClassTweakerReader.readHeader(data);
+        final byte[] data = readRaw();
+        final ClassTweakerReader.Header header = ClassTweakerReader.readHeader(data);
 
-		if (!header.getNamespace().equals(MappingsNamespace.NAMED.toString())) {
-			// Remap the AW if needed
-			visitor = getRemapper(visitor, remapper.get(), productionNamespace);
-		}
+        if (!header.getNamespace().equals(MappingsNamespace.NAMED.toString())) {
+            // Remap the AW if needed
+            visitor = getRemapper(visitor, remapper.get(), productionNamespace);
+        }
 
-		var reader = ClassTweakerReader.create(visitor);
-		reader.read(data);
-	}
+        var reader = ClassTweakerReader.create(visitor);
+        reader.read(data);
+    }
 
-	@Override
-	public void readOfficial(ClassTweakerVisitor visitor) throws IOException {
-		if (transitiveOnly) {
-			// Filter for only transitive rules
-			visitor = new TransitiveOnlyFilter(visitor);
-		}
+    @Override
+    public void readOfficial(ClassTweakerVisitor visitor) throws IOException {
+        if (transitiveOnly) {
+            // Filter for only transitive rules
+            visitor = new TransitiveOnlyFilter(visitor);
+        }
 
-		final byte[] data = readRaw();
-		final ClassTweakerReader.Header header = ClassTweakerReader.readHeader(data);
+        final byte[] data = readRaw();
+        final ClassTweakerReader.Header header = ClassTweakerReader.readHeader(data);
 
-		if (!header.getNamespace().equals(MappingsNamespace.OFFICIAL.toString())) {
-			throw new IOException("Expected official namespace for access widener entry, found: " + header.getNamespace() + " in mod: " + mod.getId());
-		}
+        if (!header.getNamespace().equals(MappingsNamespace.OFFICIAL.toString())) {
+            throw new IOException("Expected official namespace for access widener entry, found: "
+                + header.getNamespace() + " in mod: " + mod.getId());
+        }
 
-		var reader = ClassTweakerReader.create(visitor);
-		reader.read(data);
-	}
+        var reader = ClassTweakerReader.create(visitor);
+        reader.read(data);
+    }
 
-	private static ClassTweakerRemapperVisitor getRemapper(ClassTweakerVisitor visitor, TinyRemapper tinyRemapper, MappingsNamespace productionNamespace) {
-		return new ClassTweakerRemapperVisitor(
-				visitor,
-				tinyRemapper.getEnvironment().getRemapper(),
-				productionNamespace.toString(),
-				MappingsNamespace.NAMED.toString()
-		);
-	}
+    private static ClassTweakerRemapperVisitor getRemapper(ClassTweakerVisitor visitor, TinyRemapper tinyRemapper,
+        MappingsNamespace productionNamespace)
+    {
+        return new ClassTweakerRemapperVisitor(visitor, tinyRemapper.getEnvironment().getRemapper(),
+            productionNamespace.toString(), MappingsNamespace.NAMED.toString());
+    }
 
-	private byte[] readRaw() throws IOException {
-		return mod.getSource().read(path);
-	}
+    private byte[] readRaw() throws IOException {
+        return mod.getSource().read(path);
+    }
 }

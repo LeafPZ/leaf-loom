@@ -66,115 +66,122 @@ import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
 import dev.aoqia.leaf.loom.util.fmj.ModEnvironment;
 
 public class AccessWidenerJarProcessor implements ZomboidJarProcessor<AccessWidenerJarProcessor.Spec> {
-	private final String name;
-	private final boolean includeTransitive;
-	private final RegularFileProperty localAccessWidenerProperty;
+    private final boolean includeTransitive;
 
-	@Inject
-	public AccessWidenerJarProcessor(String name, boolean includeTransitive, RegularFileProperty localAccessWidenerProperty) {
-		this.name = name;
-		this.includeTransitive = includeTransitive;
-		this.localAccessWidenerProperty = localAccessWidenerProperty;
-	}
+    private final RegularFileProperty localAccessWidenerProperty;
+    private final String name;
 
-	@Override
-	public AccessWidenerJarProcessor.@Nullable Spec buildSpec(SpecContext context) {
-		List<AccessWidenerEntry> accessWideners = new ArrayList<>();
+    @Inject
+    public AccessWidenerJarProcessor(String name, boolean includeTransitive,
+        RegularFileProperty localAccessWidenerProperty)
+    {
+        this.name = name;
+        this.includeTransitive = includeTransitive;
+        this.localAccessWidenerProperty = localAccessWidenerProperty;
+    }
 
-		if (localAccessWidenerProperty.isPresent()) {
-			Path path = localAccessWidenerProperty.get().getAsFile().toPath();
+    @Override
+    public AccessWidenerJarProcessor.@Nullable Spec buildSpec(SpecContext context) {
+        List<AccessWidenerEntry> accessWideners = new ArrayList<>();
 
-			if (Files.notExists(path)) {
-				throw new UncheckedIOException(new FileNotFoundException("Could not find access widener file at {%s}".formatted(path)));
-			}
+        if (localAccessWidenerProperty.isPresent()) {
+            Path path = localAccessWidenerProperty.get().getAsFile().toPath();
 
-			// Add the access widener specified in the extension
-			accessWideners.add(LocalAccessWidenerEntry.create(path));
-		}
+            if (Files.notExists(path)) {
+                throw new UncheckedIOException(
+                    new FileNotFoundException("Could not find access widener file at {%s}".formatted(path)));
+            }
 
-		/* Uncomment to read all access wideners from local mods.
+            // Add the access widener specified in the extension
+            accessWideners.add(LocalAccessWidenerEntry.create(path));
+        }
 
-		for (FabricModJson fabricModJson : context.localMods()) {
-			accessWideners.addAll(ModAccessWidenerEntry.readAll(fabricModJson, false));
-		}
+        /*
+         * Uncomment to read all access wideners from local mods.
+         *
+         * for (FabricModJson fabricModJson : context.localMods()) {
+         * accessWideners.addAll(ModAccessWidenerEntry.readAll(fabricModJson, false));
+         * }
+         *
+         */
 
-		 */
+        if (includeTransitive) {
+            for (LeafModJson fabricModJson : context.modDependenciesCompileRuntime()) {
+                accessWideners.addAll(ModAccessWidenerEntry.readAll(fabricModJson, true));
+            }
+        }
 
-		if (includeTransitive) {
-			for (LeafModJson fabricModJson : context.modDependenciesCompileRuntime()) {
-				accessWideners.addAll(ModAccessWidenerEntry.readAll(fabricModJson, true));
-			}
-		}
+        if (accessWideners.isEmpty()) {
+            return null;
+        }
 
-		if (accessWideners.isEmpty()) {
-			return null;
-		}
+        return new Spec(accessWideners.stream().sorted(Comparator.comparing(AccessWidenerEntry::getSortKey)).toList());
+    }
 
-		return new Spec(accessWideners.stream().sorted(Comparator.comparing(AccessWidenerEntry::getSortKey)).toList());
-	}
+    @Override
+    public String getName() {
+        return name;
+    }
 
-	@Override
-	public String getName() {
-		return name;
-	}
+    @Override
+    public void processJar(Path jar, AccessWidenerJarProcessor.Spec spec, ProcessorContext context) throws IOException {
+        ClassTweaker classTweaker = getClassTweaker(spec, context);
+        AccessWidenerTransformer transformer = new AccessWidenerTransformer(classTweaker);
+        transformer.apply(jar);
+    }
 
-	public record Spec(List<AccessWidenerEntry> accessWideners) implements ZomboidJarProcessor.Spec {
-		List<AccessWidenerEntry> accessWidenersForContext(ProcessorContext context) {
-			return accessWideners.stream()
-					.filter(entry -> isSupported(entry.environment(), context))
-					.toList();
-		}
+    @Override
+    public @Nullable MappingsProcessor<Spec> processMappings() {
+        return TransitiveAccessWidenerMappingsProcessor.INSTANCE;
+    }
 
-		private static boolean isSupported(ModEnvironment modEnvironment, ProcessorContext context) {
-			if (context.isMerged()) {
-				// All envs are supported wth a merged jar
-				return true;
-			}
+    private ClassTweaker getClassTweaker(AccessWidenerJarProcessor.Spec spec, ProcessorContext context)
+        throws IOException
+    {
+        final List<AccessWidenerEntry> accessWideners = spec.accessWidenersForContext(context);
 
-			if (context.includesClient() && modEnvironment.isClient()) {
-				return true;
-			}
+        final var classTweaker = ClassTweaker.newInstance();
 
-			if (context.includesServer() && modEnvironment.isServer()) {
-				return true;
-			}
+        if (context.disableObfuscation()) {
+            for (AccessWidenerEntry widener : accessWideners) {
+                widener.readOfficial(classTweaker);
+            }
 
-			// Universal supports all jars
-			return modEnvironment == ModEnvironment.UNIVERSAL;
-		}
-	}
+            return classTweaker;
+        }
 
-	@Override
-	public void processJar(Path jar, AccessWidenerJarProcessor.Spec spec, ProcessorContext context) throws IOException {
-		ClassTweaker classTweaker = getClassTweaker(spec, context);
-		AccessWidenerTransformer transformer = new AccessWidenerTransformer(classTweaker);
-		transformer.apply(jar);
-	}
+        try (LazyCloseable<
+            TinyRemapper> remapper = context.createRemapper(context.getProductionNamespace(), MappingsNamespace.NAMED))
+        {
+            for (AccessWidenerEntry widener : accessWideners) {
+                widener.read(classTweaker, remapper, context.getProductionNamespace());
+            }
+        }
 
-	private ClassTweaker getClassTweaker(AccessWidenerJarProcessor.Spec spec, ProcessorContext context) throws IOException {
-		final List<AccessWidenerEntry> accessWideners = spec.accessWidenersForContext(context);
+        return classTweaker;
+    }
 
-		final var classTweaker = ClassTweaker.newInstance();
+    public record Spec(List<AccessWidenerEntry> accessWideners) implements ZomboidJarProcessor.Spec {
+        List<AccessWidenerEntry> accessWidenersForContext(ProcessorContext context) {
+            return accessWideners.stream().filter(entry -> isSupported(entry.environment(), context)).toList();
+        }
 
-		if (context.disableObfuscation()) {
-			for (AccessWidenerEntry widener : accessWideners) {
-				widener.readOfficial(classTweaker);
-			}
+        private static boolean isSupported(ModEnvironment modEnvironment, ProcessorContext context) {
+            if (context.isMerged()) {
+                // All envs are supported wth a merged jar
+                return true;
+            }
 
-			return classTweaker;
-		}
+            if (context.includesClient() && modEnvironment.isClient()) {
+                return true;
+            }
 
-		try (LazyCloseable<TinyRemapper> remapper = context.createRemapper(context.getProductionNamespace(), MappingsNamespace.NAMED)) {
-			for (AccessWidenerEntry widener : accessWideners) {
-				widener.read(classTweaker, remapper, context.getProductionNamespace());
-			}
-		}
+            if (context.includesServer() && modEnvironment.isServer()) {
+                return true;
+            }
 
-		return classTweaker;
-	}
-
-	@Override
-	public @Nullable MappingsProcessor<Spec> processMappings() {
-		return TransitiveAccessWidenerMappingsProcessor.INSTANCE;
-	}
+            // Universal supports all jars
+            return modEnvironment == ModEnvironment.UNIVERSAL;
+        }
+    }
 }

@@ -47,24 +47,35 @@ import org.gradle.api.Project;
 import org.gradle.api.initialization.Settings;
 
 public interface LoomFiles {
-	static LoomFiles create(Project project) {
-		return new LoomFilesProjectImpl(project);
-	}
+    static LoomFiles create(Project project) {
+        return new LoomFilesProjectImpl(project);
+    }
 
-	static LoomFiles create(Settings settings) {
-		return new LoomFilesSettingsImpl(settings);
-	}
+    static LoomFiles create(Settings settings) {
+        return new LoomFilesSettingsImpl(settings);
+    }
 
-	File getUserCache();
-	File getRootProjectPersistentCache();
-	File getProjectPersistentCache();
-	File getProjectBuildCache();
-	File getRemappedModCache();
-	File getNativesDirectory(Project project);
-	File getDefaultLog4jConfigFile();
-	File getDevLauncherConfig();
-	File getRemapClasspathFile();
-	File getGlobalZomboidRepo();
-	File getLocalZomboidRepo();
-	File getDecompileCache(String version);
+    File getDecompileCache(String version);
+
+    File getDefaultLog4jConfigFile();
+
+    File getDevLauncherConfig();
+
+    File getGlobalZomboidRepo();
+
+    File getLocalZomboidRepo();
+
+    File getNativesDirectory(Project project);
+
+    File getProjectBuildCache();
+
+    File getProjectPersistentCache();
+
+    File getRemapClasspathFile();
+
+    File getRemappedModCache();
+
+    File getRootProjectPersistentCache();
+
+    File getUserCache();
 }

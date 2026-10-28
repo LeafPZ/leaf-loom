@@ -50,26 +50,26 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.library.LibraryProces
 import dev.aoqia.leaf.loom.util.Platform;
 
 public class RuntimeLog4jLibraryProcessor extends LibraryProcessor {
-	private static final String LOG4J_GROUP = "org.apache.logging.log4j";
+    private static final String LOG4J_GROUP = "org.apache.logging.log4j";
 
-	public RuntimeLog4jLibraryProcessor(Platform platform, LibraryContext context) {
-		super(platform, context);
-	}
+    public RuntimeLog4jLibraryProcessor(Platform platform, LibraryContext context) {
+        super(platform, context);
+    }
 
-	@Override
-	public ApplicationResult getApplicationResult() {
-		return ApplicationResult.CAN_APPLY;
-	}
+    @Override
+    public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
+        return library -> {
+            if (library.is(LOG4J_GROUP)) {
+                dependencyConsumer.accept(library.withTarget(Library.Target.RUNTIME));
+                return false;
+            }
 
-	@Override
-	public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
-		return library -> {
-			if (library.is(LOG4J_GROUP)) {
-				dependencyConsumer.accept(library.withTarget(Library.Target.RUNTIME));
-				return false;
-			}
+            return true;
+        };
+    }
 
-			return true;
-		};
-	}
+    @Override
+    public ApplicationResult getApplicationResult() {
+        return ApplicationResult.CAN_APPLY;
+    }
 }

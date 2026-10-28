@@ -59,81 +59,86 @@ import dev.aoqia.leaf.loom.util.Strings;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public class DefaultRunConfigurationSettings {
-	// Configure the default values before the user can modify them.
-	public static void configureDefaults(RunConfiguration run, Project project) {
-		run.getAppendProjectPathToDisplayName().convention(true);
-		run.getMainClass().convention(run.getRuntimeEnvironment().map(side -> RunConfigUtils.getMainClass(side, LoomGradleExtension.get(project))));
-		run.getDevLaunchMainClass().convention(Constants.DLI_ENTRYPOINT);
-		run.getSourceSet().convention(run.getRuntimeEnvironment().map(runtimeEnvironment -> ZomboidSourceSets.get(project).getSourceSetForEnv(runtimeEnvironment)));
-		run.getDisplayName().convention(run.getSourceSet().map(sourceSet -> {
-			String configName = "";
+    // Configure the default values before the user can modify them.
+    public static void configureDefaults(RunConfiguration run, Project project) {
+        run.getAppendProjectPathToDisplayName().convention(true);
+        run.getMainClass()
+            .convention(run.getRuntimeEnvironment()
+                .map(side -> RunConfigUtils.getMainClass(side, LoomGradleExtension.get(project))));
+        run.getDevLaunchMainClass().convention(Constants.DLI_ENTRYPOINT);
+        run.getSourceSet()
+            .convention(run.getRuntimeEnvironment()
+                .map(runtimeEnvironment -> ZomboidSourceSets.get(project).getSourceSetForEnv(runtimeEnvironment)));
+        run.getDisplayName().convention(run.getSourceSet().map(sourceSet -> {
+            String configName = "";
 
-			final boolean isSplitClientSourceSet = LoomGradleExtension.get(project).areEnvironmentSourceSetsSplit()
-					&& sourceSet.equals("client")
-					&& run.getRuntimeEnvironment().get().equals("client");
+            final boolean isSplitClientSourceSet = LoomGradleExtension.get(project).areEnvironmentSourceSetsSplit()
+                && sourceSet.equals("client") && run.getRuntimeEnvironment().get().equals("client");
 
-			if (!sourceSet.equals(SourceSet.MAIN_SOURCE_SET_NAME) && !isSplitClientSourceSet) {
-				configName += Strings.capitalizeCamelCaseName(sourceSet) + " ";
-			}
+            if (!sourceSet.equals(SourceSet.MAIN_SOURCE_SET_NAME) && !isSplitClientSourceSet) {
+                configName += Strings.capitalizeCamelCaseName(sourceSet) + " ";
+            }
 
-			configName += "Zomboid " + Strings.capitalizeCamelCaseName(run.getName());
-			return configName;
-		}));
+            configName += "Zomboid " + Strings.capitalizeCamelCaseName(run.getName());
+            return configName;
+        }));
         run.getWorkingDirectory().set(MirrorUtil.getGameJavaPath(project).toFile());
 
-		run.getRunDirectory().convention(project.getLayout().getProjectDirectory().dir("run"));
+        run.getRunDirectory().convention(project.getLayout().getProjectDirectory().dir("run"));
 
-		run.getGenerateRunConfig().convention(GradleUtils.isRootProject(project));
-		run.getPreferGradleTask().convention(true);
-	}
+        run.getGenerateRunConfig().convention(GradleUtils.isRootProject(project));
+        run.getPreferGradleTask().convention(true);
+    }
 
-	// Apply any additional configuration after the user has modified the settings, but before the run config is generated.
-	public static RunConfiguration finialise(RunConfiguration run, Project project) {
-		RunConfigurationInternal internalRun = (RunConfigurationInternal) run;
+    // Apply any additional configuration after the user has modified the settings, but before the run config is
+    // generated.
+    public static RunConfiguration finialise(RunConfiguration run, Project project) {
+        RunConfigurationInternal internalRun = (RunConfigurationInternal) run;
 
-		if (internalRun.getIsFinalised().getOrElse(false)) {
-			return RunConfigUtils.toSerialisable(run, project);
-		}
+        if (internalRun.getIsFinalised().getOrElse(false)) {
+            return RunConfigUtils.toSerialisable(run, project);
+        }
 
-		internalRun.getIsFinalised().set(true);
-		internalRun.getIsFinalised().finalizeValue();
+        internalRun.getIsFinalised().set(true);
+        internalRun.getIsFinalised().finalizeValue();
 
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
         ZomboidVersionMeta versionInfo = extension.getZomboidProvider().getVersionInfo();
-		LibraryContext context = new LibraryContext(versionInfo, JavaVersion.current());
-		int javaVersion = versionInfo.javaVersion();
+        LibraryContext context = new LibraryContext(versionInfo, JavaVersion.current());
+        int javaVersion = versionInfo.javaVersion();
 
-		String environment = run.getRuntimeEnvironment().get().toLowerCase(Locale.ROOT);
+        String environment = run.getRuntimeEnvironment().get().toLowerCase(Locale.ROOT);
 
-		run.getJvmArguments().add("-Dfabric.dli.config=" + encodeEscaped(extension.getFiles().getDevLauncherConfig().getAbsolutePath()));
-		run.getJvmArguments().add("-Dfabric.dli.env=" + environment);
-		run.getJvmArguments().add("-Dfabric.dli.main=" + run.getMainClass().get());
+        run.getJvmArguments()
+            .add("-Dfabric.dli.config=" + encodeEscaped(extension.getFiles().getDevLauncherConfig().getAbsolutePath()));
+        run.getJvmArguments().add("-Dfabric.dli.env=" + environment);
+        run.getJvmArguments().add("-Dfabric.dli.main=" + run.getMainClass().get());
 
-		if (environment.equals("client")) {
-			// Required since 26.3-snapshot-10
-			run.getJvmArguments().add("-XX:StackShadowPages=32");
+        if (environment.equals("client")) {
+            // Required since 26.3-snapshot-10
+            run.getJvmArguments().add("-XX:StackShadowPages=32");
 
-			if (context.usesLWJGL3() && Platform.CURRENT.getOperatingSystem().isMacOS()) {
-				run.getJvmArguments().add("-XstartOnFirstThread");
-			}
+            if (context.usesLWJGL3() && Platform.CURRENT.getOperatingSystem().isMacOS()) {
+                run.getJvmArguments().add("-XstartOnFirstThread");
+            }
 
-			if (Platform.CURRENT.isRaspberryPi()) {
-				run.getEnvironmentVars().put("MESA_GL_VERSION_OVERRIDE", "4.3");
-			}
-		}
+            if (Platform.CURRENT.isRaspberryPi()) {
+                run.getEnvironmentVars().put("MESA_GL_VERSION_OVERRIDE", "4.3");
+            }
+        }
 
-		if (javaVersion >= 25) {
-			run.getJvmArguments().add("--sun-misc-unsafe-memory-access=allow");
-			run.getJvmArguments().add("--enable-native-access=ALL-UNNAMED");
-		}
+        if (javaVersion >= 25) {
+            run.getJvmArguments().add("--sun-misc-unsafe-memory-access=allow");
+            run.getJvmArguments().add("--enable-native-access=ALL-UNNAMED");
+        }
 
-		run.getSystemProperties().get().forEach((key, value) -> {
-			if (value.isBlank()) {
-				run.getJvmArguments().add("-D%s".formatted(key));
-			} else {
-				run.getJvmArguments().add("-D%s=%s".formatted(key, value));
-			}
-		});
+        run.getSystemProperties().get().forEach((key, value) -> {
+            if (value.isBlank()) {
+                run.getJvmArguments().add("-D%s".formatted(key));
+            } else {
+                run.getJvmArguments().add("-D%s=%s".formatted(key, value));
+            }
+        });
 
         versionInfo.arguments().jvm().forEach((arg, argObj) -> {
             boolean allowed = false;
@@ -149,7 +154,7 @@ public class DefaultRunConfigurationSettings {
 
             // Only care about system props for now!
             // TODO(leaf): Is it OK to keep headless for dev env (which has console)?
-            //   We definitely need to make sure it is removed for prod env as it hides the loader exception UI.
+            // We definitely need to make sure it is removed for prod env as it hides the loader exception UI.
             if (arg.startsWith("-D") && !arg.startsWith("-Djava.awt.headless")) {
                 run.getJvmArguments().add(arg);
             }
@@ -158,42 +163,42 @@ public class DefaultRunConfigurationSettings {
         // Add runDir to cachedir
         run.getProgramArguments().add("-cachedir=" + run.getRunDirectory().get());
 
-		finialiseValues(run);
+        finialiseValues(run);
 
-		return RunConfigUtils.toSerialisable(run, project);
-	}
+        return RunConfigUtils.toSerialisable(run, project);
+    }
 
-	static void finialiseValues(RunConfiguration run) {
-		run.getRuntimeEnvironment().finalizeValue();
-		run.getSystemProperties().finalizeValue();
-		run.getDisplayName().finalizeValue();
-		run.getJvmArguments().finalizeValue();
-		run.getProgramArguments().finalizeValue();
-		run.getEnvironmentVars().finalizeValue();
-		run.getAppendProjectPathToDisplayName().finalizeValue();
-		run.getMainClass().finalizeValue();
-		run.getSourceSet().finalizeValue();
-		run.getWorkingDirectory().finalizeValue();
-		run.getRunDirectory().finalizeValue();
-		run.getGenerateRunConfig().finalizeValue();
-		run.getPreferGradleTask().finalizeValue();
-		run.getIdeConfigFolder().finalizeValue();
-		run.getDevLaunchMainClass().finalizeValue();
-	}
+    static void finialiseValues(RunConfiguration run) {
+        run.getRuntimeEnvironment().finalizeValue();
+        run.getSystemProperties().finalizeValue();
+        run.getDisplayName().finalizeValue();
+        run.getJvmArguments().finalizeValue();
+        run.getProgramArguments().finalizeValue();
+        run.getEnvironmentVars().finalizeValue();
+        run.getAppendProjectPathToDisplayName().finalizeValue();
+        run.getMainClass().finalizeValue();
+        run.getSourceSet().finalizeValue();
+        run.getWorkingDirectory().finalizeValue();
+        run.getRunDirectory().finalizeValue();
+        run.getGenerateRunConfig().finalizeValue();
+        run.getPreferGradleTask().finalizeValue();
+        run.getIdeConfigFolder().finalizeValue();
+        run.getDevLaunchMainClass().finalizeValue();
+    }
 
-	private static String encodeEscaped(String s) {
-		StringBuilder ret = new StringBuilder();
+    private static String encodeEscaped(String s) {
+        StringBuilder ret = new StringBuilder();
 
-		for (int i = 0; i < s.length(); i++) {
-			char c = s.charAt(i);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
 
-			if (c == '@' && i > 0 && s.charAt(i - 1) == '@' || c == ' ') {
-				ret.append(String.format(Locale.ENGLISH, "@@%04x", (int) c));
-			} else {
-				ret.append(c);
-			}
-		}
+            if (c == '@' && i > 0 && s.charAt(i - 1) == '@' || c == ' ') {
+                ret.append(String.format(Locale.ENGLISH, "@@%04x", (int) c));
+            } else {
+                ret.append(c);
+            }
+        }
 
-		return ret.toString();
-	}
+        return ret.toString();
+    }
 }

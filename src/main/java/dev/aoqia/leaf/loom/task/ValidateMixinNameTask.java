@@ -92,191 +92,200 @@ import dev.aoqia.leaf.loom.util.Constants;
  */
 @DisableCachingByDefault
 public abstract class ValidateMixinNameTask extends SourceTask {
-	@Input
-	abstract Property<Boolean> getSoftFailures();
+    @Inject
+    public ValidateMixinNameTask() {
+        setGroup(JavaBasePlugin.VERIFICATION_GROUP);
+        getProject().getTasks().getByName("check").dependsOn(this);
+        getSoftFailures().convention(false);
+    }
 
-	@Inject
-	protected abstract WorkerExecutor getWorkerExecutor();
+    @VisibleForTesting
+    public static @Nullable Mixin getMixin(InputStream is) throws IOException {
+        final ClassReader reader = new ClassReader(is);
 
-	@Inject
-	public ValidateMixinNameTask() {
-		setGroup(JavaBasePlugin.VERIFICATION_GROUP);
-		getProject().getTasks().getByName("check").dependsOn(this);
-		getSoftFailures().convention(false);
-	}
+        var classVisitor = new MixinTargetClassVisitor();
+        reader.accept(classVisitor, ClassReader.SKIP_CODE);
 
-	@TaskAction
-	public void run() {
-		final WorkQueue workQueue = getWorkerExecutor().noIsolation();
+        if (classVisitor.mixinTarget != null && classVisitor.targets == 1) {
+            return new Mixin(classVisitor.className, classVisitor.mixinTarget, classVisitor.accessor);
+        }
 
-		workQueue.submit(ValidateMixinAction.class, params -> {
-			params.getInputClasses().from(getSource().matching(pattern -> pattern.include("**/*.class")));
-			params.getSoftFailures().set(getSoftFailures());
-		});
-	}
+        return null;
+    }
 
-	public interface ValidateMixinsParams extends WorkParameters {
-		ConfigurableFileCollection getInputClasses();
-		Property<Boolean> getSoftFailures();
-	}
+    private static @Nullable Mixin getMixin(File file) {
+        try (InputStream is = new FileInputStream(file)) {
+            return getMixin(is);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read input file: " + file, e);
+        }
+    }
 
-	public abstract static class ValidateMixinAction implements WorkAction<ValidateMixinsParams> {
-		public static final Logger LOGGER = LoggerFactory.getLogger(ValidateMixinAction.class);
+    private static String toSimpleName(String internalName) {
+        return internalName.substring(internalName.lastIndexOf('/') + 1);
+    }
 
-		@Override
-		public void execute() {
-			final Set<File> files = getParameters().getInputClasses().getAsFileTree().getFiles();
-			final List<String> errors = new ArrayList<>();
+    @TaskAction
+    public void run() {
+        final WorkQueue workQueue = getWorkerExecutor().noIsolation();
 
-			for (File file : files) {
-				final Mixin mixin = getMixin(file);
+        workQueue.submit(ValidateMixinAction.class, params -> {
+            params.getInputClasses().from(getSource().matching(pattern -> pattern.include("**/*.class")));
+            params.getSoftFailures().set(getSoftFailures());
+        });
+    }
 
-				if (mixin == null) {
-					continue;
-				}
+    @Inject
+    protected abstract WorkerExecutor getWorkerExecutor();
 
-				final String mixinClassName = toSimpleName(mixin.className);
-				final String expectedMixinClassName = mixin.expectedClassName();
+    @Input
+    abstract Property<Boolean> getSoftFailures();
 
-				if (expectedMixinClassName.startsWith("class_")) {
-					// Don't enforce intermediary named mixins.
-					continue;
-				}
+    @VisibleForTesting
+    public record Mixin(String className, Type target, boolean accessor) {
+        public String expectedClassName() {
+            return toSimpleName(target.getInternalName()).replace("$", "") + (accessor ? "Accessor" : "Mixin");
+        }
+    }
 
-				if (!expectedMixinClassName.equals(mixinClassName)) {
-					errors.add("%s -> %s".formatted(mixin.className, expectedMixinClassName));
-				}
-			}
+    public abstract static class ValidateMixinAction implements WorkAction<ValidateMixinsParams> {
+        public static final Logger LOGGER = LoggerFactory.getLogger(ValidateMixinAction.class);
 
-			if (errors.isEmpty()) {
-				return;
-			}
+        @Override
+        public void execute() {
+            final Set<File> files = getParameters().getInputClasses().getAsFileTree().getFiles();
+            final List<String> errors = new ArrayList<>();
 
-			final String message = "Mixin name validation failed: " + errors.stream().collect(Collectors.joining(System.lineSeparator()));
+            for (File file : files) {
+                final Mixin mixin = getMixin(file);
 
-			if (getParameters().getSoftFailures().get()) {
-				LOGGER.warn(message);
-				return;
-			}
+                if (mixin == null) {
+                    continue;
+                }
 
-			throw new GradleException("Mixin name validation failed: " + errors.stream().collect(Collectors.joining(System.lineSeparator())));
-		}
-	}
+                final String mixinClassName = toSimpleName(mixin.className);
+                final String expectedMixinClassName = mixin.expectedClassName();
 
-	private static String toSimpleName(String internalName) {
-		return internalName.substring(internalName.lastIndexOf('/') + 1);
-	}
+                if (expectedMixinClassName.startsWith("class_")) {
+                    // Don't enforce intermediary named mixins.
+                    continue;
+                }
 
-	@VisibleForTesting
-	public record Mixin(String className, Type target, boolean accessor) {
-		public String expectedClassName() {
-			return toSimpleName(target.getInternalName()).replace("$", "") + (accessor ? "Accessor" : "Mixin");
-		}
-	}
+                if (!expectedMixinClassName.equals(mixinClassName)) {
+                    errors.add("%s -> %s".formatted(mixin.className, expectedMixinClassName));
+                }
+            }
 
-	@Nullable private static Mixin getMixin(File file) {
-		try (InputStream is = new FileInputStream(file)) {
-			return getMixin(is);
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read input file: " + file, e);
-		}
-	}
+            if (errors.isEmpty()) {
+                return;
+            }
 
-	@Nullable @VisibleForTesting
-	public static Mixin getMixin(InputStream is) throws IOException {
-		final ClassReader reader = new ClassReader(is);
+            final String message = "Mixin name validation failed: "
+                + errors.stream().collect(Collectors.joining(System.lineSeparator()));
 
-		var classVisitor = new MixinTargetClassVisitor();
-		reader.accept(classVisitor, ClassReader.SKIP_CODE);
+            if (getParameters().getSoftFailures().get()) {
+                LOGGER.warn(message);
+                return;
+            }
 
-		if (classVisitor.mixinTarget != null && classVisitor.targets == 1) {
-			return new Mixin(classVisitor.className, classVisitor.mixinTarget, classVisitor.accessor);
-		}
+            throw new GradleException(
+                "Mixin name validation failed: " + errors.stream().collect(Collectors.joining(System.lineSeparator())));
+        }
+    }
 
-		return null;
-	}
+    public interface ValidateMixinsParams extends WorkParameters {
+        ConfigurableFileCollection getInputClasses();
 
-	private static class MixinTargetClassVisitor extends ClassVisitor {
-		Type mixinTarget;
-		String className;
-		boolean accessor;
-		int targets = 0;
+        Property<Boolean> getSoftFailures();
+    }
 
-		boolean isInterface;
+    private static class MixinTargetClassVisitor extends ClassVisitor {
+        boolean accessor;
 
-		protected MixinTargetClassVisitor() {
-			super(Constants.ASM_VERSION);
-		}
+        String className;
 
-		@Override
-		public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
-			this.className = name;
-			this.isInterface = (access & Opcodes.ACC_INTERFACE) != 0;
-			super.visit(version, access, name, signature, superName, interfaces);
-		}
+        boolean isInterface;
+        Type mixinTarget;
 
-		@Override
-		public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-			AnnotationVisitor av = super.visitAnnotation(descriptor, visible);
+        int targets = 0;
 
-			if ("Lorg/spongepowered/asm/mixin/Mixin;".equals(descriptor)) {
-				av = new MixinAnnotationVisitor(av);
-			}
+        protected MixinTargetClassVisitor() {
+            super(Constants.ASM_VERSION);
+        }
 
-			return av;
-		}
+        @Override
+        public void visit(int version, int access, String name, String signature, String superName,
+            String[] interfaces)
+        {
+            this.className = name;
+            this.isInterface = (access & Opcodes.ACC_INTERFACE) != 0;
+            super.visit(version, access, name, signature, superName, interfaces);
+        }
 
-		@Override
-		public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
-			MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+        @Override
+        public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+            AnnotationVisitor av = super.visitAnnotation(descriptor, visible);
 
-			if (mixinTarget != null) {
-				mv = new MixinMethodVisitor(mv);
-			}
+            if ("Lorg/spongepowered/asm/mixin/Mixin;".equals(descriptor)) {
+                av = new MixinAnnotationVisitor(av);
+            }
 
-			return mv;
-		}
+            return av;
+        }
 
-		private class MixinAnnotationVisitor extends AnnotationVisitor {
-			MixinAnnotationVisitor(AnnotationVisitor annotationVisitor) {
-				super(Constants.ASM_VERSION, annotationVisitor);
-			}
+        @Override
+        public MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
+            String[] exceptions)
+        {
+            MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
 
-			@Override
-			public AnnotationVisitor visitArray(String name) {
-				final AnnotationVisitor av = super.visitArray(name);
+            if (mixinTarget != null) {
+                mv = new MixinMethodVisitor(mv);
+            }
 
-				if ("value".equals(name)) {
-					return new AnnotationVisitor(Constant.ASM_VERSION, av) {
-						@Override
-						public void visit(String name, Object value) {
-							mixinTarget = Objects.requireNonNull((Type) value);
-							targets++;
+            return mv;
+        }
 
-							super.visit(name, value);
-						}
-					};
-				}
+        private class MixinAnnotationVisitor extends AnnotationVisitor {
+            MixinAnnotationVisitor(AnnotationVisitor annotationVisitor) {
+                super(Constants.ASM_VERSION, annotationVisitor);
+            }
 
-				return av;
-			}
-		}
+            @Override
+            public AnnotationVisitor visitArray(String name) {
+                final AnnotationVisitor av = super.visitArray(name);
 
-		private class MixinMethodVisitor extends MethodVisitor {
-			protected MixinMethodVisitor(MethodVisitor methodVisitor) {
-				super(Constants.ASM_VERSION, methodVisitor);
-			}
+                if ("value".equals(name)) {
+                    return new AnnotationVisitor(Constant.ASM_VERSION, av) {
+                        @Override
+                        public void visit(String name, Object value) {
+                            mixinTarget = Objects.requireNonNull((Type) value);
+                            targets++;
 
-			@Override
-			public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-				if ("Lorg/spongepowered/asm/mixin/gen/Accessor;".equals(descriptor)) {
-					accessor = true;
-				} else if ("Lorg/spongepowered/asm/mixin/gen/Invoker;".equals(descriptor)) {
-					accessor = true;
-				}
+                            super.visit(name, value);
+                        }
+                    };
+                }
 
-				return super.visitAnnotation(descriptor, visible);
-			}
-		}
-	}
+                return av;
+            }
+        }
+
+        private class MixinMethodVisitor extends MethodVisitor {
+            protected MixinMethodVisitor(MethodVisitor methodVisitor) {
+                super(Constants.ASM_VERSION, methodVisitor);
+            }
+
+            @Override
+            public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+                if ("Lorg/spongepowered/asm/mixin/gen/Accessor;".equals(descriptor)) {
+                    accessor = true;
+                } else if ("Lorg/spongepowered/asm/mixin/gen/Invoker;".equals(descriptor)) {
+                    accessor = true;
+                }
+
+                return super.visitAnnotation(descriptor, visible);
+            }
+        }
+    }
 }

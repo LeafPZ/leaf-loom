@@ -79,166 +79,184 @@ import dev.aoqia.leaf.loom.util.ZipUtils;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 public final class RemapMappingConfiguration extends MappingConfiguration {
-	private final ServiceFactory serviceFactory;
-	private final Path baseTinyMappings;
-	public final Path tinyMappings;
-	public final Path tinyMappingsJar;
-	@Nullable private Map<String, String> signatureFixes;
+    public final Path tinyMappings;
 
-	private RemapMappingConfiguration(String mappingsIdentifier, Path mappingsWorkingDir, Path inputJar, ServiceFactory serviceFactory) {
-		super(mappingsIdentifier, inputJar);
-		this.serviceFactory = serviceFactory;
-		this.baseTinyMappings = mappingsWorkingDir.resolve("mappings-base.tiny");
-		this.tinyMappings = mappingsWorkingDir.resolve("mappings.tiny");
-		this.tinyMappingsJar = mappingsWorkingDir.resolve("mappings.jar");
-	}
+    public final Path tinyMappingsJar;
 
-	public static RemapMappingConfiguration create(Project project, ServiceFactory serviceFactory, DependencyInfo dependency, ZomboidProvider gameProvider) {
-		final String version = dependency.getResolvedVersion();
-		final Path inputJar = resolveInputJar(dependency, "mappings");
-		final String mappingsName = StringUtils.removeSuffix(dependency.getDependency().getGroup() + "." + dependency.getDependency().getName(), "-unmerged");
-		final TinyJarInfo jarInfo = readJarInfo(inputJar, dependency, gameProvider, "mappings");
-		final String mappingsIdentifier = createMappingsIdentifier(mappingsName, version, getMappingsClassifier(dependency, jarInfo.v2()), gameProvider.gameVersion());
-		final Path workingDir = gameProvider.dir(mappingsIdentifier).toPath();
-		var mappingConfiguration = new RemapMappingConfiguration(mappingsIdentifier, workingDir, inputJar, serviceFactory);
+    private final Path baseTinyMappings;
 
-		mappingConfiguration.setup(project, gameProvider, dependency, "mappings");
-		return mappingConfiguration;
-	}
+    private final ServiceFactory serviceFactory;
 
-	@Override
-	protected void prepare(ZomboidProvider gameProvider) throws IOException {
-		if (gameProvider.refreshDeps()) {
-			cleanup();
-		}
+    @Nullable
+    private Map<String, String> signatureFixes;
 
-		Files.createDirectories(tinyMappings.getParent());
-	}
+    private RemapMappingConfiguration(String mappingsIdentifier, Path mappingsWorkingDir, Path inputJar,
+        ServiceFactory serviceFactory)
+    {
+        super(mappingsIdentifier, inputJar);
+        this.serviceFactory = serviceFactory;
+        this.baseTinyMappings = mappingsWorkingDir.resolve("mappings-base.tiny");
+        this.tinyMappings = mappingsWorkingDir.resolve("mappings.tiny");
+        this.tinyMappingsJar = mappingsWorkingDir.resolve("mappings.jar");
+    }
 
-	@Override
-	protected void cleanup() throws IOException {
-		if (Files.exists(tinyMappings.getParent())) {
-			Files.walkFileTree(tinyMappings.getParent(), new DeletingFileVisitor());
-		}
-	}
+    public static RemapMappingConfiguration create(Project project, ServiceFactory serviceFactory,
+        DependencyInfo dependency, ZomboidProvider gameProvider)
+    {
+        final String version = dependency.getResolvedVersion();
+        final Path inputJar = resolveInputJar(dependency, "mappings");
+        final String mappingsName = StringUtils.removeSuffix(
+            dependency.getDependency().getGroup() + "." + dependency.getDependency().getName(), "-unmerged");
+        final TinyJarInfo jarInfo = readJarInfo(inputJar, dependency, gameProvider, "mappings");
+        final String mappingsIdentifier = createMappingsIdentifier(mappingsName, version,
+            getMappingsClassifier(dependency, jarInfo.v2()), gameProvider.gameVersion());
+        final Path workingDir = gameProvider.dir(mappingsIdentifier).toPath();
+        var mappingConfiguration = new RemapMappingConfiguration(mappingsIdentifier, workingDir, inputJar,
+            serviceFactory);
 
-	@Override
-	protected void setupMappings(Project project, ZomboidProvider gameProvider, FileSystem inputJar) throws IOException {
-		extractSignatureFixes(inputJar);
+        mappingConfiguration.setup(project, gameProvider, dependency, "mappings");
+        return mappingConfiguration;
+    }
 
-		if (Files.notExists(tinyMappings) || gameProvider.refreshDeps()) {
-			TinyJarInfo.extractMappings(inputJar, baseTinyMappings);
-			storeMappings(project, gameProvider);
-		}
+    private static boolean areMappingsV2(Path path) throws IOException {
+        try (BufferedReader reader = Files.newBufferedReader(path)) {
+            return MappingReader.detectFormat(reader) == MappingFormat.TINY_2_FILE;
+        }
+    }
 
-		if (Files.notExists(tinyMappingsJar) || gameProvider.refreshDeps()) {
-			Files.deleteIfExists(tinyMappingsJar);
-			ZipUtils.add(tinyMappingsJar, TinyJarInfo.MAPPINGS_PATH, Files.readAllBytes(tinyMappings));
-		}
-	}
+    private static void suggestFieldNames(Path inputJar, Path oldMappings, Path newMappings) {
+        Command command = new CommandProposeFieldNames();
 
-	private void storeMappings(Project project, ZomboidProvider gameProvider) throws IOException {
-		if (areMappingsV2(baseTinyMappings)) {
-			final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        try {
+            command.run(new String[] {
+                inputJar.toFile().getAbsolutePath(),
+                oldMappings.toAbsolutePath().toString(),
+                newMappings.toAbsolutePath().toString()
+            });
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
-			if (extension.getUseIntermediateMappings().get()) {
-				IntermediateMappingsService intermediateMappingsService = serviceFactory.get(IntermediateMappingsService.createOptions(project, gameProvider));
-				MappingsMerger.mergeAndSaveMappings(baseTinyMappings, tinyMappings, gameProvider, intermediateMappingsService);
-			} else {
-				Files.copy(baseTinyMappings, tinyMappings, StandardCopyOption.REPLACE_EXISTING);
-			}
-		} else {
-			final List<Path> gameJars = gameProvider.getGameJars();
+    private static void validateMappings(MemoryMappingTree mappingTree) throws IOException {
+        if (!mappingTree.getMetadata(MARKDOWN_METADATA_KEY).isEmpty()) {
+            LOGGER.warn(
+                "Markdown comments are currently not supported for remapped Zomboid. Reinterpreting comments as HTML.");
+        }
+    }
 
-			if (gameJars.size() != 1) {
-				throw new UnsupportedOperationException("V1 mappings only support single jar zomboid providers");
-			}
+    @Override
+    public void applyToProject(Project project, DependencyInfo dependency) {
+        super.applyToProject(project, dependency);
+        project.getDependencies().add(Constants.Configurations.MAPPINGS_FINAL, project.files(tinyMappingsJar.toFile()));
+    }
 
-			Files.deleteIfExists(tinyMappings);
-			LOGGER.info(":populating field names");
-			suggestFieldNames(gameJars.getFirst(), baseTinyMappings, tinyMappings);
-		}
-	}
+    @Override
+    public JavadocStyle getJavadocStyle() {
+        return JavadocStyle.HTML;
+    }
 
-	private static void validateMappings(MemoryMappingTree mappingTree) throws IOException {
-		if (!mappingTree.getMetadata(MARKDOWN_METADATA_KEY).isEmpty()) {
-			LOGGER.warn("Markdown comments are currently not supported for remapped Zomboid. Reinterpreting comments as HTML.");
-		}
-	}
+    @Override
+    public String getMappingsHash() {
+        return Checksum.of(tinyMappings).sha256().hex();
+    }
 
-	@Override
-	public TinyMappingsService getMappingsService(Project project, ServiceFactory serviceFactory) {
-		TinyMappingsService mappingsService = super.getMappingsService(project, serviceFactory);
+    @Override
+    public TinyMappingsService getMappingsService(Project project, ServiceFactory serviceFactory) {
+        TinyMappingsService mappingsService = super.getMappingsService(project, serviceFactory);
 
-		try {
-			validateMappings(mappingsService.getMappingTree());
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to validate mappings", e);
-		}
+        try {
+            validateMappings(mappingsService.getMappingTree());
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to validate mappings", e);
+        }
 
-		return mappingsService;
-	}
+        return mappingsService;
+    }
 
-	@Override
-	public Provider<TinyMappingsService.Options> getMappingsServiceOptions(Project project) {
-		return TinyMappingsService.createOptions(project, tinyMappings);
-	}
+    @Override
+    public Provider<TinyMappingsService.Options> getMappingsServiceOptions(Project project) {
+        return TinyMappingsService.createOptions(project, tinyMappings);
+    }
 
-	@Override
-	public String getMappingsHash() {
-		return Checksum.of(tinyMappings).sha256().hex();
-	}
+    @Override
+    public MappingsNamespace getRuntimeNamespace() {
+        return MappingsNamespace.NAMED;
+    }
 
-	@Override
-	public MappingsNamespace getRuntimeNamespace() {
-		return MappingsNamespace.NAMED;
-	}
+    @Nullable
+    public Map<String, String> getSignatureFixes() {
+        return signatureFixes;
+    }
 
-	@Override
-	public JavadocStyle getJavadocStyle() {
-		return JavadocStyle.HTML;
-	}
+    @Override
+    protected void cleanup() throws IOException {
+        if (Files.exists(tinyMappings.getParent())) {
+            Files.walkFileTree(tinyMappings.getParent(), new DeletingFileVisitor());
+        }
+    }
 
-	@Override
-	public void applyToProject(Project project, DependencyInfo dependency) {
-		super.applyToProject(project, dependency);
-		project.getDependencies().add(Constants.Configurations.MAPPINGS_FINAL, project.files(tinyMappingsJar.toFile()));
-	}
+    @Override
+    protected void prepare(ZomboidProvider gameProvider) throws IOException {
+        if (gameProvider.refreshDeps()) {
+            cleanup();
+        }
 
-	private void extractSignatureFixes(FileSystem inputJar) throws IOException {
-		Path recordSignaturesJsonPath = inputJar.getPath("extras/record_signatures.json");
+        Files.createDirectories(tinyMappings.getParent());
+    }
 
-		if (!Files.exists(recordSignaturesJsonPath)) {
-			return;
-		}
+    @Override
+    protected void setupMappings(Project project, ZomboidProvider gameProvider, FileSystem inputJar)
+        throws IOException
+    {
+        extractSignatureFixes(inputJar);
 
-		try (Reader reader = Files.newBufferedReader(recordSignaturesJsonPath, StandardCharsets.UTF_8)) {
-			//noinspection unchecked
-			signatureFixes = LoomGradlePlugin.GSON.fromJson(reader, Map.class);
-		}
-	}
+        if (Files.notExists(tinyMappings) || gameProvider.refreshDeps()) {
+            TinyJarInfo.extractMappings(inputJar, baseTinyMappings);
+            storeMappings(project, gameProvider);
+        }
 
-	@Nullable public Map<String, String> getSignatureFixes() {
-		return signatureFixes;
-	}
+        if (Files.notExists(tinyMappingsJar) || gameProvider.refreshDeps()) {
+            Files.deleteIfExists(tinyMappingsJar);
+            ZipUtils.add(tinyMappingsJar, TinyJarInfo.MAPPINGS_PATH, Files.readAllBytes(tinyMappings));
+        }
+    }
 
-	private static boolean areMappingsV2(Path path) throws IOException {
-		try (BufferedReader reader = Files.newBufferedReader(path)) {
-			return MappingReader.detectFormat(reader) == MappingFormat.TINY_2_FILE;
-		}
-	}
+    private void extractSignatureFixes(FileSystem inputJar) throws IOException {
+        Path recordSignaturesJsonPath = inputJar.getPath("extras/record_signatures.json");
 
-	private static void suggestFieldNames(Path inputJar, Path oldMappings, Path newMappings) {
-		Command command = new CommandProposeFieldNames();
+        if (!Files.exists(recordSignaturesJsonPath)) {
+            return;
+        }
 
-		try {
-			command.run(new String[] {
-					inputJar.toFile().getAbsolutePath(),
-					oldMappings.toAbsolutePath().toString(),
-					newMappings.toAbsolutePath().toString()
-			});
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
-	}
+        try (Reader reader = Files.newBufferedReader(recordSignaturesJsonPath, StandardCharsets.UTF_8)) {
+            // noinspection unchecked
+            signatureFixes = LoomGradlePlugin.GSON.fromJson(reader, Map.class);
+        }
+    }
+
+    private void storeMappings(Project project, ZomboidProvider gameProvider) throws IOException {
+        if (areMappingsV2(baseTinyMappings)) {
+            final LoomGradleExtension extension = LoomGradleExtension.get(project);
+
+            if (extension.getUseIntermediateMappings().get()) {
+                IntermediateMappingsService intermediateMappingsService = serviceFactory
+                    .get(IntermediateMappingsService.createOptions(project, gameProvider));
+                MappingsMerger.mergeAndSaveMappings(baseTinyMappings, tinyMappings, gameProvider,
+                    intermediateMappingsService);
+            } else {
+                Files.copy(baseTinyMappings, tinyMappings, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } else {
+            final List<Path> gameJars = gameProvider.getGameJars();
+
+            if (gameJars.size() != 1) {
+                throw new UnsupportedOperationException("V1 mappings only support single jar zomboid providers");
+            }
+
+            Files.deleteIfExists(tinyMappings);
+            LOGGER.info(":populating field names");
+            suggestFieldNames(gameJars.getFirst(), baseTinyMappings, tinyMappings);
+        }
+    }
 }

@@ -49,39 +49,43 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 
 public interface DeobfProjectView extends ProjectView {
-	FileCollection getDependencies(DebofConfiguration debofConfiguration, DebofConfiguration.TargetSourceSet targetSourceSet);
+    FileCollection getDependencies(DebofConfiguration debofConfiguration,
+        DebofConfiguration.TargetSourceSet targetSourceSet);
 
-	Stream<Project> getProjectDependencies(DebofConfiguration debofConfiguration);
+    FileCollection getFullClasspath();
 
-	FileCollection getFullClasspath();
+    Stream<Project> getProjectDependencies(DebofConfiguration debofConfiguration);
 
-	class Impl extends AbstractProjectView implements DeobfProjectView {
-		protected Impl(Project project) {
-			super(project);
-		}
+    class Impl extends AbstractProjectView implements DeobfProjectView {
+        protected Impl(Project project) {
+            super(project);
+        }
 
-		@Override
-		public FileCollection getDependencies(DebofConfiguration debofConfiguration, DebofConfiguration.TargetSourceSet targetSourceSet) {
-			return debofConfiguration.getConfiguration(project, targetSourceSet);
-		}
+        @Override
+        public FileCollection getDependencies(DebofConfiguration debofConfiguration,
+            DebofConfiguration.TargetSourceSet targetSourceSet)
+        {
+            return debofConfiguration.getConfiguration(project, targetSourceSet);
+        }
 
-		@Override
-		public Stream<Project> getProjectDependencies(DebofConfiguration debofConfiguration) {
-			return debofConfiguration.getConfigurations(project).stream()
-					.flatMap(configuration -> getLoomProjectDependencies(configuration.getName()));
-		}
+        @Override
+        public FileCollection getFullClasspath() {
+            ConfigurableFileCollection classpath = project.files();
 
-		@Override
-		public FileCollection getFullClasspath() {
-			ConfigurableFileCollection classpath = project.files();
+            for (DebofConfiguration debofConfiguration : DebofConfiguration.ALL) {
+                for (Configuration configuration : debofConfiguration.getConfigurations(project)) {
+                    classpath.from(configuration);
+                }
+            }
 
-			for (DebofConfiguration debofConfiguration : DebofConfiguration.ALL) {
-				for (Configuration configuration : debofConfiguration.getConfigurations(project)) {
-					classpath.from(configuration);
-				}
-			}
+            return classpath;
+        }
 
-			return classpath;
-		}
-	}
+        @Override
+        public Stream<Project> getProjectDependencies(DebofConfiguration debofConfiguration) {
+            return debofConfiguration.getConfigurations(project)
+                .stream()
+                .flatMap(configuration -> getLoomProjectDependencies(configuration.getName()));
+        }
+    }
 }

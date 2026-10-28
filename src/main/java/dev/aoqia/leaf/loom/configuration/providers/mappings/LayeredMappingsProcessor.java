@@ -64,137 +64,140 @@ import dev.aoqia.leaf.loom.configuration.providers.mappings.extras.unpick.Unpick
 import dev.aoqia.leaf.loom.configuration.providers.mappings.unpick.UnpickMetadata;
 
 public class LayeredMappingsProcessor {
-	private final LayeredMappingSpec layeredMappingSpec;
-	private final boolean noIntermediateMappings;
+    private final LayeredMappingSpec layeredMappingSpec;
+    private final boolean noIntermediateMappings;
 
-	public LayeredMappingsProcessor(LayeredMappingSpec spec, boolean noIntermediateMappings) {
-		this.layeredMappingSpec = spec;
-		this.noIntermediateMappings = noIntermediateMappings;
-	}
+    public LayeredMappingsProcessor(LayeredMappingSpec spec, boolean noIntermediateMappings) {
+        this.layeredMappingSpec = spec;
+        this.noIntermediateMappings = noIntermediateMappings;
+    }
 
-	public List<MappingLayer> resolveLayers(MappingContext context) {
-		List<MappingLayer> layers = new ArrayList<>();
-		List<Class<? extends MappingLayer>> visitedLayers = new ArrayList<>();
+    public List<AnnotationsData> getAnnotationsData(List<MappingLayer> layers) throws IOException {
+        List<AnnotationsData> result = new ArrayList<>();
 
-		for (MappingsSpec<?> spec : layeredMappingSpec.layers()) {
-			MappingLayer layer = spec.createLayer(context);
+        for (MappingLayer layer : layers) {
+            if (layer instanceof AnnotationsLayer annotationsLayer) {
+                AnnotationsData annotationsData = annotationsLayer.getAnnotationsData();
 
-			for (Class<? extends MappingLayer> dependentLayer : layer.dependsOn()) {
-				if (!visitedLayers.contains(dependentLayer)) {
-					throw new RuntimeException("Layer %s depends on %s".formatted(layer.getClass().getName(), dependentLayer.getName()));
-				}
-			}
+                if (annotationsData != null) {
+                    result.add(annotationsData);
+                }
+            }
+        }
 
-			layers.add(layer);
-			visitedLayers.add(layer.getClass());
-		}
+        return result;
+    }
 
-		return Collections.unmodifiableList(layers);
-	}
+    public MemoryMappingTree getMappings(List<MappingLayer> layers) throws IOException {
+        MemoryMappingTree mappingTree = new MemoryMappingTree();
 
-	public MemoryMappingTree getMappings(List<MappingLayer> layers) throws IOException {
-		MemoryMappingTree mappingTree = new MemoryMappingTree();
+        for (MappingLayer layer : layers) {
+            // We have to rebuild a new tree to work on when a layer doesnt merge into layered
+            boolean rebuild = layer.getSourceNamespace() != MappingsNamespace.NAMED;
+            MemoryMappingTree workingTree;
 
-		for (MappingLayer layer : layers) {
-			// We have to rebuild a new tree to work on when a layer doesnt merge into layered
-			boolean rebuild = layer.getSourceNamespace() != MappingsNamespace.NAMED;
-			MemoryMappingTree workingTree;
+            if (rebuild) {
+                var tempTree = new MemoryMappingTree();
 
-			if (rebuild) {
-				var tempTree = new MemoryMappingTree();
+                // This can be null on the first layer
+                if (mappingTree.getSrcNamespace() != null) {
+                    var sourceNsSwitch = new MappingSourceNsSwitch(tempTree, layer.getSourceNamespace().toString());
+                    mappingTree.accept(sourceNsSwitch);
+                }
 
-				// This can be null on the first layer
-				if (mappingTree.getSrcNamespace() != null) {
-					var sourceNsSwitch = new MappingSourceNsSwitch(tempTree, layer.getSourceNamespace().toString());
-					mappingTree.accept(sourceNsSwitch);
-				}
+                workingTree = tempTree;
+            } else {
+                workingTree = mappingTree;
+            }
 
-				workingTree = tempTree;
-			} else {
-				workingTree = mappingTree;
-			}
+            try {
+                layer.visit(workingTree);
+            } catch (IOException e) {
+                throw new IOException("Failed to visit: " + layer.getClass(), e);
+            }
 
-			try {
-				layer.visit(workingTree);
-			} catch (IOException e) {
-				throw new IOException("Failed to visit: " + layer.getClass(), e);
-			}
+            if (rebuild) {
+                mappingTree = new MemoryMappingTree();
+                workingTree.accept(new MappingSourceNsSwitch(mappingTree, MappingsNamespace.NAMED.toString()));
+            }
+        }
 
-			if (rebuild) {
-				mappingTree = new MemoryMappingTree();
-				workingTree.accept(new MappingSourceNsSwitch(mappingTree, MappingsNamespace.NAMED.toString()));
-			}
-		}
+        return mappingTree;
+    }
 
-		return mappingTree;
-	}
+    @Nullable
+    public Map<String, String> getSignatureFixes(List<MappingLayer> layers) {
+        Map<String, String> signatureFixes = new HashMap<>();
 
-	public List<AnnotationsData> getAnnotationsData(List<MappingLayer> layers) throws IOException {
-		List<AnnotationsData> result = new ArrayList<>();
+        for (MappingLayer layer : layers) {
+            if (layer instanceof SignatureFixesLayer signatureFixesLayer) {
+                signatureFixes.putAll(signatureFixesLayer.getSignatureFixes());
+            }
+        }
 
-		for (MappingLayer layer : layers) {
-			if (layer instanceof AnnotationsLayer annotationsLayer) {
-				AnnotationsData annotationsData = annotationsLayer.getAnnotationsData();
+        if (signatureFixes.isEmpty()) {
+            return null;
+        }
 
-				if (annotationsData != null) {
-					result.add(annotationsData);
-				}
-			}
-		}
+        return Collections.unmodifiableMap(signatureFixes);
+    }
 
-		return result;
-	}
+    public UnpickLayer.@Nullable UnpickData getUnpickData(List<MappingLayer> layers) throws IOException {
+        List<UnpickLayer.UnpickData> unpickDataList = new ArrayList<>();
 
-	@Nullable public Map<String, String> getSignatureFixes(List<MappingLayer> layers) {
-		Map<String, String> signatureFixes = new HashMap<>();
+        for (MappingLayer layer : layers) {
+            if (layer instanceof UnpickLayer unpickLayer) {
+                UnpickLayer.UnpickData data = unpickLayer.getUnpickData();
+                if (data == null) {
+                    continue;
+                }
 
-		for (MappingLayer layer : layers) {
-			if (layer instanceof SignatureFixesLayer signatureFixesLayer) {
-				signatureFixes.putAll(signatureFixesLayer.getSignatureFixes());
-			}
-		}
+                if (!data.metadata().hasConstantsLocation()) {
+                    // if the constants location is not provided explicitly, Loom
+                    // cannot trick its way into finding them, since the mappings
+                    // dependency points to the layered mappings instead of the
+                    // individual layer that provided the unpick data
+                    String fallbackConstants = unpickLayer.getFallbackConstants();
+                    UnpickMetadata metadata = fallbackConstants == null ? data.metadata().withoutConstants()
+                        : data.metadata().withConstants(fallbackConstants);
 
-		if (signatureFixes.isEmpty()) {
-			return null;
-		}
+                    data = new UnpickLayer.UnpickData(metadata, data.definitions());
+                }
 
-		return Collections.unmodifiableMap(signatureFixes);
-	}
+                unpickDataList.add(data);
+            }
+        }
 
-	public UnpickLayer.@Nullable UnpickData getUnpickData(List<MappingLayer> layers) throws IOException {
-		List<UnpickLayer.UnpickData> unpickDataList = new ArrayList<>();
+        if (unpickDataList.isEmpty()) {
+            return null;
+        }
 
-		for (MappingLayer layer : layers) {
-			if (layer instanceof UnpickLayer unpickLayer) {
-				UnpickLayer.UnpickData data = unpickLayer.getUnpickData();
-				if (data == null) continue;
+        if (unpickDataList.size() != 1) {
+            // TODO merge
+            throw new UnsupportedOperationException("Only one unpick layer is currently supported.");
+        }
 
-				if (!data.metadata().hasConstantsLocation()) {
-					// if the constants location is not provided explicitly, Loom
-					// cannot trick its way into finding them, since the mappings
-					// dependency points to the layered mappings instead of the
-					// individual layer that provided the unpick data
-					String fallbackConstants = unpickLayer.getFallbackConstants();
-					UnpickMetadata metadata = fallbackConstants == null
-								? data.metadata().withoutConstants()
-								: data.metadata().withConstants(fallbackConstants);
+        return unpickDataList.get(0);
+    }
 
-					data = new UnpickLayer.UnpickData(metadata, data.definitions());
-				}
+    public List<MappingLayer> resolveLayers(MappingContext context) {
+        List<MappingLayer> layers = new ArrayList<>();
+        List<Class<? extends MappingLayer>> visitedLayers = new ArrayList<>();
 
-				unpickDataList.add(data);
-			}
-		}
+        for (MappingsSpec<?> spec : layeredMappingSpec.layers()) {
+            MappingLayer layer = spec.createLayer(context);
 
-		if (unpickDataList.isEmpty()) {
-			return null;
-		}
+            for (Class<? extends MappingLayer> dependentLayer : layer.dependsOn()) {
+                if (!visitedLayers.contains(dependentLayer)) {
+                    throw new RuntimeException(
+                        "Layer %s depends on %s".formatted(layer.getClass().getName(), dependentLayer.getName()));
+                }
+            }
 
-		if (unpickDataList.size() != 1) {
-			// TODO merge
-			throw new UnsupportedOperationException("Only one unpick layer is currently supported.");
-		}
+            layers.add(layer);
+            visitedLayers.add(layer.getClass());
+        }
 
-		return unpickDataList.get(0);
-	}
+        return Collections.unmodifiableList(layers);
+    }
 }

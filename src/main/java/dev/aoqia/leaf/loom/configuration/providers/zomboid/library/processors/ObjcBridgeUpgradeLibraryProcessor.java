@@ -50,42 +50,43 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.library.LibraryProces
 import dev.aoqia.leaf.loom.util.Platform;
 
 public class ObjcBridgeUpgradeLibraryProcessor extends LibraryProcessor {
-	private static final String OBJC_BRIDGE_PREFIX = "ca.weblite:java-objc-bridge";
-	private static final String OBJC_BRIDGE_VERSION = "1.1";
-	private static final String OBJC_BRIDGE_NAME = "%s:%s".formatted(OBJC_BRIDGE_PREFIX, OBJC_BRIDGE_VERSION);
+    private static final String OBJC_BRIDGE_PREFIX = "ca.weblite:java-objc-bridge";
+    private static final String OBJC_BRIDGE_VERSION = "1.1";
+    private static final String OBJC_BRIDGE_NAME = "%s:%s".formatted(OBJC_BRIDGE_PREFIX, OBJC_BRIDGE_VERSION);
 
-	public ObjcBridgeUpgradeLibraryProcessor(Platform platform, LibraryContext context) {
-		super(platform, context);
-	}
+    public ObjcBridgeUpgradeLibraryProcessor(Platform platform, LibraryContext context) {
+        super(platform, context);
+    }
 
-	@Override
-	public ApplicationResult getApplicationResult() {
-		if (!context.usesLWJGL3()) {
-			// Only supports LWJGL 3
-			return ApplicationResult.DONT_APPLY;
-		}
+    @Override
+    public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
+        // Add the updated library on the runtime classpath.
+        dependencyConsumer.accept(Library.fromMaven(OBJC_BRIDGE_NAME, Library.Target.RUNTIME));
 
-		if (!(platform.getOperatingSystem().isMacOS() && platform.getArchitecture().isArm())) {
-			// Only supported on arm64 macOS
-			return ApplicationResult.DONT_APPLY;
-		}
+        return library -> {
+            if (library.is(OBJC_BRIDGE_PREFIX)) {
+                // Remove the natives, as they are included in the dep library we added to the runtime classpath above.
+                return library.target() != Library.Target.NATIVES;
+            }
 
-		// Apply when Arm64 macOS is unsupported by Minecraft
-		return context.supportsArm64(Platform.OperatingSystem.MAC_OS) ? ApplicationResult.DONT_APPLY : ApplicationResult.MUST_APPLY;
-	}
+            return true;
+        };
+    }
 
-	@Override
-	public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
-		// Add the updated library on the runtime classpath.
-		dependencyConsumer.accept(Library.fromMaven(OBJC_BRIDGE_NAME, Library.Target.RUNTIME));
+    @Override
+    public ApplicationResult getApplicationResult() {
+        if (!context.usesLWJGL3()) {
+            // Only supports LWJGL 3
+            return ApplicationResult.DONT_APPLY;
+        }
 
-		return library -> {
-			if (library.is(OBJC_BRIDGE_PREFIX)) {
-				// Remove the natives, as they are included in the dep library we added to the runtime classpath above.
-				return library.target() != Library.Target.NATIVES;
-			}
+        if (!(platform.getOperatingSystem().isMacOS() && platform.getArchitecture().isArm())) {
+            // Only supported on arm64 macOS
+            return ApplicationResult.DONT_APPLY;
+        }
 
-			return true;
-		};
-	}
+        // Apply when Arm64 macOS is unsupported by Minecraft
+        return context.supportsArm64(Platform.OperatingSystem.MAC_OS) ? ApplicationResult.DONT_APPLY
+            : ApplicationResult.MUST_APPLY;
+    }
 }

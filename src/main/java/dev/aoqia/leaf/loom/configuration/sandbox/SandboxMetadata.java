@@ -62,126 +62,126 @@ import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readInt;
 import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readString;
 
 public sealed interface SandboxMetadata permits SandboxMetadata.V1 {
-	String SANDBOX_METADATA_FILENAME = "fabric-sandbox.json";
+    String SANDBOX_METADATA_FILENAME = "fabric-sandbox.json";
 
-	static SandboxMetadata readFromJar(Path path) {
-		try {
-			JsonObject jsonObject = ZipUtils.unpackGson(path, SANDBOX_METADATA_FILENAME, JsonObject.class);
-			int version = readInt(jsonObject, "version");
-			return switch (version) {
-			case 1 -> SandboxMetadata.V1.parseV1(jsonObject);
-			default -> throw new UnsupportedOperationException("Unsupported sandbox metadata version: " + version);
-			};
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read: " + SANDBOX_METADATA_FILENAME, e);
-		}
-	}
+    static SandboxMetadata readFromJar(Path path) {
+        try {
+            JsonObject jsonObject = ZipUtils.unpackGson(path, SANDBOX_METADATA_FILENAME, JsonObject.class);
+            int version = readInt(jsonObject, "version");
+            return switch (version) {
+                case 1 -> SandboxMetadata.V1.parseV1(jsonObject);
+                default -> throw new UnsupportedOperationException("Unsupported sandbox metadata version: " + version);
+            };
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read: " + SANDBOX_METADATA_FILENAME, e);
+        }
+    }
 
-	/**
-	 * @return The main class of the sandbox.
-	 */
-	String mainClass();
+    private static Architecture parseArchitecture(String arch) {
+        return switch (arch) {
+            case "x86_64" -> Architecture.X86_64;
+            case "arm64" -> Architecture.ARM64;
+            default -> throw new ParseException("Unsupported sandbox architecture: %s", arch);
+        };
+    }
 
-	/**
-	 * @param platform The platform to check.
-	 * @return True if the sandbox supports the platform, false otherwise.
-	 */
-	boolean supportsPlatform(Platform platform);
+    private static OperatingSystem parseOperatingSystem(String os) {
+        return switch (os) {
+            case "windows" -> OperatingSystem.WINDOWS;
+            case "macos" -> OperatingSystem.MAC_OS;
+            case "linux" -> OperatingSystem.LINUX;
+            default -> throw new ParseException("Unsupported sandbox operating system: %s", os);
+        };
+    }
 
-	record V1(String mainClass, Map<OperatingSystem, List<Architecture>> supportedPlatforms) implements SandboxMetadata {
-		static V1 parseV1(JsonObject jsonObject) {
-			String mainClass = readString(jsonObject, "mainClass");
-			JsonObject platforms = getJsonObject(jsonObject, "platforms");
+    /**
+     * @return The main class of the sandbox.
+     */
+    String mainClass();
 
-			Map<OperatingSystem, List<Architecture>> supportedPlatforms = new HashMap<>();
+    /**
+     * @param platform The platform to check.
+     * @return True if the sandbox supports the platform, false otherwise.
+     */
+    boolean supportsPlatform(Platform platform);
 
-			for (Map.Entry<String, JsonElement> entry : platforms.entrySet()) {
-				if (!entry.getValue().isJsonArray()) {
-					throw new ParseException("Unexpected json array type for key (%s)", entry.getKey());
-				}
+    enum Architecture {
+        ARM64, X86_64;
 
-				List<Architecture> architectures = new ArrayList<>();
+        public boolean compatibleWith(Platform platform) {
+            final Platform.Architecture architecture = platform.getArchitecture();
 
-				for (JsonElement element : entry.getValue().getAsJsonArray()) {
-					if (!(element.isJsonPrimitive() && element.getAsJsonPrimitive().isString())) {
-						throw new ParseException("Unexpected json primitive type for key (%s)", entry.getKey());
-					}
+            if (!architecture.is64Bit()) {
+                return false;
+            }
 
-					architectures.add(parseArchitecture(element.getAsString()));
-				}
+            return switch (this) {
+                case X86_64 -> !architecture.isArm();
+                case ARM64 -> architecture.isArm();
+            };
+        }
+    }
 
-				supportedPlatforms.put(parseOperatingSystem(entry.getKey()), Collections.unmodifiableList(architectures));
-			}
+    enum OperatingSystem {
+        LINUX, MAC_OS, WINDOWS;
 
-			return new V1(mainClass, Collections.unmodifiableMap(supportedPlatforms));
-		}
+        public boolean compatibleWith(Platform platform) {
+            final Platform.OperatingSystem operatingSystem = platform.getOperatingSystem();
 
-		@Override
-		public boolean supportsPlatform(Platform platform) {
-			for (Map.Entry<OperatingSystem, List<Architecture>> entry : supportedPlatforms.entrySet()) {
-				if (!entry.getKey().compatibleWith(platform)) {
-					continue;
-				}
+            return switch (this) {
+                case WINDOWS -> operatingSystem.isWindows();
+                case MAC_OS -> operatingSystem.isMacOS();
+                case LINUX -> operatingSystem.isLinux();
+            };
+        }
+    }
 
-				for (Architecture architecture : entry.getValue()) {
-					if (architecture.compatibleWith(platform)) {
-						return true;
-					}
-				}
-			}
+    record V1(String mainClass, Map<OperatingSystem, List<Architecture>> supportedPlatforms)
+        implements SandboxMetadata
+    {
+        static V1 parseV1(JsonObject jsonObject) {
+            String mainClass = readString(jsonObject, "mainClass");
+            JsonObject platforms = getJsonObject(jsonObject, "platforms");
 
-			return false;
-		}
-	}
+            Map<OperatingSystem, List<Architecture>> supportedPlatforms = new HashMap<>();
 
-	enum OperatingSystem {
-		WINDOWS,
-		MAC_OS,
-		LINUX;
+            for (Map.Entry<String, JsonElement> entry : platforms.entrySet()) {
+                if (!entry.getValue().isJsonArray()) {
+                    throw new ParseException("Unexpected json array type for key (%s)", entry.getKey());
+                }
 
-		public boolean compatibleWith(Platform platform) {
-			final Platform.OperatingSystem operatingSystem = platform.getOperatingSystem();
+                List<Architecture> architectures = new ArrayList<>();
 
-			return switch (this) {
-			case WINDOWS -> operatingSystem.isWindows();
-			case MAC_OS -> operatingSystem.isMacOS();
-			case LINUX -> operatingSystem.isLinux();
-			};
-		}
-	}
+                for (JsonElement element : entry.getValue().getAsJsonArray()) {
+                    if (!(element.isJsonPrimitive() && element.getAsJsonPrimitive().isString())) {
+                        throw new ParseException("Unexpected json primitive type for key (%s)", entry.getKey());
+                    }
 
-	enum Architecture {
-		X86_64,
-		ARM64;
+                    architectures.add(parseArchitecture(element.getAsString()));
+                }
 
-		public boolean compatibleWith(Platform platform) {
-			final Platform.Architecture architecture = platform.getArchitecture();
+                supportedPlatforms.put(parseOperatingSystem(entry.getKey()),
+                    Collections.unmodifiableList(architectures));
+            }
 
-			if (!architecture.is64Bit()) {
-				return false;
-			}
+            return new V1(mainClass, Collections.unmodifiableMap(supportedPlatforms));
+        }
 
-			return switch (this) {
-			case X86_64 -> !architecture.isArm();
-			case ARM64 -> architecture.isArm();
-			};
-		}
-	}
+        @Override
+        public boolean supportsPlatform(Platform platform) {
+            for (Map.Entry<OperatingSystem, List<Architecture>> entry : supportedPlatforms.entrySet()) {
+                if (!entry.getKey().compatibleWith(platform)) {
+                    continue;
+                }
 
-	private static OperatingSystem parseOperatingSystem(String os) {
-		return switch (os) {
-		case "windows" -> OperatingSystem.WINDOWS;
-		case "macos" -> OperatingSystem.MAC_OS;
-		case "linux" -> OperatingSystem.LINUX;
-		default -> throw new ParseException("Unsupported sandbox operating system: %s", os);
-		};
-	}
+                for (Architecture architecture : entry.getValue()) {
+                    if (architecture.compatibleWith(platform)) {
+                        return true;
+                    }
+                }
+            }
 
-	private static Architecture parseArchitecture(String arch) {
-		return switch (arch) {
-		case "x86_64" -> Architecture.X86_64;
-		case "arm64" -> Architecture.ARM64;
-		default -> throw new ParseException("Unsupported sandbox architecture: %s", arch);
-		};
-	}
+            return false;
+        }
+    }
 }

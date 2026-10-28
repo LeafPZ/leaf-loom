@@ -56,32 +56,32 @@ import dev.aoqia.leaf.loom.configuration.providers.mappings.file.FileMappingsSpe
 import dev.aoqia.leaf.loom.configuration.providers.mappings.intermediary.IntermediaryMappingsSpec;
 
 public class LayeredMappingSpecBuilderImpl implements LayeredMappingSpecBuilder {
-	private final List<MappingsSpec<?>> layers = new ArrayList<>();
+    private final List<MappingsSpec<?>> layers = new ArrayList<>();
 
-	@Override
-	public LayeredMappingSpecBuilder addLayer(MappingsSpec<?> mappingSpec) {
-		layers.add(mappingSpec);
-		return this;
-	}
+    @Override
+    public LayeredMappingSpecBuilder addLayer(MappingsSpec<?> mappingSpec) {
+        layers.add(mappingSpec);
+        return this;
+    }
 
-	@Override
-	public LayeredMappingSpecBuilder signatureFix(Object object) {
-		return addLayer(new SignatureFixesSpec(FileSpec.create(object)));
-	}
+    public LayeredMappingSpec build() {
+        List<MappingsSpec<?>> builtLayers = new ArrayList<>(layers.size() + 1);
+        // Intermediary is always the base layer
+        builtLayers.add(new IntermediaryMappingsSpec());
+        builtLayers.addAll(layers);
 
-	@Override
-	public LayeredMappingSpecBuilder mappings(Object file, Action<? super FileMappingsSpecBuilder> action) {
-		FileMappingsSpecBuilderImpl builder = FileMappingsSpecBuilderImpl.builder(FileSpec.create(file));
-		action.execute(builder);
-		return addLayer(builder.build());
-	}
+        return new LayeredMappingSpec(Collections.unmodifiableList(builtLayers));
+    }
 
-	public LayeredMappingSpec build() {
-		List<MappingsSpec<?>> builtLayers = new ArrayList<>(layers.size() + 1);
-		// Intermediary is always the base layer
-		builtLayers.add(new IntermediaryMappingsSpec());
-		builtLayers.addAll(layers);
+    @Override
+    public LayeredMappingSpecBuilder mappings(Object file, Action<? super FileMappingsSpecBuilder> action) {
+        FileMappingsSpecBuilderImpl builder = FileMappingsSpecBuilderImpl.builder(FileSpec.create(file));
+        action.execute(builder);
+        return addLayer(builder.build());
+    }
 
-		return new LayeredMappingSpec(Collections.unmodifiableList(builtLayers));
-	}
+    @Override
+    public LayeredMappingSpecBuilder signatureFix(Object object) {
+        return addLayer(new SignatureFixesSpec(FileSpec.create(object)));
+    }
 }

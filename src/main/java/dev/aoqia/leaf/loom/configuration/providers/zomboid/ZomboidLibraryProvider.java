@@ -66,149 +66,158 @@ import dev.aoqia.leaf.loom.util.Platform;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public class ZomboidLibraryProvider {
-	private static final Platform platform = Platform.CURRENT;
+    private static final Platform platform = Platform.CURRENT;
 
-	private final Project project;
-	private final ZomboidProvider zomboidProvider;
-	private final LibraryProcessorManager processorManager;
+    private final LibraryProcessorManager processorManager;
+    private final Project project;
+    private final ZomboidProvider zomboidProvider;
 
-	public ZomboidLibraryProvider(ZomboidProvider zomboidProvider, Project project) {
-		this.project = project;
-		this.zomboidProvider = zomboidProvider;
-		this.processorManager = new LibraryProcessorManager(platform, project.getRepositories(), LoomGradleExtension.get(project).getLibraryProcessors().get(), getEnabledProcessors());
-	}
+    public ZomboidLibraryProvider(ZomboidProvider zomboidProvider, Project project) {
+        this.project = project;
+        this.zomboidProvider = zomboidProvider;
+        this.processorManager = new LibraryProcessorManager(platform, project.getRepositories(),
+            LoomGradleExtension.get(project).getLibraryProcessors().get(), getEnabledProcessors());
+    }
 
-	private List<String> getEnabledProcessors() {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
+    public void provide() {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final ZomboidJarConfiguration jarConfiguration = extension.getZomboidJarConfiguration().get();
 
-		var enabledProcessors = new ArrayList<String>();
+        final boolean provideClient = jarConfiguration.supportedEnvironments().contains("client");
+        final boolean provideServer = jarConfiguration.supportedEnvironments().contains("server");
+        assert provideClient || provideServer;
 
-		if (extension.getRuntimeOnlyLog4j().get()) {
-			enabledProcessors.add(RuntimeLog4jLibraryProcessor.class.getSimpleName());
-		}
+        if (provideClient) {
+            provideClientLibraries();
+        }
 
-		if (extension.getRuntimeOnlyLwjglGraphics().get()) {
-			enabledProcessors.add(RuntimeLwjglGraphicsLibraryProcessor.class.getSimpleName());
-		}
+        if (provideServer) {
+            provideServerLibraries();
+        }
 
-		final Provider<String> libraryProcessorsProperty = project.getProviders().gradleProperty(Constants.Properties.LIBRARY_PROCESSORS);
+        if (extension.isCollectingDependencyVerificationMetadata()) {
+            resolveAllLibraries();
+        }
+    }
 
-		if (libraryProcessorsProperty.isPresent()) {
-			String[] split = libraryProcessorsProperty.get().split(":");
-			enabledProcessors.addAll(Arrays.asList(split));
-		}
+    private void addDependency(String configuration, Object dependency) {
+        final Dependency created = project.getDependencies().add(configuration, dependency);
 
-		return Collections.unmodifiableList(enabledProcessors);
-	}
+        // The launcher doesn't download transitive deps, so neither will we.
+        // This will also prevent a LaunchWrapper library dependency from pulling in outdated ASM jars.
+        if (created instanceof ModuleDependency md) {
+            md.setTransitive(false);
+        }
+    }
 
-	public void provide() {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final ZomboidJarConfiguration jarConfiguration = extension.getZomboidJarConfiguration().get();
+    private void addLibrary(String configuration, Library library) {
+        addDependency(configuration, library.mavenNotation());
+    }
 
-		final boolean provideClient = jarConfiguration.supportedEnvironments().contains("client");
-		final boolean provideServer = jarConfiguration.supportedEnvironments().contains("server");
-		assert provideClient || provideServer;
+    private void applyClientLibrary(Library library) {
+        switch (library.target()) {
+            case COMPILE -> addLibrary(Constants.Configurations.ZOMBOID_CLIENT_COMPILE_LIBRARIES, library);
+            case RUNTIME -> addLibrary(Constants.Configurations.ZOMBOID_CLIENT_RUNTIME_LIBRARIES, library);
+            case NATIVES -> addLibrary(Constants.Configurations.ZOMBOID_NATIVES, library);
+            case LOCAL_MOD -> applyLocalModLibrary(library);
+        }
+    }
 
-		if (provideClient) {
-			provideClientLibraries();
-		}
+    private void applyLocalModLibrary(Library library) {
+        ExternalModuleDependency dependency = (ExternalModuleDependency) project.getDependencies()
+            .create(library.mavenNotation());
+        dependency.setTransitive(false);
 
-		if (provideServer) {
-			provideServerLibraries();
-		}
+        String configuration = LoomGradleExtension.get(project).disableObfuscation()
+            ? Constants.Configurations.LOCAL_RUNTIME : "modLocalRuntime";
+        project.getDependencies().add(configuration, dependency);
+    }
 
-		if (extension.isCollectingDependencyVerificationMetadata()) {
-			resolveAllLibraries();
-		}
-	}
+    private void applyServerLibrary(Library library) {
+        switch (library.target()) {
+            case COMPILE -> addLibrary(Constants.Configurations.ZOMBOID_SERVER_COMPILE_LIBRARIES, library);
+            case RUNTIME -> addLibrary(Constants.Configurations.ZOMBOID_SERVER_RUNTIME_LIBRARIES, library);
+            case LOCAL_MOD -> applyLocalModLibrary(library);
+            default ->
+                throw new IllegalStateException("Target not supported for server library: %s".formatted(library));
+        }
+    }
 
-	private void provideClientLibraries() {
-		final List<Library> libraries = ZomboidLibraryHelper.getLibrariesForPlatform(zomboidProvider.getVersionInfo(), platform);
-		final List<Library> processLibraries = processLibraries(libraries);
-		processLibraries.forEach(this::applyClientLibrary);
+    private List<String> getEnabledProcessors() {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-		if (!zomboidProvider.getVersionInfo().hasNativesToExtract()) {
-			project.getConfigurations().named(Constants.Configurations.ZOMBOID_RUNTIME_LIBRARIES, configuration -> configuration.extendsFrom(project.getConfigurations().named(Constants.Configurations.ZOMBOID_NATIVES)));
-		}
-	}
+        var enabledProcessors = new ArrayList<String>();
 
-	private void provideServerLibraries() {
-		final List<Library> libraries = Collections.emptyList();
-		final List<Library> processLibraries = processLibraries(libraries);
-		processLibraries.forEach(this::applyServerLibrary);
-	}
+        if (extension.getRuntimeOnlyLog4j().get()) {
+            enabledProcessors.add(RuntimeLog4jLibraryProcessor.class.getSimpleName());
+        }
 
-	/**
-	 * When Gradle is writing dependency verification metadata, we need to resolve all libraries across all platforms,
-	 * to ensure that they are captured.
-	 */
-	private void resolveAllLibraries() {
-		project.getLogger().info("Resolving all libraries for dependency verification metadata generation");
+        if (extension.getRuntimeOnlyLwjglGraphics().get()) {
+            enabledProcessors.add(RuntimeLwjglGraphicsLibraryProcessor.class.getSimpleName());
+        }
 
-		final List<Library> libraries = ZomboidLibraryHelper.getAllLibraries(zomboidProvider.getVersionInfo());
-		Configuration detachedConfiguration = project.getConfigurations().detachedConfiguration(
-				libraries.stream()
-					.map(library -> project.getDependencies().create(library.mavenNotation()))
-					.toArray(Dependency[]::new)
-		);
-		detachedConfiguration.getFiles();
-	}
+        final Provider<String> libraryProcessorsProperty = project.getProviders()
+            .gradleProperty(Constants.Properties.LIBRARY_PROCESSORS);
 
-	private List<Library> processLibraries(List<Library> libraries) {
-		final LibraryContext libraryContext = new LibraryContext(zomboidProvider.getVersionInfo(), getTargetRuntimeJavaVersion());
-		return processorManager.processLibraries(libraries, libraryContext);
-	}
+        if (libraryProcessorsProperty.isPresent()) {
+            String[] split = libraryProcessorsProperty.get().split(":");
+            enabledProcessors.addAll(Arrays.asList(split));
+        }
 
-	private JavaVersion getTargetRuntimeJavaVersion() {
-		final Object property = GradleUtils.getProperty(project, Constants.Properties.RUNTIME_JAVA_COMPATIBILITY_VERSION);
+        return Collections.unmodifiableList(enabledProcessors);
+    }
 
-		if (property != null) {
-			// This is very much a last ditch effort to allow users to set the runtime java version
-			// It's not recommended and will likely cause support confusion if it has been changed without good reason.
-			project.getLogger().warn("Runtime java compatibility version has manually been set to: {}", property);
-			return JavaVersion.toVersion(property);
-		}
+    private JavaVersion getTargetRuntimeJavaVersion() {
+        final Object property = GradleUtils.getProperty(project,
+            Constants.Properties.RUNTIME_JAVA_COMPATIBILITY_VERSION);
 
-		return JavaVersion.current();
-	}
+        if (property != null) {
+            // This is very much a last ditch effort to allow users to set the runtime java version
+            // It's not recommended and will likely cause support confusion if it has been changed without good reason.
+            project.getLogger().warn("Runtime java compatibility version has manually been set to: {}", property);
+            return JavaVersion.toVersion(property);
+        }
 
-	private void applyClientLibrary(Library library) {
-		switch (library.target()) {
-		case COMPILE -> addLibrary(Constants.Configurations.ZOMBOID_CLIENT_COMPILE_LIBRARIES, library);
-		case RUNTIME -> addLibrary(Constants.Configurations.ZOMBOID_CLIENT_RUNTIME_LIBRARIES, library);
-		case NATIVES -> addLibrary(Constants.Configurations.ZOMBOID_NATIVES, library);
-		case LOCAL_MOD -> applyLocalModLibrary(library);
-		}
-	}
+        return JavaVersion.current();
+    }
 
-	private void applyServerLibrary(Library library) {
-		switch (library.target()) {
-		case COMPILE -> addLibrary(Constants.Configurations.ZOMBOID_SERVER_COMPILE_LIBRARIES, library);
-		case RUNTIME -> addLibrary(Constants.Configurations.ZOMBOID_SERVER_RUNTIME_LIBRARIES, library);
-		case LOCAL_MOD -> applyLocalModLibrary(library);
-		default -> throw new IllegalStateException("Target not supported for server library: %s".formatted(library));
-		}
-	}
+    private List<Library> processLibraries(List<Library> libraries) {
+        final LibraryContext libraryContext = new LibraryContext(zomboidProvider.getVersionInfo(),
+            getTargetRuntimeJavaVersion());
+        return processorManager.processLibraries(libraries, libraryContext);
+    }
 
-	private void applyLocalModLibrary(Library library) {
-		ExternalModuleDependency dependency = (ExternalModuleDependency) project.getDependencies().create(library.mavenNotation());
-		dependency.setTransitive(false);
+    private void provideClientLibraries() {
+        final List<Library> libraries = ZomboidLibraryHelper.getLibrariesForPlatform(zomboidProvider.getVersionInfo(),
+            platform);
+        final List<Library> processLibraries = processLibraries(libraries);
+        processLibraries.forEach(this::applyClientLibrary);
 
-		String configuration = LoomGradleExtension.get(project).disableObfuscation() ? Constants.Configurations.LOCAL_RUNTIME : "modLocalRuntime";
-		project.getDependencies().add(configuration, dependency);
-	}
+        if (!zomboidProvider.getVersionInfo().hasNativesToExtract()) {
+            project.getConfigurations()
+                .named(Constants.Configurations.ZOMBOID_RUNTIME_LIBRARIES, configuration -> configuration
+                    .extendsFrom(project.getConfigurations().named(Constants.Configurations.ZOMBOID_NATIVES)));
+        }
+    }
 
-	private void addLibrary(String configuration, Library library) {
-		addDependency(configuration, library.mavenNotation());
-	}
+    private void provideServerLibraries() {
+        final List<Library> libraries = Collections.emptyList();
+        final List<Library> processLibraries = processLibraries(libraries);
+        processLibraries.forEach(this::applyServerLibrary);
+    }
 
-	private void addDependency(String configuration, Object dependency) {
-		final Dependency created = project.getDependencies().add(configuration, dependency);
+    /**
+     * When Gradle is writing dependency verification metadata, we need to resolve all libraries across all platforms,
+     * to ensure that they are captured.
+     */
+    private void resolveAllLibraries() {
+        project.getLogger().info("Resolving all libraries for dependency verification metadata generation");
 
-		// The launcher doesn't download transitive deps, so neither will we.
-		// This will also prevent a LaunchWrapper library dependency from pulling in outdated ASM jars.
-		if (created instanceof ModuleDependency md) {
-			md.setTransitive(false);
-		}
-	}
+        final List<Library> libraries = ZomboidLibraryHelper.getAllLibraries(zomboidProvider.getVersionInfo());
+        Configuration detachedConfiguration = project.getConfigurations()
+            .detachedConfiguration(libraries.stream()
+                .map(library -> project.getDependencies().create(library.mavenNotation()))
+                .toArray(Dependency[]::new));
+        detachedConfiguration.getFiles();
+    }
 }

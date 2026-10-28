@@ -44,24 +44,24 @@ package dev.aoqia.leaf.loom.util;
 import java.util.List;
 
 public class Arguments {
-	public static String join(List<String> args) {
-		final var sb = new StringBuilder();
-		boolean first = true;
+    public static String join(List<String> args) {
+        final var sb = new StringBuilder();
+        boolean first = true;
 
-		for (String arg : args) {
-			if (!first) {
-				sb.append(" ");
-			}
+        for (String arg : args) {
+            if (!first) {
+                sb.append(" ");
+            }
 
-			first = false;
+            first = false;
 
-			if (arg.contains(" ")) {
-				sb.append("\"").append(arg).append("\"");
-			} else {
-				sb.append(arg);
-			}
-		}
+            if (arg.contains(" ")) {
+                sb.append("\"").append(arg).append("\"");
+            } else {
+                sb.append(arg);
+            }
+        }
 
-		return sb.toString();
-	}
+        return sb.toString();
+    }
 }

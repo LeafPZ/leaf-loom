@@ -52,10 +52,10 @@ import dev.aoqia.leaf.loom.api.mappings.intermediate.IntermediateMappingsProvide
 
 @ApiStatus.Internal
 public abstract class IntermediateMappingsProviderInternal extends IntermediateMappingsProvider {
-	public abstract void provide(Path tinyMappings, @Nullable Project project) throws IOException;
+    @Override
+    public void provide(Path tinyMappings) throws IOException {
+        this.provide(tinyMappings, null);
+    }
 
-	@Override
-	public void provide(Path tinyMappings) throws IOException {
-		this.provide(tinyMappings, null);
-	}
+    public abstract void provide(Path tinyMappings, @Nullable Project project) throws IOException;
 }

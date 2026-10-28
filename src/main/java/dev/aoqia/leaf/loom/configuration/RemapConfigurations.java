@@ -63,207 +63,224 @@ import dev.aoqia.leaf.loom.util.Strings;
 import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 
 public final class RemapConfigurations {
-	private static final List<ConfigurationOption> OPTIONS = List.of(
-			new ConfigurationOption(mainOnly(SourceSet::getApiConfigurationName), true, true, RemapConfigurationSettings.PublishingMode.COMPILE_AND_RUNTIME),
-			new ConfigurationOption(SourceSet::getImplementationConfigurationName, true, true, RemapConfigurationSettings.PublishingMode.RUNTIME_ONLY),
-			new ConfigurationOption(SourceSet::getCompileOnlyConfigurationName, true, false, RemapConfigurationSettings.PublishingMode.NONE),
-			new ConfigurationOption(mainOnly(SourceSet::getCompileOnlyApiConfigurationName), true, false, RemapConfigurationSettings.PublishingMode.COMPILE_ONLY),
-			new ConfigurationOption(SourceSet::getRuntimeOnlyConfigurationName, false, true, RemapConfigurationSettings.PublishingMode.RUNTIME_ONLY),
-			new ConfigurationOption(mainOnly(Constants.Configurations.LOCAL_RUNTIME), false, true, RemapConfigurationSettings.PublishingMode.NONE)
-	);
+    private static final List<ConfigurationOption> OPTIONS = List.of(
+        new ConfigurationOption(mainOnly(SourceSet::getApiConfigurationName), true, true,
+            RemapConfigurationSettings.PublishingMode.COMPILE_AND_RUNTIME),
+        new ConfigurationOption(SourceSet::getImplementationConfigurationName, true, true,
+            RemapConfigurationSettings.PublishingMode.RUNTIME_ONLY),
+        new ConfigurationOption(SourceSet::getCompileOnlyConfigurationName, true, false,
+            RemapConfigurationSettings.PublishingMode.NONE),
+        new ConfigurationOption(mainOnly(SourceSet::getCompileOnlyApiConfigurationName), true, false,
+            RemapConfigurationSettings.PublishingMode.COMPILE_ONLY),
+        new ConfigurationOption(SourceSet::getRuntimeOnlyConfigurationName, false, true,
+            RemapConfigurationSettings.PublishingMode.RUNTIME_ONLY),
+        new ConfigurationOption(mainOnly(Constants.Configurations.LOCAL_RUNTIME), false, true,
+            RemapConfigurationSettings.PublishingMode.NONE));
 
-	private RemapConfigurations() {
-	}
+    private RemapConfigurations() {
+    }
 
-	public static void setupForSourceSet(Project project, SourceSet sourceSet) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
+    public static void applyToProject(Project project, RemapConfigurationSettings settings) {
+        final NamedDomainObjectProvider<Configuration> configuration = project.getConfigurations()
+            .register(settings.getName(), config -> config.setTransitive(true));
 
-		for (ConfigurationOption option : getValidOptions(sourceSet)) {
-			extension.addRemapConfiguration(option.name(sourceSet), configure(
-					sourceSet,
-					option.targetName(sourceSet),
-					option.compileClasspath(),
-					option.runtimeClasspath(),
-					option.publishingMode()
-			));
-		}
-	}
+        if (settings.getOnCompileClasspath().get()) {
+            extendsFrom(Constants.Configurations.MOD_COMPILE_CLASSPATH, configuration, project);
+        }
 
-	public static void configureClientConfigurations(Project project, SourceSet clientSourceSet) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        for (String outgoingConfigurationName : settings.getPublishingMode().get().outgoingConfigurations()) {
+            extendsFrom(outgoingConfigurationName, configuration, project);
+        }
+    }
 
-		if (extension.disableObfuscation()) {
-			return;
-		}
+    public static void configureClientConfigurations(Project project, SourceSet clientSourceSet) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-		extension.createRemapConfigurations(clientSourceSet);
+        if (extension.disableObfuscation()) {
+            return;
+        }
 
-		final NamedDomainObjectList<RemapConfigurationSettings> configurations = extension.getRemapConfigurations();
-		SourceSet mainSourceSet = SourceSetHelper.getMainSourceSet(project);
+        extension.createRemapConfigurations(clientSourceSet);
 
-		// Apply the client target names to the main configurations
-		for (ConfigurationOption option : getValidOptions(mainSourceSet)) {
-			configurations.named(option.name(mainSourceSet), settings -> {
-				String name = option.targetName(clientSourceSet);
+        final NamedDomainObjectList<RemapConfigurationSettings> configurations = extension.getRemapConfigurations();
+        SourceSet mainSourceSet = SourceSetHelper.getMainSourceSet(project);
 
-				if (name == null) {
-					return;
-				}
+        // Apply the client target names to the main configurations
+        for (ConfigurationOption option : getValidOptions(mainSourceSet)) {
+            configurations.named(option.name(mainSourceSet), settings -> {
+                String name = option.targetName(clientSourceSet);
 
-				settings.getClientSourceConfigurationName().set(name);
-			});
-		}
-	}
+                if (name == null) {
+                    return;
+                }
 
-	/**
-	 * Gets or creates the collector configuration for a {@link SourceSet}.
-	 * The collector configuration receives all compile-time or runtime remapped mod dependency files.
-	 *
-	 * @param project  the project
-	 * @param settings the remap configuration settings
-	 * @param runtime  if {@code true}, returns the runtime configuration;
-	 *                 if {@code false}, returns the compile-time one
-	 * @return the collector configuration provider
-	 */
-	public static NamedDomainObjectProvider<? extends Configuration> getOrRegisterCollectorConfiguration(Project project, RemapConfigurationSettings settings, boolean runtime) {
-		return getOrRegisterCollectorConfiguration(project, settings.getSourceSet().get(), runtime);
-	}
+                settings.getClientSourceConfigurationName().set(name);
+            });
+        }
+    }
 
-	/**
-	 * Gets or creates the collector configuration for a {@link RemapConfigurationSettings} instance.
-	 * The collector configuration receives all compile-time or runtime remapped mod dependency files.
-	 *
-	 * @param project   the project
-	 * @param sourceSet the source set to apply the collector config to, should generally match {@link RemapConfigurationSettings#getSourceSet()}
-	 * @param runtime   if {@code true}, returns the runtime configuration;
-	 *                  if {@code false}, returns the compile-time one
-	 * @return the collector configuration provider
-	 */
-	// Note: this method is generally called on demand, so these configurations
-	// won't exist at buildscript evaluation time. There's no need for them anyway
-	// since they're internals.
-	public static NamedDomainObjectProvider<? extends Configuration> getOrRegisterCollectorConfiguration(Project project, SourceSet sourceSet, boolean runtime) {
-		final String configurationName = "mod"
-				+ (runtime ? "Runtime" : "Compile")
-				+ "Classpath"
-				+ Strings.capitalize(sourceSet.getName())
-				+ "Mapped";
-		final ConfigurationContainer configurations = project.getConfigurations();
+    /**
+     * Gets or creates the collector configuration for a {@link SourceSet}.
+     * The collector configuration receives all compile-time or runtime remapped mod dependency files.
+     *
+     * @param project the project
+     * @param settings the remap configuration settings
+     * @param runtime if {@code true}, returns the runtime configuration;
+     * if {@code false}, returns the compile-time one
+     * @return the collector configuration provider
+     */
+    public static NamedDomainObjectProvider<? extends Configuration>
+        getOrRegisterCollectorConfiguration(Project project, RemapConfigurationSettings settings, boolean runtime)
+    {
+        return getOrRegisterCollectorConfiguration(project, settings.getSourceSet().get(), runtime);
+    }
 
-		if (configurations.findByName(configurationName) == null) {
-			NamedDomainObjectProvider<? extends Configuration> configuration = configurations.register(configurationName, config -> {
-				// Don't get transitive deps of already remapped mods
-				config.setTransitive(false);
+    /**
+     * Gets or creates the collector configuration for a {@link RemapConfigurationSettings} instance.
+     * The collector configuration receives all compile-time or runtime remapped mod dependency files.
+     *
+     * @param project the project
+     * @param sourceSet the source set to apply the collector config to, should generally match
+     * {@link RemapConfigurationSettings#getSourceSet()}
+     * @param runtime if {@code true}, returns the runtime configuration;
+     * if {@code false}, returns the compile-time one
+     * @return the collector configuration provider
+     */
+    // Note: this method is generally called on demand, so these configurations
+    // won't exist at buildscript evaluation time. There's no need for them anyway
+    // since they're internals.
+    public static NamedDomainObjectProvider<? extends Configuration>
+        getOrRegisterCollectorConfiguration(Project project, SourceSet sourceSet, boolean runtime)
+    {
+        final String configurationName = "mod" + (runtime ? "Runtime" : "Compile") + "Classpath"
+            + Strings.capitalize(sourceSet.getName()) + "Mapped";
+        final ConfigurationContainer configurations = project.getConfigurations();
 
-				// Set the usage attribute to fetch the correct artifacts.
-				// Note: Even though most deps are resolved via copies of mod* configurations,
-				// non-remapped mods that get added straight to these collectors will need the attribute.
-				final Usage usage = project.getObjects().named(Usage.class, runtime ? Usage.JAVA_RUNTIME : Usage.JAVA_API);
-				config.attributes(attributes -> attributes.attribute(Usage.USAGE_ATTRIBUTE, usage));
-			});
+        if (configurations.findByName(configurationName) == null) {
+            NamedDomainObjectProvider<
+                ? extends Configuration> configuration = configurations.register(configurationName, config -> {
+                    // Don't get transitive deps of already remapped mods
+                    config.setTransitive(false);
 
-			// The main classpath also applies to the test source set like with normal dependencies.
-			final boolean isMainSourceSet = sourceSet.getName().equals("main");
+                    // Set the usage attribute to fetch the correct artifacts.
+                    // Note: Even though most deps are resolved via copies of mod* configurations,
+                    // non-remapped mods that get added straight to these collectors will need the attribute.
+                    final Usage usage = project.getObjects()
+                        .named(Usage.class, runtime ? Usage.JAVA_RUNTIME : Usage.JAVA_API);
+                    config.attributes(attributes -> attributes.attribute(Usage.USAGE_ATTRIBUTE, usage));
+                });
 
-			if (runtime) {
-				extendsFrom(sourceSet.getRuntimeClasspathConfigurationName(), configuration, project);
+            // The main classpath also applies to the test source set like with normal dependencies.
+            final boolean isMainSourceSet = sourceSet.getName().equals("main");
 
-				if (isMainSourceSet) {
-					extendsFrom(JavaPlugin.TEST_RUNTIME_CLASSPATH_CONFIGURATION_NAME, configuration, project);
-				}
-			} else {
-				extendsFrom(sourceSet.getCompileClasspathConfigurationName(), configuration, project);
-				extendsFrom(Constants.Configurations.MOD_COMPILE_CLASSPATH_MAPPED, configuration, project);
+            if (runtime) {
+                extendsFrom(sourceSet.getRuntimeClasspathConfigurationName(), configuration, project);
 
-				if (isMainSourceSet) {
-					extendsFrom(JavaPlugin.TEST_COMPILE_CLASSPATH_CONFIGURATION_NAME, configuration, project);
-				}
-			}
+                if (isMainSourceSet) {
+                    extendsFrom(JavaPlugin.TEST_RUNTIME_CLASSPATH_CONFIGURATION_NAME, configuration, project);
+                }
+            } else {
+                extendsFrom(sourceSet.getCompileClasspathConfigurationName(), configuration, project);
+                extendsFrom(Constants.Configurations.MOD_COMPILE_CLASSPATH_MAPPED, configuration, project);
 
-			return configuration;
-		} else {
-			return configurations.named(configurationName);
-		}
-	}
+                if (isMainSourceSet) {
+                    extendsFrom(JavaPlugin.TEST_COMPILE_CLASSPATH_CONFIGURATION_NAME, configuration, project);
+                }
+            }
 
-	public static void applyToProject(Project project, RemapConfigurationSettings settings) {
-		final NamedDomainObjectProvider<Configuration> configuration = project.getConfigurations().register(settings.getName(), config -> config.setTransitive(true));
+            return configuration;
+        } else {
+            return configurations.named(configurationName);
+        }
+    }
 
-		if (settings.getOnCompileClasspath().get()) {
-			extendsFrom(Constants.Configurations.MOD_COMPILE_CLASSPATH, configuration, project);
-		}
+    public static void setupForSourceSet(Project project, SourceSet sourceSet) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-		for (String outgoingConfigurationName : settings.getPublishingMode().get().outgoingConfigurations()) {
-			extendsFrom(outgoingConfigurationName, configuration, project);
-		}
-	}
+        for (ConfigurationOption option : getValidOptions(sourceSet)) {
+            extension.addRemapConfiguration(option.name(sourceSet), configure(sourceSet, option.targetName(sourceSet),
+                option.compileClasspath(), option.runtimeClasspath(), option.publishingMode()));
+        }
+    }
 
-	private static Action<RemapConfigurationSettings> configure(SourceSet sourceSet, String targetConfiguration, boolean compileClasspath, boolean runtimeClasspath, RemapConfigurationSettings.PublishingMode publishingMode) {
-		return configuration -> {
-			configuration.getSourceSet().convention(sourceSet);
-			configuration.getTargetConfigurationName().convention(targetConfiguration);
-			configuration.getOnCompileClasspath().convention(compileClasspath);
-			configuration.getOnRuntimeClasspath().convention(runtimeClasspath);
+    private static String capitalise(String str) {
+        return str.substring(0, 1).toUpperCase(Locale.ROOT) + str.substring(1);
+    }
 
-			// Publish only for the main source set.
-			if (SourceSet.MAIN_SOURCE_SET_NAME.equals(sourceSet.getName())) {
-				configuration.getPublishingMode().convention(publishingMode);
-			}
-		};
-	}
+    private static Action<RemapConfigurationSettings> configure(SourceSet sourceSet, String targetConfiguration,
+        boolean compileClasspath, boolean runtimeClasspath, RemapConfigurationSettings.PublishingMode publishingMode)
+    {
+        return configuration -> {
+            configuration.getSourceSet().convention(sourceSet);
+            configuration.getTargetConfigurationName().convention(targetConfiguration);
+            configuration.getOnCompileClasspath().convention(compileClasspath);
+            configuration.getOnRuntimeClasspath().convention(runtimeClasspath);
 
-	private static void extendsFrom(String name, NamedDomainObjectProvider<? extends Configuration> configuration, Project project) {
-		project.getConfigurations().named(name).configure(namedConfiguration -> {
-			namedConfiguration.extendsFrom(configuration);
-		});
-	}
+            // Publish only for the main source set.
+            if (SourceSet.MAIN_SOURCE_SET_NAME.equals(sourceSet.getName())) {
+                configuration.getPublishingMode().convention(publishingMode);
+            }
+        };
+    }
 
-	private static Function<SourceSet, String> mainOnly(Function<SourceSet, String> function) {
-		return sourceSet -> sourceSet.getName().equals(SourceSet.MAIN_SOURCE_SET_NAME) ? function.apply(sourceSet) : null;
-	}
+    private static void extendsFrom(String name, NamedDomainObjectProvider<? extends Configuration> configuration,
+        Project project)
+    {
+        project.getConfigurations().named(name).configure(namedConfiguration -> {
+            namedConfiguration.extendsFrom(configuration);
+        });
+    }
 
-	private static Function<SourceSet, String> mainOnly(String name) {
-		return mainOnly(sourceSet -> name);
-	}
+    private static List<ConfigurationOption> getValidOptions(SourceSet sourceSet) {
+        return OPTIONS.stream().filter(option -> option.validFor(sourceSet)).toList();
+    }
 
-	private static List<ConfigurationOption> getValidOptions(SourceSet sourceSet) {
-		return OPTIONS.stream().filter(option -> option.validFor(sourceSet)).toList();
-	}
+    private static Function<SourceSet, String> mainOnly(Function<SourceSet, String> function) {
+        return sourceSet -> sourceSet.getName().equals(SourceSet.MAIN_SOURCE_SET_NAME) ? function.apply(sourceSet)
+            : null;
+    }
 
-	private static String capitalise(String str) {
-		return str.substring(0, 1).toUpperCase(Locale.ROOT) + str.substring(1);
-	}
+    private static Function<SourceSet, String> mainOnly(String name) {
+        return mainOnly(sourceSet -> name);
+    }
 
-	@VisibleForTesting
-	public record ConfigurationOption(Function<SourceSet, String> targetNameFunc, boolean compileClasspath, boolean runtimeClasspath, RemapConfigurationSettings.PublishingMode publishingMode) {
-		String targetName(SourceSet sourceSet) {
-			return targetNameFunc.apply(sourceSet);
-		}
+    @VisibleForTesting
+    public record ConfigurationOption(
+        Function<SourceSet, String> targetNameFunc,
+        boolean compileClasspath,
+        boolean runtimeClasspath,
+        RemapConfigurationSettings.PublishingMode publishingMode
+    )
+    {
+        String targetName(SourceSet sourceSet) {
+            return targetNameFunc.apply(sourceSet);
+        }
 
-		boolean validFor(SourceSet sourceSet) {
-			return targetName(sourceSet) != null;
-		}
+        boolean validFor(SourceSet sourceSet) {
+            return targetName(sourceSet) != null;
+        }
 
-		public String name(SourceSet sourceSet) {
-			String targetName = targetName(sourceSet);
+        public String name(SourceSet sourceSet) {
+            String targetName = targetName(sourceSet);
 
-			if (targetName == null) {
-				throw new UnsupportedOperationException("Configuration option is not available for sourceset (%s)".formatted(sourceSet.getName()));
-			}
+            if (targetName == null) {
+                throw new UnsupportedOperationException(
+                    "Configuration option is not available for sourceset (%s)".formatted(sourceSet.getName()));
+            }
 
-			if (targetName.startsWith(sourceSet.getName())) {
-				targetName = targetName.substring(sourceSet.getName().length());
-			}
+            if (targetName.startsWith(sourceSet.getName())) {
+                targetName = targetName.substring(sourceSet.getName().length());
+            }
 
-			final StringBuilder builder = new StringBuilder();
-			builder.append("mod");
+            final StringBuilder builder = new StringBuilder();
+            builder.append("mod");
 
-			if (!SourceSet.MAIN_SOURCE_SET_NAME.equals(sourceSet.getName())) {
-				builder.append(capitalise(sourceSet.getName()));
-			}
+            if (!SourceSet.MAIN_SOURCE_SET_NAME.equals(sourceSet.getName())) {
+                builder.append(capitalise(sourceSet.getName()));
+            }
 
-			builder.append(capitalise(targetName));
-			return builder.toString();
-		}
-	}
+            builder.append(capitalise(targetName));
+            return builder.toString();
+        }
+    }
 }

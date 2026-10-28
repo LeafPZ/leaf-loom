@@ -52,47 +52,50 @@ import dev.aoqia.leaf.loom.util.fmj.LeafModJsonFactory;
  * Represents the settings for data generation.
  */
 public interface DataGenerationSettings {
-	/**
-	 * Contains the output directory where generated data files will be stored.
-	 */
-	RegularFileProperty getOutputDirectory();
+    /**
+     * Contains a boolean property indicating whether the generated resources will be automatically added to the main
+     * sourceset.
+     */
+    Property<Boolean> getAddToResources();
 
-	/**
-	 * Contains a boolean indicating whether a run configuration should be created for the data generation process.
-	 */
-	Property<Boolean> getCreateRunConfiguration();
+    /**
+     * Contains a boolean property indicating whether data generation will be compiled and ran with the client.
+     */
+    Property<Boolean> getClient();
 
-	/**
-	 * Contains a boolean property indicating whether a new source set should be created for the data generation process.
-	 */
-	Property<Boolean> getCreateSourceSet();
+    /**
+     * Contains a boolean indicating whether a run configuration should be created for the data generation process.
+     */
+    Property<Boolean> getCreateRunConfiguration();
 
-	/**
-	 * Contains a string property representing the mod ID associated with the data generation process.
-	 *
-	 * <p>This must be set when {@link #getCreateRunConfiguration()} is set.
-	 */
-	Property<String> getModId();
+    /**
+     * Contains a boolean property indicating whether a new source set should be created for the data generation
+     * process.
+     */
+    Property<Boolean> getCreateSourceSet();
 
-	/**
-	 * Contains a boolean property indicating whether strict validation is enabled.
-	 */
-	Property<Boolean> getStrictValidation();
+    /**
+     * Contains a string property representing the mod ID associated with the data generation process.
+     *
+     * <p>
+     * This must be set when {@link #getCreateRunConfiguration()} is set.
+     */
+    Property<String> getModId();
 
-	/**
-	 * Contains a boolean property indicating whether the generated resources will be automatically added to the main sourceset.
-	 */
-	Property<Boolean> getAddToResources();
+    /**
+     * Contains the output directory where generated data files will be stored.
+     */
+    RegularFileProperty getOutputDirectory();
 
-	/**
-	 * Contains a boolean property indicating whether data generation will be compiled and ran with the client.
-	 */
-	Property<Boolean> getClient();
+    /**
+     * Contains a boolean property indicating whether strict validation is enabled.
+     */
+    Property<Boolean> getStrictValidation();
 
-	/**
-	 * Sets {@link #getModId()} property based on the {@code id} field defined in the provided file.
-	 */
-	default void modId(File fabricModJsonFile) {
-		getModId().set(LeafModJsonFactory.createFromFile(fabricModJsonFile).getId());
-	}
+    /**
+     * Sets {@link #getModId()} property based on the {@code id} field defined in the provided file.
+     */
+    default void modId(File fabricModJsonFile) {
+        getModId().set(LeafModJsonFactory.createFromFile(fabricModJsonFile).getId());
+    }
 }

@@ -49,15 +49,11 @@ import java.util.Set;
 import dev.aoqia.leaf.loom.api.ModSettings;
 
 public record ClasspathGroup(List<String> paths, List<ExternalClasspathGroup> externalGroups) implements Serializable {
-	public static List<ClasspathGroup> fromModSettings(Set<ModSettings> modSettings) {
-		return modSettings.stream().map(s -> new ClasspathGroup(getPaths(s), s.getExternalGroups().get())).toList();
-	}
+    public static List<ClasspathGroup> fromModSettings(Set<ModSettings> modSettings) {
+        return modSettings.stream().map(s -> new ClasspathGroup(getPaths(s), s.getExternalGroups().get())).toList();
+    }
 
-	private static List<String> getPaths(ModSettings modSettings) {
-		return modSettings.getModFiles()
-				.getFiles()
-				.stream()
-				.map(File::getAbsolutePath)
-				.toList();
-	}
+    private static List<String> getPaths(ModSettings modSettings) {
+        return modSettings.getModFiles().getFiles().stream().map(File::getAbsolutePath).toList();
+    }
 }

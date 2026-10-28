@@ -59,150 +59,151 @@ import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 
-@SuppressWarnings({"rawtypes", "unchecked"})
+@SuppressWarnings({ "rawtypes", "unchecked" })
 public class GradleTypeAdapter implements TypeAdapterFactory {
-	public static final Gson GSON = new Gson().newBuilder()
-			.registerTypeAdapterFactory(new GradleTypeAdapter())
-			.create();
+    public static final Gson GSON = new Gson().newBuilder()
+        .registerTypeAdapterFactory(new GradleTypeAdapter())
+        .create();
 
-	@Override
-	public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
-		final Class<? super T> rawClass = type.getRawType();
+    @Override
+    public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
+        final Class<? super T> rawClass = type.getRawType();
 
-		if (FileCollection.class.isAssignableFrom(rawClass)) {
-			return new FileCollectionTypeAdapter();
-		} else if (RegularFileProperty.class.isAssignableFrom(rawClass)) {
-			return new RegularFilePropertyTypeAdapter();
-		} else if (DirectoryProperty.class.isAssignableFrom(rawClass)) {
-			return new DirectoryPropertyTypeAdapter();
-		} else if (ListProperty.class.isAssignableFrom(rawClass)) {
-			return new ListPropertyTypeAdapter(gson);
-		} else if (MapProperty.class.isAssignableFrom(rawClass)) {
-			return new MapPropertyTypeAdapter(gson);
-		} else if (Property.class.isAssignableFrom(rawClass)) {
-			return new PropertyTypeAdapter(gson);
-		}
+        if (FileCollection.class.isAssignableFrom(rawClass)) {
+            return new FileCollectionTypeAdapter();
+        } else if (RegularFileProperty.class.isAssignableFrom(rawClass)) {
+            return new RegularFilePropertyTypeAdapter();
+        } else if (DirectoryProperty.class.isAssignableFrom(rawClass)) {
+            return new DirectoryPropertyTypeAdapter();
+        } else if (ListProperty.class.isAssignableFrom(rawClass)) {
+            return new ListPropertyTypeAdapter(gson);
+        } else if (MapProperty.class.isAssignableFrom(rawClass)) {
+            return new MapPropertyTypeAdapter(gson);
+        } else if (Property.class.isAssignableFrom(rawClass)) {
+            return new PropertyTypeAdapter(gson);
+        }
 
-		return null;
-	}
+        return null;
+    }
 
-	private static final class PropertyTypeAdapter<T extends Property<?>> extends WriteOnlyTypeAdapter<T> {
-		private final Gson gson;
+    private static final class DirectoryPropertyTypeAdapter<T extends DirectoryProperty>
+        extends WriteOnlyTypeAdapter<T>
+    {
+        @Override
+        public void write(JsonWriter out, T property) throws IOException {
+            if (!property.isPresent()) {
+                out.nullValue();
+                return;
+            }
 
-		private PropertyTypeAdapter(Gson gson) {
-			this.gson = gson;
-		}
+            final File file = property.get().getAsFile();
+            out.value(file.getAbsolutePath());
+        }
+    }
 
-		@Override
-		public void write(JsonWriter out, T property) throws IOException {
-			if (!property.isPresent()) {
-				out.nullValue();
-				return;
-			}
+    private static final class FileCollectionTypeAdapter<T extends FileCollection> extends WriteOnlyTypeAdapter<T> {
+        @Override
+        public void write(JsonWriter out, T fileCollection) throws IOException {
+            out.beginArray();
 
-			final Object o = property.get();
-			final TypeAdapter adapter = gson.getAdapter(o.getClass());
-			adapter.write(out, o);
-		}
-	}
+            final List<String> files = fileCollection.getFiles().stream().map(File::getAbsolutePath).sorted().toList();
 
-	private static final class FileCollectionTypeAdapter<T extends FileCollection> extends WriteOnlyTypeAdapter<T> {
-		@Override
-		public void write(JsonWriter out, T fileCollection) throws IOException {
-			out.beginArray();
+            for (String file : files) {
+                out.value(file);
+            }
 
-			final List<String> files = fileCollection.getFiles().stream()
-					.map(File::getAbsolutePath)
-					.sorted()
-					.toList();
+            out.endArray();
+        }
+    }
 
-			for (String file : files) {
-				out.value(file);
-			}
+    private static final class ListPropertyTypeAdapter<T extends ListProperty<?>> extends WriteOnlyTypeAdapter<T> {
+        private final Gson gson;
 
-			out.endArray();
-		}
-	}
+        private ListPropertyTypeAdapter(Gson gson) {
+            this.gson = gson;
+        }
 
-	private static final class RegularFilePropertyTypeAdapter<T extends RegularFileProperty> extends WriteOnlyTypeAdapter<T> {
-		@Override
-		public void write(JsonWriter out, T property) throws IOException {
-			if (!property.isPresent()) {
-				out.nullValue();
-				return;
-			}
+        @Override
+        public void write(JsonWriter out, T property) throws IOException {
+            List<?> objects = property.get();
+            out.beginArray();
 
-			final File file = property.get().getAsFile();
-			out.value(file.getAbsolutePath());
-		}
-	}
+            for (Object o : objects) {
+                final TypeAdapter adapter = gson.getAdapter(o.getClass());
+                adapter.write(out, o);
+            }
 
-	private static final class DirectoryPropertyTypeAdapter<T extends DirectoryProperty> extends WriteOnlyTypeAdapter<T> {
-		@Override
-		public void write(JsonWriter out, T property) throws IOException {
-			if (!property.isPresent()) {
-				out.nullValue();
-				return;
-			}
+            out.endArray();
+        }
+    }
 
-			final File file = property.get().getAsFile();
-			out.value(file.getAbsolutePath());
-		}
-	}
+    private static final class MapPropertyTypeAdapter<T extends MapProperty<?, ?>> extends WriteOnlyTypeAdapter<T> {
+        private final Gson gson;
 
-	private static final class ListPropertyTypeAdapter<T extends ListProperty<?>> extends WriteOnlyTypeAdapter<T> {
-		private final Gson gson;
+        private MapPropertyTypeAdapter(Gson gson) {
+            this.gson = gson;
+        }
 
-		private ListPropertyTypeAdapter(Gson gson) {
-			this.gson = gson;
-		}
+        @Override
+        public void write(JsonWriter out, T property) throws IOException {
+            out.beginObject();
 
-		@Override
-		public void write(JsonWriter out, T property) throws IOException {
-			List<?> objects = property.get();
-			out.beginArray();
+            for (Map.Entry<?, ?> entry : property.get().entrySet()) {
+                Object key = entry.getKey();
+                Object value = entry.getValue();
 
-			for (Object o : objects) {
-				final TypeAdapter adapter = gson.getAdapter(o.getClass());
-				adapter.write(out, o);
-			}
+                if (!(key instanceof String)) {
+                    throw new UnsupportedOperationException("Map keys must be strings");
+                }
 
-			out.endArray();
-		}
-	}
+                out.name(entry.getKey().toString());
+                final TypeAdapter adapter = gson.getAdapter(value.getClass());
+                adapter.write(out, value);
+            }
 
-	private static final class MapPropertyTypeAdapter<T extends MapProperty<?, ?>> extends WriteOnlyTypeAdapter<T> {
-		private final Gson gson;
+            out.endObject();
+        }
+    }
 
-		private MapPropertyTypeAdapter(Gson gson) {
-			this.gson = gson;
-		}
+    private static final class PropertyTypeAdapter<T extends Property<?>> extends WriteOnlyTypeAdapter<T> {
+        private final Gson gson;
 
-		@Override
-		public void write(JsonWriter out, T property) throws IOException {
-			out.beginObject();
+        private PropertyTypeAdapter(Gson gson) {
+            this.gson = gson;
+        }
 
-			for (Map.Entry<?, ?> entry : property.get().entrySet()) {
-				Object key = entry.getKey();
-				Object value = entry.getValue();
+        @Override
+        public void write(JsonWriter out, T property) throws IOException {
+            if (!property.isPresent()) {
+                out.nullValue();
+                return;
+            }
 
-				if (!(key instanceof String)) {
-					throw new UnsupportedOperationException("Map keys must be strings");
-				}
+            final Object o = property.get();
+            final TypeAdapter adapter = gson.getAdapter(o.getClass());
+            adapter.write(out, o);
+        }
+    }
 
-				out.name(entry.getKey().toString());
-				final TypeAdapter adapter = gson.getAdapter(value.getClass());
-				adapter.write(out, value);
-			}
+    private static final class RegularFilePropertyTypeAdapter<T extends RegularFileProperty>
+        extends WriteOnlyTypeAdapter<T>
+    {
+        @Override
+        public void write(JsonWriter out, T property) throws IOException {
+            if (!property.isPresent()) {
+                out.nullValue();
+                return;
+            }
 
-			out.endObject();
-		}
-	}
+            final File file = property.get().getAsFile();
+            out.value(file.getAbsolutePath());
+        }
+    }
 
-	private abstract static class WriteOnlyTypeAdapter<T> extends TypeAdapter<T> {
-		@Override
-		public final T read(JsonReader in) {
-			throw new UnsupportedOperationException("This type adapter is write-only");
-		}
-	}
+    private abstract static class WriteOnlyTypeAdapter<T> extends TypeAdapter<T> {
+        @Override
+        public final T read(JsonReader in) {
+            throw new UnsupportedOperationException("This type adapter is write-only");
+        }
+    }
 }

@@ -63,116 +63,118 @@ import org.slf4j.LoggerFactory;
 import dev.aoqia.leaf.loom.util.ExceptionUtil;
 
 public abstract class TracyCapture {
-	private static final Logger LOGGER = LoggerFactory.getLogger(TracyCapture.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TracyCapture.class);
 
-	/**
-	 * The path to the tracy-capture executable.
-	 */
-	@InputFile
-	@PathSensitive(PathSensitivity.NONE)
-	@Optional
-	public abstract RegularFileProperty getTracyCapture();
+    @Inject
+    public TracyCapture() {
+        getMaxShutdownWaitSeconds().convention(10);
+    }
 
-	/**
-	 * The maximum number of seconds to wait for tracy-capture to stop on its own before killing it.
-	 *
-	 * <p>Defaults to 10 seconds.
-	 */
-	@Input
-	public abstract Property<Integer> getMaxShutdownWaitSeconds();
+    private static void captureLog(InputStream inputStream, Consumer<String> lineConsumer) {
+        new Thread(() -> {
+            try {
+                new BufferedReader(new InputStreamReader(inputStream)).lines().forEach(lineConsumer);
+            } catch (Exception e) {
+                // Don't really care, this will happen when the stream is closed
+            }
+        }).start();
+    }
 
-	/**
-	 * The path to the output file.
-	 */
-	@OutputFile
-	@Optional
-	public abstract RegularFileProperty getOutput();
+    /**
+     * The maximum number of seconds to wait for tracy-capture to stop on its own before killing it.
+     *
+     * <p>
+     * Defaults to 10 seconds.
+     */
+    @Input
+    public abstract Property<Integer> getMaxShutdownWaitSeconds();
 
-	@Inject
-	public TracyCapture() {
-		getMaxShutdownWaitSeconds().convention(10);
-	}
+    /**
+     * The path to the output file.
+     */
+    @OutputFile
+    @Optional
+    public abstract RegularFileProperty getOutput();
 
-	public void runWithTracy(IORunnable runnable) throws IOException {
-		TracyCaptureRunner tracyCaptureRunner = createRunner();
+    /**
+     * The path to the tracy-capture executable.
+     */
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    @Optional
+    public abstract RegularFileProperty getTracyCapture();
 
-		boolean success = false;
+    public void runWithTracy(IORunnable runnable) throws IOException {
+        TracyCaptureRunner tracyCaptureRunner = createRunner();
 
-		try {
-			runnable.run();
-			success = true;
-		} finally {
-			try {
-				tracyCaptureRunner.close();
-			} catch (Exception e) {
-				if (success) {
-					//noinspection ThrowFromFinallyBlock
-					throw ExceptionUtil.createDescriptiveWrapper(RuntimeException::new, "Failed to stop tracy capture", e);
-				}
-			}
-		}
-	}
+        boolean success = false;
 
-	private TracyCaptureRunner createRunner() throws IOException {
-		File tracyCapture = getTracyCapture().getAsFile().get();
-		File output = getOutput().getAsFile().get();
+        try {
+            runnable.run();
+            success = true;
+        } finally {
+            try {
+                tracyCaptureRunner.close();
+            } catch (Exception e) {
+                if (success) {
+                    // noinspection ThrowFromFinallyBlock
+                    throw ExceptionUtil.createDescriptiveWrapper(RuntimeException::new, "Failed to stop tracy capture",
+                        e);
+                }
+            }
+        }
+    }
 
-		ProcessBuilder builder = new ProcessBuilder()
-				.command(tracyCapture.getAbsolutePath(), "-a", "127.0.0.1", "-f", "-o", output.getAbsolutePath());
-		Process process = builder.start();
+    private TracyCaptureRunner createRunner() throws IOException {
+        File tracyCapture = getTracyCapture().getAsFile().get();
+        File output = getOutput().getAsFile().get();
 
-		captureLog(process.getInputStream(), LOGGER::info);
-		captureLog(process.getErrorStream(), LOGGER::error);
+        ProcessBuilder builder = new ProcessBuilder().command(tracyCapture.getAbsolutePath(), "-a", "127.0.0.1", "-f",
+            "-o", output.getAbsolutePath());
+        Process process = builder.start();
 
-		LOGGER.info("Tracy capture started");
+        captureLog(process.getInputStream(), LOGGER::info);
+        captureLog(process.getErrorStream(), LOGGER::error);
 
-		return new TracyCaptureRunner(process, getMaxShutdownWaitSeconds().get());
-	}
+        LOGGER.info("Tracy capture started");
 
-	private record TracyCaptureRunner(Process process, int shutdownWait) implements AutoCloseable {
-		@Override
-		public void close() throws Exception {
-			// Wait x seconds for tracy to stop on its own
-			// This allows time for tracy to save the profile to disk
-			for (int i = 0; i < shutdownWait; i++) {
-				if (!process.isAlive()) {
-					break;
-				}
+        return new TracyCaptureRunner(process, getMaxShutdownWaitSeconds().get());
+    }
 
-				try {
-					Thread.sleep(1000);
-				} catch (InterruptedException e) {
-					throw new RuntimeException(e);
-				}
-			}
+    @FunctionalInterface
+    public interface IORunnable {
+        void run() throws IOException;
+    }
 
-			// If it's still running, kill it
-			if (process.isAlive()) {
-				LOGGER.error("Tracy capture did not stop on its own, killing it");
-				process.destroy();
-				process.waitFor();
-			}
+    private record TracyCaptureRunner(Process process, int shutdownWait) implements AutoCloseable {
+        @Override
+        public void close() throws Exception {
+            // Wait x seconds for tracy to stop on its own
+            // This allows time for tracy to save the profile to disk
+            for (int i = 0; i < shutdownWait; i++) {
+                if (!process.isAlive()) {
+                    break;
+                }
 
-			int exitCode = process.exitValue();
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
 
-			if (exitCode != 0) {
-				throw new RuntimeException("Tracy capture failed with exit code " + exitCode);
-			}
-		}
-	}
+            // If it's still running, kill it
+            if (process.isAlive()) {
+                LOGGER.error("Tracy capture did not stop on its own, killing it");
+                process.destroy();
+                process.waitFor();
+            }
 
-	private static void captureLog(InputStream inputStream, Consumer<String> lineConsumer) {
-		new Thread(() -> {
-			try {
-				new BufferedReader(new InputStreamReader(inputStream)).lines().forEach(lineConsumer);
-			} catch (Exception e) {
-				// Don't really care, this will happen when the stream is closed
-			}
-		}).start();
-	}
+            int exitCode = process.exitValue();
 
-	@FunctionalInterface
-	public interface IORunnable {
-		void run() throws IOException;
-	}
+            if (exitCode != 0) {
+                throw new RuntimeException("Tracy capture failed with exit code " + exitCode);
+            }
+        }
+    }
 }

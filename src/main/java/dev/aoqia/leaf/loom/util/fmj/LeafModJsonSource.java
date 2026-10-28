@@ -58,36 +58,36 @@ import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
  * This abstraction allows easily reading a contained file from the mod.
  */
 public interface LeafModJsonSource {
-	byte[] read(String path) throws IOException;
+    byte[] read(String path) throws IOException;
 
-	record ZipSource(Path zipPath) implements LeafModJsonSource {
-		@Override
-		public byte[] read(String path) throws IOException {
-			return ZipUtils.unpack(zipPath, path);
-		}
-	}
+    record DirectorySource(Path directoryPath) implements LeafModJsonSource {
+        @Override
+        public byte[] read(String path) throws IOException {
+            return Files.readAllBytes(directoryPath.resolve(path));
+        }
+    }
 
-	record DirectorySource(Path directoryPath) implements LeafModJsonSource {
-		@Override
-		public byte[] read(String path) throws IOException {
-			return Files.readAllBytes(directoryPath.resolve(path));
-		}
-	}
+    record SourceSetSource(Project project, SourceSet... sourceSets) implements LeafModJsonSource {
+        @Override
+        public byte[] read(String path) throws IOException {
+            return Files.readAllBytes(findFile(path).toPath());
+        }
 
-	record SourceSetSource(Project project, SourceSet... sourceSets) implements LeafModJsonSource {
-		@Override
-		public byte[] read(String path) throws IOException {
-			return Files.readAllBytes(findFile(path).toPath());
-		}
+        private File findFile(String path) throws IOException {
+            final File file = SourceSetHelper.findFirstFileInResource(path, project, sourceSets);
 
-		private File findFile(String path) throws IOException {
-			final File file = SourceSetHelper.findFirstFileInResource(path, project, sourceSets);
+            if (file == null) {
+                throw new FileNotFoundException("Could not find: " + path);
+            }
 
-			if (file == null) {
-				throw new FileNotFoundException("Could not find: " + path);
-			}
+            return file;
+        }
+    }
 
-			return file;
-		}
-	}
+    record ZipSource(Path zipPath) implements LeafModJsonSource {
+        @Override
+        public byte[] read(String path) throws IOException {
+            return ZipUtils.unpack(zipPath, path);
+        }
+    }
 }

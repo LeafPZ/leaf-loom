@@ -67,214 +67,224 @@ import dev.aoqia.leaf.loom.task.service.LorenzMappingService;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 public class SourceRemapper {
-	private final Project project;
-	private final ServiceFactory serviceFactory;
-	private final boolean toNamed;
-	private final List<Consumer<ProgressLogger>> remapTasks = new ArrayList<>();
+    private Mercury mercury;
 
-	private Mercury mercury;
+    private final Project project;
 
-	public SourceRemapper(Project project, ServiceFactory serviceFactory, boolean toNamed) {
-		this.project = project;
-		this.serviceFactory = serviceFactory;
-		this.toNamed = toNamed;
-	}
+    private final List<Consumer<ProgressLogger>> remapTasks = new ArrayList<>();
 
-	public void scheduleRemapSources(File source, File destination, boolean reproducibleFileOrder, boolean preserveFileTimestamps, Runnable completionCallback) {
-		remapTasks.add((logger) -> {
-			try {
-				logger.progress("remapping sources - " + source.getName());
-				Files.deleteIfExists(destination.toPath());
-				remapSourcesInner(source, destination);
+    private final ServiceFactory serviceFactory;
 
-				if (reproducibleFileOrder || !preserveFileTimestamps) {
-					ZipReprocessorUtil.reprocessZip(destination.toPath(), reproducibleFileOrder, preserveFileTimestamps);
-				}
+    private final boolean toNamed;
 
-				// Set the remapped sources creation date to match the sources if we're likely succeeded in making it
-				destination.setLastModified(source.lastModified());
-				completionCallback.run();
-			} catch (Exception e) {
-				// Failed to remap, lets clean up to ensure we try again next time
-				destination.delete();
-				throw new RuntimeException("Failed to remap sources for " + source, e);
-			}
-		});
-	}
+    public SourceRemapper(Project project, ServiceFactory serviceFactory, boolean toNamed) {
+        this.project = project;
+        this.serviceFactory = serviceFactory;
+        this.toNamed = toNamed;
+    }
 
-	public void remapAll() {
-		if (remapTasks.isEmpty()) {
-			return;
-		}
+    public static void copyNonJavaFiles(Path from, Path to, Logger logger, Path source) throws IOException {
+        Files.walk(from).forEach(path -> {
+            Path targetPath = to.resolve(from.relativize(path).toString());
 
-		project.getLogger().lifecycle(":remapping sources");
+            if (!isJavaFile(path) && !Files.exists(targetPath)) {
+                try {
+                    Files.copy(path, targetPath);
+                } catch (IOException e) {
+                    logger.warn("Could not copy non-java sources '" + source + "' fully!", e);
+                }
+            }
+        });
+    }
 
-		ProgressLoggerFactory progressLoggerFactory = ((ProjectInternal) project).getServices().get(ProgressLoggerFactory.class);
-		ProgressLogger progressLogger = progressLoggerFactory.newOperation(SourceRemapper.class.getName());
-		progressLogger.start("Remapping dependency sources", "sources");
+    public static Mercury createMercuryWithClassPath(Project project, boolean toNamed) {
+        Mercury m = new Mercury();
+        m.setGracefulClasspathChecks(true);
 
-		remapTasks.forEach(consumer -> consumer.accept(progressLogger));
+        final List<Path> classPath = new ArrayList<>();
 
-		progressLogger.completed();
+        for (File file : project.getConfigurations()
+            .getByName(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES)
+            .getFiles())
+        {
+            classPath.add(file.toPath());
+        }
 
-		// TODO: FIXME - WORKAROUND https://github.com/FabricMC/fabric-loom/issues/45
-		System.gc();
-	}
+        if (!toNamed) {
+            for (File file : project.getConfigurations().getByName("compileClasspath").getFiles()) {
+                classPath.add(file.toPath());
+            }
+        } else {
+            final LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-	private void remapSourcesInner(File source, File destination) throws Exception {
-		project.getLogger().info(":remapping source jar");
-		Mercury mercury = getMercuryInstance();
+            for (RemapConfigurationSettings entry : extension.getRemapConfigurations()) {
+                for (File inputFile : entry.getSourceConfiguration().get().getFiles()) {
+                    classPath.add(inputFile.toPath());
+                }
+            }
+        }
 
-		if (source.equals(destination)) {
-			if (source.isDirectory()) {
-				throw new RuntimeException("Directories must differ!");
-			}
+        for (Path path : classPath) {
+            if (Files.exists(path)) {
+                m.getClassPath().add(path);
+            }
+        }
 
-			source = new File(destination.getAbsolutePath().substring(0, destination.getAbsolutePath().lastIndexOf('.')) + "-dev.jar");
+        return m;
+    }
 
-			try {
-				Files.move(destination.toPath(), source.toPath());
-			} catch (IOException e) {
-				throw new RuntimeException("Could not rename " + destination.getName() + "!", e);
-			}
-		}
+    private static boolean isJavaFile(Path path) {
+        String name = path.getFileName().toString();
+        // ".java" is not a valid java file
+        return name.endsWith(".java") && name.length() != 5;
+    }
 
-		Path srcPath = source.toPath();
-		boolean isSrcTmp = false;
+    public void remapAll() {
+        if (remapTasks.isEmpty()) {
+            return;
+        }
 
-		if (!source.isDirectory()) {
-			// create tmp directory
-			isSrcTmp = true;
-			srcPath = Files.createTempDirectory("fabric-loom-src");
-			ZipUtils.unpackAll(source.toPath(), srcPath);
-		}
+        project.getLogger().lifecycle(":remapping sources");
 
-		if (!destination.isDirectory() && destination.exists()) {
-			if (!destination.delete()) {
-				throw new RuntimeException("Could not delete " + destination.getName() + "!");
-			}
-		}
+        ProgressLoggerFactory progressLoggerFactory = ((ProjectInternal) project).getServices()
+            .get(ProgressLoggerFactory.class);
+        ProgressLogger progressLogger = progressLoggerFactory.newOperation(SourceRemapper.class.getName());
+        progressLogger.start("Remapping dependency sources", "sources");
 
-		FileSystemUtil.Delegate dstFs = destination.isDirectory() ? null : FileSystemUtil.getJarFileSystem(destination, true);
-		Path dstPath = dstFs != null ? dstFs.get().getPath("/") : destination.toPath();
+        remapTasks.forEach(consumer -> consumer.accept(progressLogger));
 
-		try {
-			mercury.rewrite(srcPath, dstPath);
-		} catch (Exception e) {
-			project.getLogger().warn("Could not remap " + source.getName() + " fully!", e);
-		}
+        progressLogger.completed();
 
-		copyNonJavaFiles(srcPath, dstPath, project.getLogger(), source.toPath());
+        // TODO: FIXME - WORKAROUND https://github.com/FabricMC/fabric-loom/issues/45
+        System.gc();
+    }
 
-		if (dstFs != null) {
-			dstFs.close();
-		}
+    public void scheduleRemapSources(File source, File destination, boolean reproducibleFileOrder,
+        boolean preserveFileTimestamps, Runnable completionCallback)
+    {
+        remapTasks.add((logger) -> {
+            try {
+                logger.progress("remapping sources - " + source.getName());
+                Files.deleteIfExists(destination.toPath());
+                remapSourcesInner(source, destination);
 
-		if (isSrcTmp) {
-			Files.walkFileTree(srcPath, new DeletingFileVisitor());
-		}
-	}
+                if (reproducibleFileOrder || !preserveFileTimestamps) {
+                    ZipReprocessorUtil.reprocessZip(destination.toPath(), reproducibleFileOrder,
+                        preserveFileTimestamps);
+                }
 
-	private Mercury getMercuryInstance() {
-		if (this.mercury != null) {
-			return this.mercury;
-		}
+                // Set the remapped sources creation date to match the sources if we're likely succeeded in making it
+                destination.setLastModified(source.lastModified());
+                completionCallback.run();
+            } catch (Exception e) {
+                // Failed to remap, lets clean up to ensure we try again next time
+                destination.delete();
+                throw new RuntimeException("Failed to remap sources for " + source, e);
+            }
+        });
+    }
 
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
-		RemapMappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
-		MappingsNamespace prodNamespace = extension.getProductionNamespaceEnum().get();
+    private Mercury getMercuryInstance() {
+        if (this.mercury != null) {
+            return this.mercury;
+        }
 
-		LorenzMappingService lorenzMappingService = serviceFactory.get(LorenzMappingService.createOptions(
-				project,
-				mappingConfiguration,
-				toNamed ? prodNamespace : MappingsNamespace.NAMED,
-				toNamed ? MappingsNamespace.NAMED : prodNamespace));
-		MappingSet mappings = lorenzMappingService.getMappings();
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
+        RemapMappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
+        MappingsNamespace prodNamespace = extension.getProductionNamespaceEnum().get();
 
-		Mercury mercury = createMercuryWithClassPath(project, toNamed);
-		// Always use the latest version
-		mercury.setSourceCompatibilityFromRelease(Integer.MAX_VALUE);
+        LorenzMappingService lorenzMappingService = serviceFactory
+            .get(LorenzMappingService.createOptions(project, mappingConfiguration,
+                toNamed ? prodNamespace : MappingsNamespace.NAMED, toNamed ? MappingsNamespace.NAMED : prodNamespace));
+        MappingSet mappings = lorenzMappingService.getMappings();
 
-		for (File file : extension.getUnmappedModCollection()) {
-			Path path = file.toPath();
+        Mercury mercury = createMercuryWithClassPath(project, toNamed);
+        // Always use the latest version
+        mercury.setSourceCompatibilityFromRelease(Integer.MAX_VALUE);
 
-			if (Files.isRegularFile(path)) {
-				mercury.getClassPath().add(path);
-			}
-		}
+        for (File file : extension.getUnmappedModCollection()) {
+            Path path = file.toPath();
 
-		for (Path productionJar : extension.getZomboidJars(prodNamespace)) {
-			mercury.getClassPath().add(productionJar);
-		}
+            if (Files.isRegularFile(path)) {
+                mercury.getClassPath().add(path);
+            }
+        }
 
-		for (Path intermediaryJar : extension.getZomboidJars(MappingsNamespace.NAMED)) {
-			mercury.getClassPath().add(intermediaryJar);
-		}
+        for (Path productionJar : extension.getZomboidJars(prodNamespace)) {
+            mercury.getClassPath().add(productionJar);
+        }
 
-		Set<File> files = project.getConfigurations()
-				.detachedConfiguration(project.getDependencies().create(LoomVersions.JETBRAINS_ANNOTATIONS.mavenNotation()))
-				.resolve();
+        for (Path intermediaryJar : extension.getZomboidJars(MappingsNamespace.NAMED)) {
+            mercury.getClassPath().add(intermediaryJar);
+        }
 
-		for (File file : files) {
-			mercury.getClassPath().add(file.toPath());
-		}
+        Set<File> files = project.getConfigurations()
+            .detachedConfiguration(project.getDependencies().create(LoomVersions.JETBRAINS_ANNOTATIONS.mavenNotation()))
+            .resolve();
 
-		mercury.getProcessors().add(MercuryRemapper.create(mappings));
+        for (File file : files) {
+            mercury.getClassPath().add(file.toPath());
+        }
 
-		this.mercury = mercury;
-		return this.mercury;
-	}
+        mercury.getProcessors().add(MercuryRemapper.create(mappings));
 
-	public static void copyNonJavaFiles(Path from, Path to, Logger logger, Path source) throws IOException {
-		Files.walk(from).forEach(path -> {
-			Path targetPath = to.resolve(from.relativize(path).toString());
+        this.mercury = mercury;
+        return this.mercury;
+    }
 
-			if (!isJavaFile(path) && !Files.exists(targetPath)) {
-				try {
-					Files.copy(path, targetPath);
-				} catch (IOException e) {
-					logger.warn("Could not copy non-java sources '" + source + "' fully!", e);
-				}
-			}
-		});
-	}
+    private void remapSourcesInner(File source, File destination) throws Exception {
+        project.getLogger().info(":remapping source jar");
+        Mercury mercury = getMercuryInstance();
 
-	public static Mercury createMercuryWithClassPath(Project project, boolean toNamed) {
-		Mercury m = new Mercury();
-		m.setGracefulClasspathChecks(true);
+        if (source.equals(destination)) {
+            if (source.isDirectory()) {
+                throw new RuntimeException("Directories must differ!");
+            }
 
-		final List<Path> classPath = new ArrayList<>();
+            source = new File(destination.getAbsolutePath().substring(0, destination.getAbsolutePath().lastIndexOf('.'))
+                + "-dev.jar");
 
-		for (File file : project.getConfigurations().getByName(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES).getFiles()) {
-			classPath.add(file.toPath());
-		}
+            try {
+                Files.move(destination.toPath(), source.toPath());
+            } catch (IOException e) {
+                throw new RuntimeException("Could not rename " + destination.getName() + "!", e);
+            }
+        }
 
-		if (!toNamed) {
-			for (File file : project.getConfigurations().getByName("compileClasspath").getFiles()) {
-				classPath.add(file.toPath());
-			}
-		} else {
-			final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        Path srcPath = source.toPath();
+        boolean isSrcTmp = false;
 
-			for (RemapConfigurationSettings entry : extension.getRemapConfigurations()) {
-				for (File inputFile : entry.getSourceConfiguration().get().getFiles()) {
-					classPath.add(inputFile.toPath());
-				}
-			}
-		}
+        if (!source.isDirectory()) {
+            // create tmp directory
+            isSrcTmp = true;
+            srcPath = Files.createTempDirectory("fabric-loom-src");
+            ZipUtils.unpackAll(source.toPath(), srcPath);
+        }
 
-		for (Path path : classPath) {
-			if (Files.exists(path)) {
-				m.getClassPath().add(path);
-			}
-		}
+        if (!destination.isDirectory() && destination.exists()) {
+            if (!destination.delete()) {
+                throw new RuntimeException("Could not delete " + destination.getName() + "!");
+            }
+        }
 
-		return m;
-	}
+        FileSystemUtil.Delegate dstFs = destination.isDirectory() ? null
+            : FileSystemUtil.getJarFileSystem(destination, true);
+        Path dstPath = dstFs != null ? dstFs.get().getPath("/") : destination.toPath();
 
-	private static boolean isJavaFile(Path path) {
-		String name = path.getFileName().toString();
-		// ".java" is not a valid java file
-		return name.endsWith(".java") && name.length() != 5;
-	}
+        try {
+            mercury.rewrite(srcPath, dstPath);
+        } catch (Exception e) {
+            project.getLogger().warn("Could not remap " + source.getName() + " fully!", e);
+        }
+
+        copyNonJavaFiles(srcPath, dstPath, project.getLogger(), source.toPath());
+
+        if (dstFs != null) {
+            dstFs.close();
+        }
+
+        if (isSrcTmp) {
+            Files.walkFileTree(srcPath, new DeletingFileVisitor());
+        }
+    }
 }

@@ -52,31 +52,30 @@ import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
 import dev.aoqia.leaf.loom.util.fmj.LeafModJsonSource;
 
-public record MixinConfiguration(
-		@Nullable MixinRefmap refmap) {
-	private static final String REFMAP_KEY = "refmap";
+public record MixinConfiguration(@Nullable MixinRefmap refmap) {
+    private static final String REFMAP_KEY = "refmap";
 
-	public static List<MixinConfiguration> fromMod(LeafModJson fabricModJson) throws IOException {
-		var configs = new ArrayList<MixinConfiguration>();
+    public static List<MixinConfiguration> fromMod(LeafModJson fabricModJson) throws IOException {
+        var configs = new ArrayList<MixinConfiguration>();
 
-		for (String configPath : fabricModJson.getMixinConfigurations()) {
-			configs.add(fromMod(configPath, fabricModJson.getSource()));
-		}
+        for (String configPath : fabricModJson.getMixinConfigurations()) {
+            configs.add(fromMod(configPath, fabricModJson.getSource()));
+        }
 
-		return configs;
-	}
+        return configs;
+    }
 
-	private static MixinConfiguration fromMod(String configPath, LeafModJsonSource modSource) throws IOException {
-		final String mixinConfigJson = new String(modSource.read(configPath));
-		final JsonObject jsonObject = LoomGradlePlugin.GSON.fromJson(mixinConfigJson, JsonObject.class);
+    private static MixinConfiguration fromMod(String configPath, LeafModJsonSource modSource) throws IOException {
+        final String mixinConfigJson = new String(modSource.read(configPath));
+        final JsonObject jsonObject = LoomGradlePlugin.GSON.fromJson(mixinConfigJson, JsonObject.class);
 
-		MixinRefmap refmap = null;
+        MixinRefmap refmap = null;
 
-		if (jsonObject.has(REFMAP_KEY)) {
-			String refmapPath = jsonObject.get(REFMAP_KEY).getAsString();
-			refmap = MixinRefmap.fromMod(refmapPath, modSource);
-		}
+        if (jsonObject.has(REFMAP_KEY)) {
+            String refmapPath = jsonObject.get(REFMAP_KEY).getAsString();
+            refmap = MixinRefmap.fromMod(refmapPath, modSource);
+        }
 
-		return new MixinConfiguration(refmap);
-	}
+        return new MixinConfiguration(refmap);
+    }
 }

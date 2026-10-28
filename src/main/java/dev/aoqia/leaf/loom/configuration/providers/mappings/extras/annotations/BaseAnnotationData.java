@@ -48,8 +48,11 @@ import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.TypeAnnotationNode;
 
 public interface BaseAnnotationData {
-	Set<String> annotationsToRemove();
-	List<AnnotationNode> annotationsToAdd();
-	Set<TypeAnnotationKey> typeAnnotationsToRemove();
-	List<TypeAnnotationNode> typeAnnotationsToAdd();
+    List<AnnotationNode> annotationsToAdd();
+
+    Set<String> annotationsToRemove();
+
+    List<TypeAnnotationNode> typeAnnotationsToAdd();
+
+    Set<TypeAnnotationKey> typeAnnotationsToRemove();
 }

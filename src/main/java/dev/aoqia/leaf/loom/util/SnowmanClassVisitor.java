@@ -46,55 +46,48 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 
 public class SnowmanClassVisitor extends ClassVisitor {
-	public static class SnowmanMethodVisitor extends MethodVisitor {
-		public SnowmanMethodVisitor(int api, MethodVisitor methodVisitor) {
-			super(api, methodVisitor);
-		}
+    public SnowmanClassVisitor(int api, ClassVisitor cv) {
+        super(api, cv);
+    }
 
-		@Override
-		public void visitParameter(final String name, final int access) {
-			if (name != null && name.startsWith("\u2603")) {
-				super.visitParameter(null, access);
-			} else {
-				super.visitParameter(name, access);
-			}
-		}
+    @Override
+    public MethodVisitor visitMethod(final int access, final String name, final String descriptor,
+        final String signature, final String[] exceptions)
+    {
+        return new SnowmanMethodVisitor(api, super.visitMethod(access, name, descriptor, signature, exceptions));
+    }
 
-		@Override
-		public void visitLocalVariable(
-				final String name,
-				final String descriptor,
-				final String signature,
-				final Label start,
-				final Label end,
-				final int index) {
-			String newName = name;
+    @Override
+    public void visitSource(final String source, final String debug) {
+        // Don't trust the obfuscation on this.
+        super.visitSource(null, null);
+    }
 
-			if (name != null && name.startsWith("\u2603")) {
-				newName = "lvt" + index;
-			}
+    public static class SnowmanMethodVisitor extends MethodVisitor {
+        public SnowmanMethodVisitor(int api, MethodVisitor methodVisitor) {
+            super(api, methodVisitor);
+        }
 
-			super.visitLocalVariable(newName, descriptor, signature, start, end, index);
-		}
-	}
+        @Override
+        public void visitLocalVariable(final String name, final String descriptor, final String signature,
+            final Label start, final Label end, final int index)
+        {
+            String newName = name;
 
-	public SnowmanClassVisitor(int api, ClassVisitor cv) {
-		super(api, cv);
-	}
+            if (name != null && name.startsWith("\u2603")) {
+                newName = "lvt" + index;
+            }
 
-	@Override
-	public void visitSource(final String source, final String debug) {
-		// Don't trust the obfuscation on this.
-		super.visitSource(null, null);
-	}
+            super.visitLocalVariable(newName, descriptor, signature, start, end, index);
+        }
 
-	@Override
-	public MethodVisitor visitMethod(
-			final int access,
-			final String name,
-			final String descriptor,
-			final String signature,
-			final String[] exceptions) {
-		return new SnowmanMethodVisitor(api, super.visitMethod(access, name, descriptor, signature, exceptions));
-	}
+        @Override
+        public void visitParameter(final String name, final int access) {
+            if (name != null && name.startsWith("\u2603")) {
+                super.visitParameter(null, access);
+            } else {
+                super.visitParameter(name, access);
+            }
+        }
+    }
 }

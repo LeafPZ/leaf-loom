@@ -49,43 +49,45 @@ import groovy.namespace.QName;
 import groovy.util.Node;
 
 public final class GroovyXmlUtil {
-	private GroovyXmlUtil() { }
+    private GroovyXmlUtil() {
+    }
 
-	public static Node getOrCreateNode(Node parent, String name) {
-		for (Object object : parent.children()) {
-			if (object instanceof Node node && isSameName(node.name(), name)) {
-				return node;
-			}
-		}
+    public static Stream<Node> childrenNodesStream(Node node) {
+        // noinspection unchecked
+        return (Stream<Node>) (Stream) (((List<Object>) node.children()).stream().filter((i) -> i instanceof Node));
+    }
 
-		return parent.appendNode(name);
-	}
+    public static Optional<Node> getNode(Node parent, String name) {
+        for (Object object : parent.children()) {
+            if (object instanceof Node node && isSameName(node.name(), name)) {
+                return Optional.of(node);
+            }
+        }
 
-	public static Optional<Node> getNode(Node parent, String name) {
-		for (Object object : parent.children()) {
-			if (object instanceof Node node && isSameName(node.name(), name)) {
-				return Optional.of(node);
-			}
-		}
+        return Optional.empty();
+    }
 
-		return Optional.empty();
-	}
+    public static Node getOrCreateNode(Node parent, String name) {
+        for (Object object : parent.children()) {
+            if (object instanceof Node node && isSameName(node.name(), name)) {
+                return node;
+            }
+        }
 
-	private static boolean isSameName(Object nodeName, String givenName) {
-		if (nodeName instanceof String) {
-			return nodeName.equals(givenName);
-		}
+        return parent.appendNode(name);
+    }
 
-		// New groovy 3 (gradle 7) class
-		if (nodeName instanceof QName qName) {
-			return qName.matches(givenName);
-		}
+    private static boolean isSameName(Object nodeName, String givenName) {
+        if (nodeName instanceof String) {
+            return nodeName.equals(givenName);
+        }
 
-		throw new UnsupportedOperationException("Cannot determine if " + nodeName.getClass() + " is the same as a String");
-	}
+        // New groovy 3 (gradle 7) class
+        if (nodeName instanceof QName qName) {
+            return qName.matches(givenName);
+        }
 
-	public static Stream<Node> childrenNodesStream(Node node) {
-		//noinspection unchecked
-		return (Stream<Node>) (Stream) (((List<Object>) node.children()).stream().filter((i) -> i instanceof Node));
-	}
+        throw new UnsupportedOperationException(
+            "Cannot determine if " + nodeName.getClass() + " is the same as a String");
+    }
 }

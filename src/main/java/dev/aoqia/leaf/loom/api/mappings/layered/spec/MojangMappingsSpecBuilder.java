@@ -42,12 +42,13 @@
 package dev.aoqia.leaf.loom.api.mappings.layered.spec;
 
 public interface MojangMappingsSpecBuilder {
-	/**
-	 * When enabled synthetic fields and methods will be mapped to name specified in the official mojang mappings.
-	 *
-	 * <p>When disabled synthetic fields and methods will not be mapped leaving them with their intermediary name.
-	 */
-	MojangMappingsSpecBuilder setNameSyntheticMembers(boolean value);
+    boolean getNameSyntheticMembers();
 
-	boolean getNameSyntheticMembers();
+    /**
+     * When enabled synthetic fields and methods will be mapped to name specified in the official mojang mappings.
+     *
+     * <p>
+     * When disabled synthetic fields and methods will not be mapped leaving them with their intermediary name.
+     */
+    MojangMappingsSpecBuilder setNameSyntheticMembers(boolean value);
 }

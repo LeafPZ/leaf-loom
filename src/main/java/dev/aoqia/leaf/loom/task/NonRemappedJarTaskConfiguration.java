@@ -66,55 +66,47 @@ import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
  * Used when remapping is disabled via dontRemapOutputs().
  */
 public class NonRemappedJarTaskConfiguration {
-	private final Project project;
-	private final LoomGradleExtension extension;
+    private final LoomGradleExtension extension;
+    private final Project project;
 
-	public NonRemappedJarTaskConfiguration(Project project, LoomGradleExtension extension) {
-		this.project = project;
-		this.extension = extension;
-	}
+    public NonRemappedJarTaskConfiguration(Project project, LoomGradleExtension extension) {
+        this.project = project;
+        this.extension = extension;
+    }
 
-	public void configure() {
-		final Provider<JarManifestService> manifestServiceProvider = JarManifestService.get(project);
+    public void configure() {
+        final Provider<JarManifestService> manifestServiceProvider = JarManifestService.get(project);
 
-		project.getTasks().named(JavaPlugin.JAR_TASK_NAME, Jar.class).configure(task -> {
-			task.doLast(new ManifestModificationAction(
-					manifestServiceProvider,
-					"official",
-					project.provider(extension::areEnvironmentSourceSetsSplit),
-					project.provider(this::getClientOnlyEntries)
-			));
+        project.getTasks().named(JavaPlugin.JAR_TASK_NAME, Jar.class).configure(task -> {
+            task.doLast(new ManifestModificationAction(manifestServiceProvider, "official",
+                project.provider(extension::areEnvironmentSourceSetsSplit),
+                project.provider(this::getClientOnlyEntries)));
 
-			task.usesService(manifestServiceProvider);
-		});
+            task.usesService(manifestServiceProvider);
+        });
 
-		IncludeConfigurations.nestJars(
-				project,
-				project.getTasks().named(JavaPlugin.JAR_TASK_NAME, Jar.class),
-				project.getConfigurations().named(Constants.Configurations.INCLUDE),
-				Constants.Task.PROCESS_INCLUDE_JARS,
-				Constants.Configurations.INCLUDE_INTERNAL
-		);
+        IncludeConfigurations.nestJars(project, project.getTasks().named(JavaPlugin.JAR_TASK_NAME, Jar.class),
+            project.getConfigurations().named(Constants.Configurations.INCLUDE), Constants.Task.PROCESS_INCLUDE_JARS,
+            Constants.Configurations.INCLUDE_INTERNAL);
 
-		extension.getUnmappedModCollection().from(project.getTasks().named(JavaPlugin.JAR_TASK_NAME));
-	}
+        extension.getUnmappedModCollection().from(project.getTasks().named(JavaPlugin.JAR_TASK_NAME));
+    }
 
-	private List<String> getClientOnlyEntries() {
-		if (!extension.areEnvironmentSourceSetsSplit()) {
-			return Collections.emptyList();
-		}
+    private List<String> getClientOnlyEntries() {
+        if (!extension.areEnvironmentSourceSetsSplit()) {
+            return Collections.emptyList();
+        }
 
-		final SourceSet clientSourceSet = SourceSetHelper.getSourceSetByName(
-				ZomboidSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME,
-				project
-		);
-		final Provider<ClientEntriesService.Classes.Options> optionsProvider = ClientEntriesService.Classes.createOptions(project, clientSourceSet);
+        final SourceSet clientSourceSet = SourceSetHelper
+            .getSourceSetByName(ZomboidSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME, project);
+        final Provider<ClientEntriesService.Classes.Options> optionsProvider = ClientEntriesService.Classes
+            .createOptions(project, clientSourceSet);
 
-		try (var serviceFactory = new ScopedServiceFactory()) {
-			ClientEntriesService<ClientEntriesService.Classes.Options> service = serviceFactory.get(optionsProvider);
-			return new ArrayList<>(service.getClientOnlyEntries());
-		} catch (IOException e) {
-			throw new RuntimeException("Failed to determine client-only entries", e);
-		}
-	}
+        try (var serviceFactory = new ScopedServiceFactory()) {
+            ClientEntriesService<ClientEntriesService.Classes.Options> service = serviceFactory.get(optionsProvider);
+            return new ArrayList<>(service.getClientOnlyEntries());
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to determine client-only entries", e);
+        }
+    }
 }

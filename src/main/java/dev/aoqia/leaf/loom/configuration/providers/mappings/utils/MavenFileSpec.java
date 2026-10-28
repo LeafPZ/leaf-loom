@@ -47,8 +47,8 @@ import dev.aoqia.leaf.loom.api.mappings.layered.MappingContext;
 import dev.aoqia.leaf.loom.api.mappings.layered.spec.FileSpec;
 
 public record MavenFileSpec(String dependencyNotation) implements FileSpec {
-	@Override
-	public Path get(MappingContext context) {
-		return context.resolveMavenDependency(dependencyNotation);
-	}
+    @Override
+    public Path get(MappingContext context) {
+        return context.resolveMavenDependency(dependencyNotation);
+    }
 }

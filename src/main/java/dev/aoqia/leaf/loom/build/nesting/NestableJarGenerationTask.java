@@ -87,194 +87,200 @@ import dev.aoqia.leaf.loom.util.fmj.LeafModJsonFactory;
 
 @DisableCachingByDefault
 public abstract class NestableJarGenerationTask extends AbstractLoomTask {
-	private static final Logger LOGGER = LoggerFactory.getLogger(NestableJarGenerationTask.class);
-	private static final String SEMVER_REGEX = "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$";
-	private static final Pattern SEMVER_PATTERN = Pattern.compile(SEMVER_REGEX);
+    private static final Logger LOGGER = LoggerFactory.getLogger(NestableJarGenerationTask.class);
 
-	@InputFiles
-	@PathSensitive(PathSensitivity.NAME_ONLY)
-	protected abstract ConfigurableFileCollection getJars();
+    private static final String SEMVER_REGEX = "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-("
+        + "(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+"
+        + "([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$";
+    private static final Pattern SEMVER_PATTERN = Pattern.compile(SEMVER_REGEX);
 
-	@OutputDirectory
-	public abstract DirectoryProperty getOutputDirectory();
+    // Generates a barebones mod for a dependency
+    private static String generateModForDependency(Metadata metadata) {
+        String modId = (metadata.group() + "_" + metadata.name() + metadata.classifier()).replaceAll("\\.", "_")
+            .toLowerCase(Locale.ENGLISH);
 
-	@Input
-	protected abstract MapProperty<String, Metadata> getJarIds();
+        // Fabric Loader can't handle modIds longer than 64 characters
+        if (modId.length() > 64) {
+            String hash = Checksum.of(modId).sha256().hex();
+            modId = modId.substring(0, 50) + hash.substring(0, 14);
+        }
 
-	@Input
-	public abstract Property<Boolean> getUncompressNestedJars();
+        final JsonObject jsonObject = new JsonObject();
+        jsonObject.addProperty("schemaVersion", 1);
 
-	@TaskAction
-	void makeNestableJars() {
-		Map<String, String> fabricModJsons = new HashMap<>();
-		getJarIds().get().forEach((fileName, metadata) -> {
-			fabricModJsons.put(fileName, generateModForDependency(metadata));
-		});
+        jsonObject.addProperty("id", modId);
+        String version = getVersion(metadata);
+        jsonObject.addProperty("version", version);
+        jsonObject.addProperty("name", metadata.name());
 
-		try {
-			File targetDir = getOutputDirectory().get().getAsFile();
-			DeletingFileVisitor.deleteDirectory(targetDir.toPath());
-			targetDir.mkdirs();
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
+        JsonObject custom = new JsonObject();
+        custom.addProperty("leaf-loom:generated", true);
+        jsonObject.add("custom", custom);
 
-		getJars().forEach(file -> {
-			File targetFile = getOutputDirectory().file(file.getName()).get().getAsFile();
-			targetFile.delete();
-			String fabricModJson = Objects.requireNonNull(fabricModJsons.get(file.getName()), "Could not generate leaf.mod.json for included dependency "+file.getName());
-			makeNestableJar(file, targetFile, fabricModJson);
-		});
-	}
+        return LoomGradlePlugin.GSON.toJson(jsonObject);
+    }
 
-	public void from(Configuration configuration) {
-		ArtifactView artifacts = configuration.getIncoming().artifactView(config -> {
-			config.attributes(
-					attr -> attr.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.JAR_TYPE)
-			);
-		});
-		getJars().from(artifacts.getFiles());
-		dependsOn(configuration);
-		getJarIds().putAll(artifacts.getArtifacts().getResolvedArtifacts().map(set -> {
-			Map<String, Metadata> map = new HashMap<>();
-			set.forEach(artifact -> {
-				ResolvedVariantResult variant = artifact.getVariant();
+    private static String getVersion(Metadata metadata) {
+        String version = metadata.version();
 
-				ComponentIdentifier id = variant.getOwner();
-				Metadata moduleLocation = null;
+        if (validSemVer(version)) {
+            return version;
+        }
 
-				if (id instanceof ModuleComponentIdentifier moduleIdentifier) {
-					moduleLocation = new Metadata(
-							moduleIdentifier.getGroup(),
-							moduleIdentifier.getModule(),
-							moduleIdentifier.getVersion(),
-							null
-					);
-				}
+        if (version.endsWith(".Final") || version.endsWith(".final")) {
+            String trimmedVersion = version.substring(0, version.length() - 6);
 
-				List<Metadata> capabilityLocations = variant.getCapabilities().stream()
-						.map(capability -> new Metadata(capability.getGroup(), capability.getName(), capability.getVersion(), null))
-						.toList();
+            if (validSemVer(trimmedVersion)) {
+                return trimmedVersion;
+            }
+        }
 
-				if (!capabilityLocations.isEmpty() && (moduleLocation == null || !capabilityLocations.contains(moduleLocation))) {
-					moduleLocation = capabilityLocations.get(0);
-				}
+        LOGGER.warn("({}) is not valid semver for dependency {}", version, metadata);
+        return version;
+    }
 
-				if (moduleLocation == null) {
-					throw new RuntimeException("Attempted to nest artifact " + id + " which is not a module component and has no capabilities.");
-				} else if (moduleLocation.version == null) {
-					throw new RuntimeException("Attempted to nest artifact " + id + " which has no version");
-				}
+    private static boolean validSemVer(String version) {
+        Matcher matcher = SEMVER_PATTERN.matcher(version);
+        return matcher.find();
+    }
 
-				String group = moduleLocation.group;
-				String name = moduleLocation.name;
-				String version = moduleLocation.version;
-				String classifier = null;
+    public void from(Configuration configuration) {
+        ArtifactView artifacts = configuration.getIncoming().artifactView(config -> {
+            config.attributes(attr -> attr.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE,
+                ArtifactTypeDefinition.JAR_TYPE));
+        });
+        getJars().from(artifacts.getFiles());
+        dependsOn(configuration);
+        getJarIds().putAll(artifacts.getArtifacts().getResolvedArtifacts().map(set -> {
+            Map<String, Metadata> map = new HashMap<>();
+            set.forEach(artifact -> {
+                ResolvedVariantResult variant = artifact.getVariant();
 
-				if (artifact.getFile().getName().startsWith(name + "-" + version + "-")) {
-					String rest = artifact.getFile().getName().substring(name.length() + version.length() + 2);
-					int dotIndex = rest.indexOf('.');
+                ComponentIdentifier id = variant.getOwner();
+                Metadata moduleLocation = null;
 
-					if (dotIndex != -1) {
-						classifier = rest.substring(0, dotIndex);
-					}
-				}
+                if (id instanceof ModuleComponentIdentifier moduleIdentifier) {
+                    moduleLocation = new Metadata(moduleIdentifier.getGroup(), moduleIdentifier.getModule(),
+                        moduleIdentifier.getVersion(), null);
+                }
 
-				Metadata metadata = new Metadata(group, name, version, classifier);
-				map.put(artifact.getFile().getName(), metadata);
-			});
-			return map;
-		}));
-	}
+                List<Metadata> capabilityLocations = variant.getCapabilities()
+                    .stream()
+                    .map(capability -> new Metadata(capability.getGroup(), capability.getName(),
+                        capability.getVersion(), null))
+                    .toList();
 
-	// Generates a barebones mod for a dependency
-	private static String generateModForDependency(Metadata metadata) {
-		String modId = (metadata.group() + "_" + metadata.name() + metadata.classifier())
-				.replaceAll("\\.", "_")
-				.toLowerCase(Locale.ENGLISH);
+                if (!capabilityLocations.isEmpty()
+                    && (moduleLocation == null || !capabilityLocations.contains(moduleLocation)))
+                {
+                    moduleLocation = capabilityLocations.get(0);
+                }
 
-		// Fabric Loader can't handle modIds longer than 64 characters
-		if (modId.length() > 64) {
-			String hash = Checksum.of(modId).sha256().hex();
-			modId = modId.substring(0, 50) + hash.substring(0, 14);
-		}
+                if (moduleLocation == null) {
+                    throw new RuntimeException("Attempted to nest artifact " + id
+                        + " which is not a module component and has no capabilities.");
+                } else if (moduleLocation.version == null) {
+                    throw new RuntimeException("Attempted to nest artifact " + id + " which has no version");
+                }
 
-		final JsonObject jsonObject = new JsonObject();
-		jsonObject.addProperty("schemaVersion", 1);
+                String group = moduleLocation.group;
+                String name = moduleLocation.name;
+                String version = moduleLocation.version;
+                String classifier = null;
 
-		jsonObject.addProperty("id", modId);
-		String version = getVersion(metadata);
-		jsonObject.addProperty("version", version);
-		jsonObject.addProperty("name", metadata.name());
+                if (artifact.getFile().getName().startsWith(name + "-" + version + "-")) {
+                    String rest = artifact.getFile().getName().substring(name.length() + version.length() + 2);
+                    int dotIndex = rest.indexOf('.');
 
-		JsonObject custom = new JsonObject();
-		custom.addProperty("leaf-loom:generated", true);
-		jsonObject.add("custom", custom);
+                    if (dotIndex != -1) {
+                        classifier = rest.substring(0, dotIndex);
+                    }
+                }
 
-		return LoomGradlePlugin.GSON.toJson(jsonObject);
-	}
+                Metadata metadata = new Metadata(group, name, version, classifier);
+                map.put(artifact.getFile().getName(), metadata);
+            });
+            return map;
+        }));
+    }
 
-	private static String getVersion(Metadata metadata) {
-		String version = metadata.version();
+    @OutputDirectory
+    public abstract DirectoryProperty getOutputDirectory();
 
-		if (validSemVer(version)) {
-			return version;
-		}
+    @Input
+    public abstract Property<Boolean> getUncompressNestedJars();
 
-		if (version.endsWith(".Final") || version.endsWith(".final")) {
-			String trimmedVersion = version.substring(0, version.length() - 6);
+    @Input
+    protected abstract MapProperty<String, Metadata> getJarIds();
 
-			if (validSemVer(trimmedVersion)) {
-				return trimmedVersion;
-			}
-		}
+    @InputFiles
+    @PathSensitive(PathSensitivity.NAME_ONLY)
+    protected abstract ConfigurableFileCollection getJars();
 
-		LOGGER.warn("({}) is not valid semver for dependency {}", version, metadata);
-		return version;
-	}
+    @TaskAction
+    void makeNestableJars() {
+        Map<String, String> fabricModJsons = new HashMap<>();
+        getJarIds().get().forEach((fileName, metadata) -> {
+            fabricModJsons.put(fileName, generateModForDependency(metadata));
+        });
 
-	private static boolean validSemVer(String version) {
-		Matcher matcher = SEMVER_PATTERN.matcher(version);
-		return matcher.find();
-	}
+        try {
+            File targetDir = getOutputDirectory().get().getAsFile();
+            DeletingFileVisitor.deleteDirectory(targetDir.toPath());
+            targetDir.mkdirs();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
 
-	private void makeNestableJar(final File input, final File output, final String modJsonFile) {
-		try {
-			Files.copy(input.toPath(), output.toPath());
+        getJars().forEach(file -> {
+            File targetFile = getOutputDirectory().file(file.getName()).get().getAsFile();
+            targetFile.delete();
+            String fabricModJson = Objects.requireNonNull(fabricModJsons.get(file.getName()),
+                "Could not generate leaf.mod.json for included dependency " + file.getName());
+            makeNestableJar(file, targetFile, fabricModJson);
+        });
+    }
 
-			if (getUncompressNestedJars().get()) {
-				ZipReprocessorUtil.reprocessZip(output.toPath(), false, true, ZipEntryCompression.STORED);
-			}
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to copy mod file %s".formatted(input), e);
-		}
+    private void makeNestableJar(final File input, final File output, final String modJsonFile) {
+        try {
+            Files.copy(input.toPath(), output.toPath());
 
-		if (LeafModJsonFactory.isModJar(input)) {
-			// Input is a mod, nothing needs to be done.
-			return;
-		}
+            if (getUncompressNestedJars().get()) {
+                ZipReprocessorUtil.reprocessZip(output.toPath(), false, true, ZipEntryCompression.STORED);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to copy mod file %s".formatted(input), e);
+        }
+
+        if (LeafModJsonFactory.isModJar(input)) {
+            // Input is a mod, nothing needs to be done.
+            return;
+        }
 
         // TODO(leaf): Support leaf.mod.json
-		try {
-			ZipReprocessorUtil.appendZipEntry(output.toPath(), "leaf.mod.json", modJsonFile.getBytes(StandardCharsets.UTF_8));
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to add dummy mod while including %s".formatted(input), e);
-		}
-	}
+        try {
+            ZipReprocessorUtil.appendZipEntry(output.toPath(), "leaf.mod.json",
+                modJsonFile.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to add dummy mod while including %s".formatted(input), e);
+        }
+    }
 
-	public record Metadata(String group, String name, String version, @Nullable String classifier) implements Serializable {
-		@Override
-		public String classifier() {
-			if (classifier == null) {
-				return "";
-			} else {
-				return "_" + classifier;
-			}
-		}
+    public record Metadata(String group, String name, String version, @Nullable String classifier)
+        implements Serializable
+    {
+        @Override
+        public String classifier() {
+            if (classifier == null) {
+                return "";
+            } else {
+                return "_" + classifier;
+            }
+        }
 
-		@Override
-		public String toString() {
-			return group + ":" + name + ":" + version + classifier();
-		}
-	}
+        @Override
+        public String toString() {
+            return group + ":" + name + ":" + version + classifier();
+        }
+    }
 }

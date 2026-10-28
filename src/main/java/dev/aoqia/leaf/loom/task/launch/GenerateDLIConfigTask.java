@@ -80,180 +80,186 @@ import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 
 @DisableCachingByDefault
 public abstract class GenerateDLIConfigTask extends AbstractLoomTask {
-	@Input
-	protected abstract Property<String> getVersionInfoJson();
+    public GenerateDLIConfigTask() {
+        getVersionInfoJson().set(LoomGradlePlugin.GSON.toJson(getExtension().getZomboidProvider().getVersionInfo()));
+        getGameVersion().set(getExtension().getZomboidProvider().gameVersion());
+        getSplitSourceSets().set(getExtension().areEnvironmentSourceSetsSplit());
+        getANSISupportedIDE().set(ansiSupportedIde(getProject()));
+        getPlainConsole().set(getProject().getGradle().getStartParameter().getConsoleOutput() == ConsoleOutput.Plain);
+        getClasspathGroupOptions().set(ClasspathGroupService.create(getProject()));
 
-	@Input
-	protected abstract Property<String> getGameVersion();
+        getLog4jConfigPaths().set(getAllLog4JConfigFiles(getProject()));
 
-	@Input
-	protected abstract Property<Boolean> getSplitSourceSets();
-
-	@Input
-	protected abstract Property<Boolean> getPlainConsole();
-
-	@Input
-	protected abstract Property<Boolean> getANSISupportedIDE();
-
-	@Input
-	protected abstract Property<String> getLog4jConfigPaths();
-
-	@Input
-	@Optional
-	protected abstract Property<String> getClientGameJarPath();
-
-	@Input
-	@Optional
-	protected abstract Property<String> getCommonGameJarPath();
-
-	@Input
-	protected abstract Property<String> getNativesDirectoryPath();
-
-	@Input
-	protected abstract Property<String> getProductionNamespace();
-
-	@Input
-	protected abstract Property<String> getDefaultMixinRemapType();
-
-	@InputFile
-	@PathSensitive(PathSensitivity.ABSOLUTE)
-	@Optional
-	public abstract RegularFileProperty getRemapClasspathFile();
-
-	@OutputFile
-	protected abstract RegularFileProperty getDevLauncherConfig();
-
-	@Nested
-	protected abstract Property<ClasspathGroupService.Options> getClasspathGroupOptions();
-
-	public GenerateDLIConfigTask() {
-		getVersionInfoJson().set(LoomGradlePlugin.GSON.toJson(getExtension().getZomboidProvider().getVersionInfo()));
-		getGameVersion().set(getExtension().getZomboidProvider().gameVersion());
-		getSplitSourceSets().set(getExtension().areEnvironmentSourceSetsSplit());
-		getANSISupportedIDE().set(ansiSupportedIde(getProject()));
-		getPlainConsole().set(getProject().getGradle().getStartParameter().getConsoleOutput() == ConsoleOutput.Plain);
-		getClasspathGroupOptions().set(ClasspathGroupService.create(getProject()));
-
-		getLog4jConfigPaths().set(getAllLog4JConfigFiles(getProject()));
-
-		if (getSplitSourceSets().get()) {
-			getClientGameJarPath().set(getGameJarPath("client"));
-			getCommonGameJarPath().set(getGameJarPath("common"));
-		} else {
+        if (getSplitSourceSets().get()) {
+            getClientGameJarPath().set(getGameJarPath("client"));
+            getCommonGameJarPath().set(getGameJarPath("common"));
+        } else {
             getCommonGameJarPath().set(getGameJarPath("common"));
         }
 
-		getNativesDirectoryPath().set(getExtension().getFiles().getNativesDirectory(getProject()).getAbsolutePath());
-		getDevLauncherConfig().set(getExtension().getFiles().getDevLauncherConfig());
-		getProductionNamespace().set(getExtension().getProductionNamespaceEnum().map(MappingsNamespace::toString));
-		getDefaultMixinRemapType().set(getExtension().getDefaultMixinRemapTypeEnum().map(remapType -> remapType.toString().toLowerCase(Locale.ROOT)));
-	}
+        getNativesDirectoryPath().set(getExtension().getFiles().getNativesDirectory(getProject()).getAbsolutePath());
+        getDevLauncherConfig().set(getExtension().getFiles().getDevLauncherConfig());
+        getProductionNamespace().set(getExtension().getProductionNamespaceEnum().map(MappingsNamespace::toString));
+        getDefaultMixinRemapType().set(getExtension().getDefaultMixinRemapTypeEnum()
+            .map(remapType -> remapType.toString().toLowerCase(Locale.ROOT)));
+    }
 
-	@TaskAction
-	public void run() throws IOException {
-		final ZomboidVersionMeta versionInfo = LoomGradlePlugin.GSON.fromJson(getVersionInfoJson().get(), ZomboidVersionMeta.class);
+    private static boolean ansiSupportedIde(Project project) {
+        File rootDir = project.getRootDir();
+        return new File(rootDir, ".vscode").exists() || new File(rootDir, ".idea").exists()
+            || new File(rootDir, ".project").exists()
+            || (Arrays.stream(rootDir.listFiles()).anyMatch(file -> file.getName().endsWith(".iws")));
+    }
 
-		final LaunchConfig launchConfig = new LaunchConfig()
-            .property("leaf.development", "true")
+    private static String getAllLog4JConfigFiles(Project project) {
+        return LoomGradleExtension.get(project)
+            .getLog4jConfigs()
+            .getFiles()
+            .stream()
+            .map(File::getAbsolutePath)
+            .collect(Collectors.joining(","));
+    }
+
+    @InputFile
+    @PathSensitive(PathSensitivity.ABSOLUTE)
+    @Optional
+    public abstract RegularFileProperty getRemapClasspathFile();
+
+    @TaskAction
+    public void run() throws IOException {
+        final ZomboidVersionMeta versionInfo = LoomGradlePlugin.GSON.fromJson(getVersionInfoJson().get(),
+            ZomboidVersionMeta.class);
+
+        final LaunchConfig launchConfig = new LaunchConfig().property("leaf.development", "true")
             .property("log4j.configurationFile", getLog4jConfigPaths().get())
             .property("log4j2.formatMsgNoLookups", "true")
             .property("leaf.defaultModDistributionNamespace", getProductionNamespace().get())
             .property("leaf.defaultMixinRemapType", getDefaultMixinRemapType().get());
 
-		if (getRemapClasspathFile().isPresent()) {
-			launchConfig.property("leaf.remapClasspathFile", getRemapClasspathFile().get().getAsFile().getAbsolutePath());
-		}
+        if (getRemapClasspathFile().isPresent()) {
+            launchConfig.property("leaf.remapClasspathFile",
+                getRemapClasspathFile().get().getAsFile().getAbsolutePath());
+        }
 
-		if (versionInfo.hasNativesToExtract()) {
+        if (versionInfo.hasNativesToExtract()) {
             throw new RuntimeException("We shouldn't be here! Report me to a developer pls >w<");
-		}
+        }
 
-		if (getSplitSourceSets().get()) {
-			launchConfig.property("client", "leaf.gameJarPath.client", getClientGameJarPath().get());
-			launchConfig.property("leaf.gameJarPath", getCommonGameJarPath().get());
-		} else {
+        if (getSplitSourceSets().get()) {
+            launchConfig.property("client", "leaf.gameJarPath.client", getClientGameJarPath().get());
+            launchConfig.property("leaf.gameJarPath", getCommonGameJarPath().get());
+        } else {
             launchConfig.property("leaf.gameJarPath", getCommonGameJarPath().get());
         }
 
-		try (ScopedServiceFactory serviceFactory = new ScopedServiceFactory()) {
-			ClasspathGroupService classpathGroupService = serviceFactory.get(getClasspathGroupOptions());
+        try (ScopedServiceFactory serviceFactory = new ScopedServiceFactory()) {
+            ClasspathGroupService classpathGroupService = serviceFactory.get(getClasspathGroupOptions());
 
-			if (classpathGroupService.hasGroups()) {
-				launchConfig.property("leaf.classPathGroups", classpathGroupService.getClasspathGroupsPropertyValue());
-			}
-		}
+            if (classpathGroupService.hasGroups()) {
+                launchConfig.property("leaf.classPathGroups", classpathGroupService.getClasspathGroupsPropertyValue());
+            }
+        }
 
-		//Enable ansi by default for idea and vscode when gradle is not ran with plain console.
-		if (getANSISupportedIDE().get() && !getPlainConsole().get()) {
-			launchConfig.property("leaf.log.disableAnsi", "false");
-		}
+        // Enable ansi by default for idea and vscode when gradle is not ran with plain console.
+        if (getANSISupportedIDE().get() && !getPlainConsole().get()) {
+            launchConfig.property("leaf.log.disableAnsi", "false");
+        }
 
-		Files.writeString(getDevLauncherConfig().getAsFile().get().toPath(), launchConfig.asString(), StandardCharsets.UTF_8);
-	}
+        Files.writeString(getDevLauncherConfig().getAsFile().get().toPath(), launchConfig.asString(),
+            StandardCharsets.UTF_8);
+    }
 
-	private static String getAllLog4JConfigFiles(Project project) {
-		return LoomGradleExtension.get(project).getLog4jConfigs().getFiles().stream()
-				.map(File::getAbsolutePath)
-				.collect(Collectors.joining(","));
-	}
+    @Input
+    protected abstract Property<Boolean> getANSISupportedIDE();
 
-	private String getGameJarPath(String env) {
+    @Nested
+    protected abstract Property<ClasspathGroupService.Options> getClasspathGroupOptions();
+
+    @Input
+    @Optional
+    protected abstract Property<String> getClientGameJarPath();
+
+    @Input
+    @Optional
+    protected abstract Property<String> getCommonGameJarPath();
+
+    @Input
+    protected abstract Property<String> getDefaultMixinRemapType();
+
+    @OutputFile
+    protected abstract RegularFileProperty getDevLauncherConfig();
+
+    @Input
+    protected abstract Property<String> getGameVersion();
+
+    @Input
+    protected abstract Property<String> getLog4jConfigPaths();
+
+    @Input
+    protected abstract Property<String> getNativesDirectoryPath();
+
+    @Input
+    protected abstract Property<Boolean> getPlainConsole();
+
+    @Input
+    protected abstract Property<String> getProductionNamespace();
+
+    @Input
+    protected abstract Property<Boolean> getSplitSourceSets();
+
+    @Input
+    protected abstract Property<String> getVersionInfoJson();
+
+    private String getGameJarPath(String env) {
         ZomboidJar jar = switch (getExtension().getNamedZomboidProvider()) {
             case MappedZomboidProvider.CompleteJar p -> p.getGameJar();
+            // checkstyle:off
             case MappedZomboidProvider.Split p -> switch (env) {
                 case "client" -> p.getClientOnlyJar();
                 case "common" -> p.getCommonJar();
                 default -> throw new UnsupportedOperationException();
             };
+            // checkstyle:on
             default -> throw new RuntimeException("Unsupported provider when getting game jar path for DLI config");
         };
 
         return jar.getPath().toAbsolutePath().toString();
-	}
+    }
 
-	private static boolean ansiSupportedIde(Project project) {
-		File rootDir = project.getRootDir();
-		return new File(rootDir, ".vscode").exists()
-				|| new File(rootDir, ".idea").exists()
-				|| new File(rootDir, ".project").exists()
-				|| (Arrays.stream(rootDir.listFiles()).anyMatch(file -> file.getName().endsWith(".iws")));
-	}
+    public static class LaunchConfig {
+        private final Map<String, List<String>> values = new HashMap<>();
 
-	public static class LaunchConfig {
-		private final Map<String, List<String>> values = new HashMap<>();
+        public LaunchConfig argument(String value) {
+            return argument("common", value);
+        }
 
-		public LaunchConfig property(String key, String value) {
-			return property("common", key, value);
-		}
+        public LaunchConfig argument(String side, String value) {
+            values.computeIfAbsent(side + "Args", (s -> new ArrayList<>())).add(value);
+            return this;
+        }
 
-		public LaunchConfig property(String side, String key, String value) {
-			values.computeIfAbsent(side + "Properties", (s -> new ArrayList<>()))
-					.add(String.format("%s=%s", key, value));
-			return this;
-		}
+        public String asString() {
+            StringJoiner stringJoiner = new StringJoiner("\n");
 
-		public LaunchConfig argument(String value) {
-			return argument("common", value);
-		}
+            for (Map.Entry<String, List<String>> entry : values.entrySet()) {
+                stringJoiner.add(entry.getKey());
 
-		public LaunchConfig argument(String side, String value) {
-			values.computeIfAbsent(side + "Args", (s -> new ArrayList<>()))
-					.add(value);
-			return this;
-		}
+                for (String s : entry.getValue()) {
+                    stringJoiner.add("\t" + s);
+                }
+            }
 
-		public String asString() {
-			StringJoiner stringJoiner = new StringJoiner("\n");
+            return stringJoiner.toString();
+        }
 
-			for (Map.Entry<String, List<String>> entry : values.entrySet()) {
-				stringJoiner.add(entry.getKey());
+        public LaunchConfig property(String key, String value) {
+            return property("common", key, value);
+        }
 
-				for (String s : entry.getValue()) {
-					stringJoiner.add("\t" + s);
-				}
-			}
-
-			return stringJoiner.toString();
-		}
-	}
+        public LaunchConfig property(String side, String key, String value) {
+            values.computeIfAbsent(side + "Properties", (s -> new ArrayList<>()))
+                .add(String.format("%s=%s", key, value));
+            return this;
+        }
+    }
 }

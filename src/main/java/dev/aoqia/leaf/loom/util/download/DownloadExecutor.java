@@ -51,52 +51,53 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class DownloadExecutor implements AutoCloseable {
-	private final ExecutorService executorService;
-	private final List<DownloadException> downloadExceptions = Collections.synchronizedList(new ArrayList<>());
+    private final List<DownloadException> downloadExceptions = Collections.synchronizedList(new ArrayList<>());
 
-	public DownloadExecutor(int threads) {
-		executorService = Executors.newFixedThreadPool(threads);
-	}
+    private final ExecutorService executorService;
 
-	CompletableFuture<DownloadResult> runAsync(DownloadRunner downloadRunner) {
-		if (!downloadExceptions.isEmpty()) {
-			return CompletableFuture.failedFuture(new DownloadException("Download blocked due to previous errors"));
-		}
+    public DownloadExecutor(int threads) {
+        executorService = Executors.newFixedThreadPool(threads);
+    }
 
-		return CompletableFuture.supplyAsync(() -> {
-			try {
-				return downloadRunner.run();
-			} catch (DownloadException e) {
-				executorService.shutdownNow();
-				downloadExceptions.add(e);
-				throw new CompletionException(e);
-			}
-		}, executorService);
-	}
+    @Override
+    public void close() throws DownloadException {
+        executorService.shutdown();
 
-	@Override
-	public void close() throws DownloadException {
-		executorService.shutdown();
+        try {
+            executorService.awaitTermination(1, TimeUnit.DAYS);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
 
-		try {
-			executorService.awaitTermination(1, TimeUnit.DAYS);
-		} catch (InterruptedException e) {
-			throw new RuntimeException(e);
-		}
+        if (!downloadExceptions.isEmpty()) {
+            DownloadException downloadException = new DownloadException("Failed to download");
 
-		if (!downloadExceptions.isEmpty()) {
-			DownloadException downloadException = new DownloadException("Failed to download");
+            for (DownloadException suppressed : downloadExceptions) {
+                downloadException.addSuppressed(suppressed);
+            }
 
-			for (DownloadException suppressed : downloadExceptions) {
-				downloadException.addSuppressed(suppressed);
-			}
+            throw downloadException;
+        }
+    }
 
-			throw downloadException;
-		}
-	}
+    CompletableFuture<DownloadResult> runAsync(DownloadRunner downloadRunner) {
+        if (!downloadExceptions.isEmpty()) {
+            return CompletableFuture.failedFuture(new DownloadException("Download blocked due to previous errors"));
+        }
 
-	@FunctionalInterface
-	public interface DownloadRunner {
-		DownloadResult run() throws DownloadException;
-	}
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return downloadRunner.run();
+            } catch (DownloadException e) {
+                executorService.shutdownNow();
+                downloadExceptions.add(e);
+                throw new CompletionException(e);
+            }
+        }, executorService);
+    }
+
+    @FunctionalInterface
+    public interface DownloadRunner {
+        DownloadResult run() throws DownloadException;
+    }
 }

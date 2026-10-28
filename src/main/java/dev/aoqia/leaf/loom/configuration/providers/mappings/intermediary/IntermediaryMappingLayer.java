@@ -53,16 +53,18 @@ import dev.aoqia.leaf.loom.api.mappings.layered.MappingLayer;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 
 public record IntermediaryMappingLayer(Supplier<MemoryMappingTree> memoryMappingTree) implements MappingLayer {
-	@Override
-	public MappingsNamespace getSourceNamespace() {
-		return MappingsNamespace.OFFICIAL;
-	}
+    @Override
+    public MappingsNamespace getSourceNamespace() {
+        return MappingsNamespace.OFFICIAL;
+    }
 
-	@Override
-	public void visit(MappingVisitor mappingVisitor) throws IOException {
-		// Populate named with intermediary and add Add a "named" namespace
-		MappingNsCompleter nsCompleter = new MappingNsCompleter(mappingVisitor, Collections.singletonMap(MappingsNamespace.NAMED.toString(), MappingsNamespace.INTERMEDIARY.toString()), true);
+    @Override
+    public void visit(MappingVisitor mappingVisitor) throws IOException {
+        // Populate named with intermediary and add Add a "named" namespace
+        MappingNsCompleter nsCompleter = new MappingNsCompleter(mappingVisitor,
+            Collections.singletonMap(MappingsNamespace.NAMED.toString(), MappingsNamespace.INTERMEDIARY.toString()),
+            true);
 
-		memoryMappingTree.get().accept(nsCompleter);
-	}
+        memoryMappingTree.get().accept(nsCompleter);
+    }
 }

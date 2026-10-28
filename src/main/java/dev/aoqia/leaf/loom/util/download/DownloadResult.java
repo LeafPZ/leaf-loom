@@ -42,5 +42,5 @@
 package dev.aoqia.leaf.loom.util.download;
 
 public interface DownloadResult {
-	boolean didDownload();
+    boolean didDownload();
 }

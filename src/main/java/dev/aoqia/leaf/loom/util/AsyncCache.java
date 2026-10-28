@@ -53,45 +53,42 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class AsyncCache<T> {
-	private static final Executor EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
-	private final Map<Object, CompletableFuture<T>> cache = new ConcurrentHashMap<>();
+    private static final Executor EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
-	public CompletableFuture<T> get(Object cacheKey, Supplier<T> supplier) {
-		return cache.computeIfAbsent(cacheKey, $ -> CompletableFuture.supplyAsync(supplier, EXECUTOR));
-	}
+    private final Map<Object, CompletableFuture<T>> cache = new ConcurrentHashMap<>();
 
-	public T getBlocking(Object cacheKey, Supplier<T> supplier) {
-		return join(get(cacheKey, supplier));
-	}
+    // Rethrows the exception from the CompletableFuture, if it exists.
+    public static <T> T join(CompletableFuture<T> future) {
+        try {
+            return future.join();
+        } catch (CompletionException e) {
+            sneakyThrow(e.getCause() != null ? e.getCause() : e);
+            throw new IllegalStateException();
+        }
+    }
 
-	public static <T> List<T> joinList(Collection<CompletableFuture<List<T>>> futures) {
-		return join(futures.stream()
-				.collect(CompletableFutureCollector.allOf()))
-				.stream()
-				.flatMap(List::stream)
-				.toList();
-	}
+    public static <T> List<T> joinList(Collection<CompletableFuture<List<T>>> futures) {
+        return join(futures.stream().collect(CompletableFutureCollector.allOf())).stream()
+            .flatMap(List::stream)
+            .toList();
+    }
 
-	public static <K, V> Map<K, V> joinMap(Map<K, CompletableFuture<V>> futures) {
-		return futures.entrySet().stream()
-			.collect(Collectors.toMap(
-					Map.Entry::getKey,
-					entry -> join(entry.getValue())
-			));
-	}
+    public static <K, V> Map<K, V> joinMap(Map<K, CompletableFuture<V>> futures) {
+        return futures.entrySet()
+            .stream()
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> join(entry.getValue())));
+    }
 
-	// Rethrows the exception from the CompletableFuture, if it exists.
-	public static <T> T join(CompletableFuture<T> future) {
-		try {
-			return future.join();
-		} catch (CompletionException e) {
-			sneakyThrow(e.getCause() != null ? e.getCause() : e);
-			throw new IllegalStateException();
-		}
-	}
+    @SuppressWarnings("unchecked")
+    private static <E extends Throwable> void sneakyThrow(Throwable e) throws E {
+        throw (E) e;
+    }
 
-	@SuppressWarnings("unchecked")
-	private static <E extends Throwable> void sneakyThrow(Throwable e) throws E {
-		throw (E) e;
-	}
+    public CompletableFuture<T> get(Object cacheKey, Supplier<T> supplier) {
+        return cache.computeIfAbsent(cacheKey, $ -> CompletableFuture.supplyAsync(supplier, EXECUTOR));
+    }
+
+    public T getBlocking(Object cacheKey, Supplier<T> supplier) {
+        return join(get(cacheKey, supplier));
+    }
 }

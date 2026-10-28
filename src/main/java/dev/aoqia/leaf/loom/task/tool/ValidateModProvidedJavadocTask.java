@@ -96,293 +96,342 @@ import dev.aoqia.leaf.loom.util.problem.ProblemReportingOptions;
  */
 @DisableCachingByDefault
 public abstract class ValidateModProvidedJavadocTask extends AbstractLoomTask {
-	private static final ProblemId MAPPINGS_CONTAIN_DST_NAMES = LoomProblems.problemId("mappings-contain-dst-names", "Mod-provided javadoc mapping file contains renames");
-	private static final ProblemId INCORRECT_MAPPING_SRC_NAME = LoomProblems.problemId("incorrect-mapping-src-name", "Mod-provided javadoc mapping file has an invalid source namespace");
-	private static final ProblemId MAPPING_PARSING_ERROR = LoomProblems.problemId("mapping-parsing-error", "Cannot parse mod-provided javadoc mapping file");
-	private static final ProblemId CODE_ELEMENT_MISSING = LoomProblems.problemId("code-element-missing", "Cannot find code element to document");
+    private static final ProblemId CODE_ELEMENT_MISSING = LoomProblems.problemId("code-element-missing",
+        "Cannot find code element to document");
 
-	/**
-	 * The mapping files to check.
-	 */
-	@InputFiles
-	@SkipWhenEmpty
-	@PathSensitive(PathSensitivity.NONE)
-	public abstract ConfigurableFileCollection getMappingFiles();
+    private static final ProblemId INCORRECT_MAPPING_SRC_NAME = LoomProblems.problemId("incorrect-mapping-src-name",
+        "Mod-provided javadoc mapping file has an invalid source namespace");
 
-	/**
-	 * The game jars. All targeted code elements will need to be in these jars.
-	 */
-	@Classpath
-	public abstract ConfigurableFileCollection getZomboidJars();
+    private static final ProblemId MAPPING_PARSING_ERROR = LoomProblems.problemId("mapping-parsing-error",
+        "Cannot parse mod-provided javadoc mapping file");
 
-	/**
-	 * The expected source namespaced for the mappings.
-	 */
-	@Input
-	public abstract Property<String> getExpectedNamespace();
+    private static final ProblemId MAPPINGS_CONTAIN_DST_NAMES = LoomProblems.problemId("mappings-contain-dst-names",
+        "Mod-provided javadoc mapping file contains renames");
 
-	@Nested
-	public ProblemReportingOptions getProblemReportingOptions() {
-		return problemReportingOptions;
-	}
+    private final ProblemReportingOptions problemReportingOptions;
 
-	@ApiStatus.Internal
-	@Inject
-	protected abstract Problems getProblems();
+    public ValidateModProvidedJavadocTask() {
+        getZomboidJars()
+            .convention(getExtension().getProductionNamespaceEnum().map(getExtension()::getZomboidJarsCollection));
+        getExpectedNamespace().convention(getExtension().getProductionNamespace());
+        problemReportingOptions = getProject().getObjects().newInstance(ProblemReportingOptions.class);
 
-	private final ProblemReportingOptions problemReportingOptions;
+        // Ignore outputs for up-to-date checks as there aren't any (so only inputs are checked)
+        getOutputs().upToDateWhen(task -> true);
+    }
 
-	public ValidateModProvidedJavadocTask() {
-		getZomboidJars().convention(getExtension().getProductionNamespaceEnum().map(getExtension()::getZomboidJarsCollection));
-		getExpectedNamespace().convention(getExtension().getProductionNamespace());
-		problemReportingOptions = getProject().getObjects().newInstance(ProblemReportingOptions.class);
+    /**
+     * The expected source namespaced for the mappings.
+     */
+    @Input
+    public abstract Property<String> getExpectedNamespace();
 
-		// Ignore outputs for up-to-date checks as there aren't any (so only inputs are checked)
-		getOutputs().upToDateWhen(task -> true);
-	}
+    /**
+     * The mapping files to check.
+     */
+    @InputFiles
+    @SkipWhenEmpty
+    @PathSensitive(PathSensitivity.NONE)
+    public abstract ConfigurableFileCollection getMappingFiles();
 
-	public void problemReportingOptions(Action<? super ProblemReportingOptions> action) {
-		action.execute(getProblemReportingOptions());
-	}
+    @Nested
+    public ProblemReportingOptions getProblemReportingOptions() {
+        return problemReportingOptions;
+    }
 
-	@TaskAction
-	protected void check() throws IOException {
-		final var reporter = new LoomProblemReporter(getProblems().getReporter(), getProblemReportingOptions());
-		final ErrorReporter errorReporter = (problemId, currentPath, details, cause) -> reporter.problem(problemId, builder -> {
-			builder.fileLocation(currentPath);
+    /**
+     * The game jars. All targeted code elements will need to be in these jars.
+     */
+    @Classpath
+    public abstract ConfigurableFileCollection getZomboidJars();
 
-			if (details != null) {
-				builder.details(details);
-			}
+    public void problemReportingOptions(Action<? super ProblemReportingOptions> action) {
+        action.execute(getProblemReportingOptions());
+    }
 
-			if (cause != null) {
-				builder.cause(cause);
-			}
-		});
+    @TaskAction
+    protected void check() throws IOException {
+        final var reporter = new LoomProblemReporter(getProblems().getReporter(), getProblemReportingOptions());
+        final ErrorReporter errorReporter = (problemId, currentPath, details, cause) -> reporter.problem(problemId,
+            builder -> {
+                builder.fileLocation(currentPath);
 
-		try (var validator = new Validator(errorReporter, getZomboidJars().getFiles())) {
-			for (File mappingFile : getMappingFiles()) {
-				validator.check(mappingFile.toPath(), getExpectedNamespace().get());
-			}
-		}
+                if (details != null) {
+                    builder.details(details);
+                }
 
-		reporter.reportAndThrow("Found issues in mod-provided javadoc");
-	}
+                if (cause != null) {
+                    builder.cause(cause);
+                }
+            });
 
-	@VisibleForTesting
-	@FunctionalInterface
-	public interface ErrorReporter {
-		void reportError(ProblemId problemId, Path currentPath, @Nullable String details, @Nullable Exception cause) throws IOException;
+        try (var validator = new Validator(errorReporter, getZomboidJars().getFiles())) {
+            for (File mappingFile : getMappingFiles()) {
+                validator.check(mappingFile.toPath(), getExpectedNamespace().get());
+            }
+        }
 
-		default void reportError(ProblemId problemId, Path currentPath, @Nullable String details) throws IOException {
-			reportError(problemId, currentPath, details, null);
-		}
-	}
+        reporter.reportAndThrow("Found issues in mod-provided javadoc");
+    }
 
-	@VisibleForTesting
-	public static final class Validator implements Closeable {
-		private final ErrorReporter errorReporter;
-		private final GameJarIndex jarIndex;
+    @ApiStatus.Internal
+    @Inject
+    protected abstract Problems getProblems();
 
-		public Validator(ErrorReporter errorReporter, Collection<File> targetJars) throws IOException {
-			this.errorReporter = errorReporter;
-			this.jarIndex = new GameJarIndex(targetJars);
-		}
+    @VisibleForTesting
+    @FunctionalInterface
+    public interface ErrorReporter {
+        default void reportError(ProblemId problemId, Path currentPath, @Nullable String details) throws IOException {
+            reportError(problemId, currentPath, details, null);
+        }
 
-		public void check(Path mappingFile, String expectedNamespace) throws IOException {
-			try {
-				final var structuralChecker = new StructuralChecker(jarIndex, errorReporter, mappingFile);
-				final MappingVisitor visitor = new MappingChecker(new FlatAsRegularMappingVisitor(structuralChecker), expectedNamespace, errorReporter, mappingFile);
-				MappingReader.read(mappingFile, visitor);
-			} catch (IOException e) {
-				errorReporter.reportError(MAPPING_PARSING_ERROR, mappingFile, "Cannot parse mappings, " + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
-			}
-		}
+        void reportError(ProblemId problemId, Path currentPath, @Nullable String details, @Nullable Exception cause)
+            throws IOException;
+    }
 
-		@Override
-		public void close() throws IOException {
-			jarIndex.close();
-		}
-	}
+    @VisibleForTesting
+    public static final class Validator implements Closeable {
+        private final ErrorReporter errorReporter;
+        private final GameJarIndex jarIndex;
 
-	private static final class GameJarIndex implements Closeable {
-		private final List<FileSystemUtil.Delegate> fileSystems;
-		private final Map<String, ClassNode> classNodes = new HashMap<>();
+        public Validator(ErrorReporter errorReporter, Collection<File> targetJars) throws IOException {
+            this.errorReporter = errorReporter;
+            this.jarIndex = new GameJarIndex(targetJars);
+        }
 
-		private GameJarIndex(Collection<File> files) throws IOException {
-			fileSystems = new ArrayList<>(files.size());
+        public void check(Path mappingFile, String expectedNamespace) throws IOException {
+            try {
+                final var structuralChecker = new StructuralChecker(jarIndex, errorReporter, mappingFile);
+                final MappingVisitor visitor = new MappingChecker(new FlatAsRegularMappingVisitor(structuralChecker),
+                    expectedNamespace, errorReporter, mappingFile);
+                MappingReader.read(mappingFile, visitor);
+            } catch (IOException e) {
+                errorReporter.reportError(MAPPING_PARSING_ERROR, mappingFile,
+                    "Cannot parse mappings, " + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
+            }
+        }
 
-			for (File file : files) {
-				fileSystems.add(FileSystemUtil.getJarFileSystem(file.toPath()));
-			}
-		}
+        @Override
+        public void close() throws IOException {
+            jarIndex.close();
+        }
+    }
 
-		public boolean classExists(String className) throws IOException {
-			if (classNodes.containsKey(className)) {
-				return true;
-			}
+    private static final class GameJarIndex implements Closeable {
+        private final Map<String, ClassNode> classNodes = new HashMap<>();
+        private final List<FileSystemUtil.Delegate> fileSystems;
 
-			for (FileSystemUtil.Delegate fileSystem : fileSystems) {
-				final Path classFile = fileSystem.getPath(className + ".class");
+        private GameJarIndex(Collection<File> files) throws IOException {
+            fileSystems = new ArrayList<>(files.size());
 
-				if (Files.exists(classFile)) {
-					final ClassNode node = new ClassNode();
-					final ClassReader cr = new ClassReader(Files.readAllBytes(classFile));
-					cr.accept(node, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-					classNodes.put(className, node);
-					return true;
-				}
-			}
+            for (File file : files) {
+                fileSystems.add(FileSystemUtil.getJarFileSystem(file.toPath()));
+            }
+        }
 
-			return false;
-		}
+        public boolean classExists(String className) throws IOException {
+            if (classNodes.containsKey(className)) {
+                return true;
+            }
 
-		public boolean fieldExists(String owner, String name, @Nullable String desc) throws IOException {
-			if (desc == null || !classExists(owner)) return false;
+            for (FileSystemUtil.Delegate fileSystem : fileSystems) {
+                final Path classFile = fileSystem.getPath(className + ".class");
 
-			for (FieldNode field : classNodes.get(owner).fields) {
-				if (name.equals(field.name) && desc.equals(field.desc)) {
-					return true;
-				}
-			}
+                if (Files.exists(classFile)) {
+                    final ClassNode node = new ClassNode();
+                    final ClassReader cr = new ClassReader(Files.readAllBytes(classFile));
+                    cr.accept(node, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+                    classNodes.put(className, node);
+                    return true;
+                }
+            }
 
-			return false;
-		}
+            return false;
+        }
 
-		public boolean methodExists(String owner, String name, @Nullable String desc) throws IOException {
-			if (desc == null || !classExists(owner)) return false;
+        @Override
+        public void close() throws IOException {
+            @Nullable
+            IOException suppressed = null;
 
-			for (MethodNode method : classNodes.get(owner).methods) {
-				if (name.equals(method.name) && desc.equals(method.desc)) {
-					return true;
-				}
-			}
+            for (FileSystemUtil.Delegate fs : fileSystems) {
+                try {
+                    fs.close();
+                } catch (IOException e) {
+                    if (suppressed != null) {
+                        suppressed.addSuppressed(e);
+                    } else {
+                        suppressed = e;
+                    }
+                }
+            }
 
-			return false;
-		}
+            if (suppressed != null) {
+                throw suppressed;
+            }
+        }
 
-		@Override
-		public void close() throws IOException {
-			@Nullable IOException suppressed = null;
+        public boolean fieldExists(String owner, String name, @Nullable String desc) throws IOException {
+            if (desc == null || !classExists(owner)) {
+                return false;
+            }
 
-			for (FileSystemUtil.Delegate fs : fileSystems) {
-				try {
-					fs.close();
-				} catch (IOException e) {
-					if (suppressed != null) {
-						suppressed.addSuppressed(e);
-					} else {
-						suppressed = e;
-					}
-				}
-			}
+            for (FieldNode field : classNodes.get(owner).fields) {
+                if (name.equals(field.name) && desc.equals(field.desc)) {
+                    return true;
+                }
+            }
 
-			if (suppressed != null) {
-				throw suppressed;
-			}
-		}
-	}
+            return false;
+        }
 
-	private static final class MappingChecker extends ForwardingMappingVisitor {
-		private final String expectedNamespace;
-		private final ErrorReporter errorReporter;
-		private final Path currentPath;
+        public boolean methodExists(String owner, String name, @Nullable String desc) throws IOException {
+            if (desc == null || !classExists(owner)) {
+                return false;
+            }
 
-		private MappingChecker(MappingVisitor next, String expectedNamespace, ErrorReporter errorReporter, Path currentPath) {
-			super(next);
-			this.expectedNamespace = expectedNamespace;
-			this.errorReporter = errorReporter;
-			this.currentPath = currentPath;
-		}
+            for (MethodNode method : classNodes.get(owner).methods) {
+                if (name.equals(method.name) && desc.equals(method.desc)) {
+                    return true;
+                }
+            }
 
-		@Override
-		public void visitNamespaces(String srcNamespace, List<String> dstNamespaces) throws IOException {
-			if (!expectedNamespace.equals(srcNamespace) && !MappingUtil.NS_SOURCE_FALLBACK.equals(srcNamespace)) {
-				errorReporter.reportError(INCORRECT_MAPPING_SRC_NAME, currentPath, "Expected %s or %s for the source namespace, but found %s.".formatted(expectedNamespace, MappingUtil.NS_SOURCE_FALLBACK, srcNamespace));
-			}
+            return false;
+        }
+    }
 
-			super.visitNamespaces(srcNamespace, dstNamespaces);
-		}
+    private static final class MappingChecker extends ForwardingMappingVisitor {
+        private final Path currentPath;
+        private final ErrorReporter errorReporter;
+        private final String expectedNamespace;
 
-		@Override
-		public void visitDstName(MappedElementKind targetKind, int namespace, String name) throws IOException {
-			errorReporter.reportError(MAPPINGS_CONTAIN_DST_NAMES, currentPath, "These mappings cannot contain any destination names. They can only contain javadoc.");
-		}
-	}
+        private MappingChecker(MappingVisitor next, String expectedNamespace, ErrorReporter errorReporter,
+            Path currentPath)
+        {
+            super(next);
+            this.expectedNamespace = expectedNamespace;
+            this.errorReporter = errorReporter;
+            this.currentPath = currentPath;
+        }
 
-	private static final class StructuralChecker implements FlatMappingVisitor {
-		private final GameJarIndex jarIndex;
-		private final ErrorReporter errorReporter;
-		private final Path currentPath;
+        @Override
+        public void visitDstName(MappedElementKind targetKind, int namespace, String name) throws IOException {
+            errorReporter.reportError(MAPPINGS_CONTAIN_DST_NAMES, currentPath,
+                "These mappings cannot contain any destination names. They can only contain javadoc.");
+        }
 
-		private StructuralChecker(GameJarIndex jarIndex, ErrorReporter errorReporter, Path currentPath) {
-			this.jarIndex = jarIndex;
-			this.errorReporter = errorReporter;
-			this.currentPath = currentPath;
-		}
+        @Override
+        public void visitNamespaces(String srcNamespace, List<String> dstNamespaces) throws IOException {
+            if (!expectedNamespace.equals(srcNamespace) && !MappingUtil.NS_SOURCE_FALLBACK.equals(srcNamespace)) {
+                errorReporter.reportError(INCORRECT_MAPPING_SRC_NAME, currentPath,
+                    "Expected %s or %s for the source namespace, but found %s.".formatted(expectedNamespace,
+                        MappingUtil.NS_SOURCE_FALLBACK, srcNamespace));
+            }
 
-		@Override
-		public void visitNamespaces(String srcNamespace, List<String> dstNamespaces) {
-		}
+            super.visitNamespaces(srcNamespace, dstNamespaces);
+        }
+    }
 
-		@Override
-		public boolean visitClass(String srcName, @Nullable String @Nullable [] dstNames) {
-			return true;
-		}
+    private record StructuralChecker(GameJarIndex jarIndex, ErrorReporter errorReporter, Path currentPath)
+        implements FlatMappingVisitor
+    {
+        @Override
+        public void visitNamespaces(String srcNamespace, List<String> dstNamespaces) {
+        }
 
-		@Override
-		public void visitClassComment(String srcName, @Nullable String @Nullable [] dstNames, String comment) throws IOException {
-			if (!jarIndex.classExists(srcName)) {
-				errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath, "Class " + srcName + " does not exist");
-			}
-		}
+        @Override
+        public boolean visitClass(String srcName, @Nullable String @Nullable [] dstNames) {
+            return true;
+        }
 
-		@Override
-		public boolean visitField(String srcClsName, String srcName, @Nullable String srcDesc, @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstNames, @Nullable String @Nullable [] dstDescs) {
-			return true;
-		}
+        @Override
+        public void visitClassComment(String srcName, @Nullable String @Nullable [] dstNames, String comment)
+            throws IOException
+        {
+            if (!jarIndex.classExists(srcName)) {
+                errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath, "Class " + srcName + " does not exist");
+            }
+        }
 
-		@Override
-		public void visitFieldComment(String srcClsName, String srcName, @Nullable String srcDesc, @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstNames, @Nullable String @Nullable [] dstDescs, String comment) throws IOException {
-			if (!jarIndex.fieldExists(srcClsName, srcName, srcDesc)) {
-				errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath, "Field %s.%s:%s does not exist".formatted(srcClsName, srcName, srcDesc));
-			}
-		}
+        @Override
+        public boolean visitField(String srcClsName, String srcName, @Nullable String srcDesc,
+            @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstNames,
+            @Nullable String @Nullable [] dstDescs)
+        {
+            return true;
+        }
 
-		@Override
-		public boolean visitMethod(String srcClsName, String srcName, @Nullable String srcDesc, @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstNames, @Nullable String @Nullable [] dstDescs) {
-			return true;
-		}
+        @Override
+        public void visitFieldComment(String srcClsName, String srcName, @Nullable String srcDesc,
+            @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstNames,
+            @Nullable String @Nullable [] dstDescs, String comment) throws IOException
+        {
+            if (!jarIndex.fieldExists(srcClsName, srcName, srcDesc)) {
+                errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath,
+                    "Field %s.%s:%s does not exist".formatted(srcClsName, srcName, srcDesc));
+            }
+        }
 
-		@Override
-		public void visitMethodComment(String srcClsName, String srcName, @Nullable String srcDesc, @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstNames, @Nullable String @Nullable [] dstDescs, String comment) throws IOException {
-			if (!jarIndex.methodExists(srcClsName, srcName, srcDesc)) {
-				errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath, "Method %s.%s%s does not exist".formatted(srcClsName, srcName, srcDesc));
-			}
-		}
+        @Override
+        public boolean visitMethod(String srcClsName, String srcName, @Nullable String srcDesc,
+            @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstNames,
+            @Nullable String @Nullable [] dstDescs)
+        {
+            return true;
+        }
 
-		@Override
-		public boolean visitMethodArg(String srcClsName, String srcMethodName, @Nullable String srcMethodDesc, int argPosition, int lvIndex, @Nullable String srcName, @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstMethodNames, @Nullable String @Nullable [] dstMethodDescs, String[] dstNames) {
-			return true;
-		}
+        @Override
+        public void visitMethodComment(String srcClsName, String srcName, @Nullable String srcDesc,
+            @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstNames,
+            @Nullable String @Nullable [] dstDescs, String comment) throws IOException
+        {
+            if (!jarIndex.methodExists(srcClsName, srcName, srcDesc)) {
+                errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath,
+                    "Method %s.%s%s does not exist".formatted(srcClsName, srcName, srcDesc));
+            }
+        }
 
-		@Override
-		public void visitMethodArgComment(String srcClsName, String srcMethodName, @Nullable String srcMethodDesc, int argPosition, int lvIndex, @Nullable String srcName, @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstMethodNames, @Nullable String @Nullable [] dstMethodDescs, @Nullable String @Nullable [] dstNames, String comment) throws IOException {
-			if (!jarIndex.methodExists(srcClsName, srcMethodName, srcMethodDesc)) {
-				errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath, "Method %s.%s%s does not exist".formatted(srcClsName, srcMethodName, srcMethodDesc));
-			}
-		}
+        @Override
+        public boolean visitMethodArg(String srcClsName, String srcMethodName, @Nullable String srcMethodDesc,
+            int argPosition, int lvIndex, @Nullable String srcName, @Nullable String @Nullable [] dstClsNames,
+            @Nullable String @Nullable [] dstMethodNames, @Nullable String @Nullable [] dstMethodDescs,
+            String[] dstNames)
+        {
+            return true;
+        }
 
-		@Override
-		public boolean visitMethodVar(String srcClsName, String srcMethodName, @Nullable String srcMethodDesc, int lvtRowIndex, int lvIndex, int startOpIdx, int endOpIdx, @Nullable String srcName, @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstMethodNames, @Nullable String @Nullable [] dstMethodDescs, String[] dstNames) {
-			return true;
-		}
+        @Override
+        public void visitMethodArgComment(String srcClsName, String srcMethodName, @Nullable String srcMethodDesc,
+            int argPosition, int lvIndex, @Nullable String srcName, @Nullable String @Nullable [] dstClsNames,
+            @Nullable String @Nullable [] dstMethodNames, @Nullable String @Nullable [] dstMethodDescs,
+            @Nullable String @Nullable [] dstNames, String comment) throws IOException
+        {
+            if (!jarIndex.methodExists(srcClsName, srcMethodName, srcMethodDesc)) {
+                errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath,
+                    "Method %s.%s%s does not exist".formatted(srcClsName, srcMethodName, srcMethodDesc));
+            }
+        }
 
-		@Override
-		public void visitMethodVarComment(String srcClsName, String srcMethodName, @Nullable String srcMethodDesc, int lvtRowIndex, int lvIndex, int startOpIdx, int endOpIdx, @Nullable String srcName, @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstMethodNames, @Nullable String @Nullable [] dstMethodDescs, @Nullable String @Nullable [] dstNames, String comment) throws IOException {
-			if (!jarIndex.methodExists(srcClsName, srcMethodName, srcMethodDesc)) {
-				errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath, "Method %s.%s%s does not exist".formatted(srcClsName, srcMethodName, srcMethodDesc));
-			}
-		}
-	}
+        @Override
+        public boolean visitMethodVar(String srcClsName, String srcMethodName, @Nullable String srcMethodDesc,
+            int lvtRowIndex, int lvIndex, int startOpIdx, int endOpIdx, @Nullable String srcName,
+            @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstMethodNames,
+            @Nullable String @Nullable [] dstMethodDescs, String[] dstNames)
+        {
+            return true;
+        }
+
+        @Override
+        public void visitMethodVarComment(String srcClsName, String srcMethodName, @Nullable String srcMethodDesc,
+            int lvtRowIndex, int lvIndex, int startOpIdx, int endOpIdx, @Nullable String srcName,
+            @Nullable String @Nullable [] dstClsNames, @Nullable String @Nullable [] dstMethodNames,
+            @Nullable String @Nullable [] dstMethodDescs, @Nullable String @Nullable [] dstNames, String comment)
+            throws IOException
+        {
+            if (!jarIndex.methodExists(srcClsName, srcMethodName, srcMethodDesc)) {
+                errorReporter.reportError(CODE_ELEMENT_MISSING, currentPath,
+                    "Method %s.%s%s does not exist".formatted(srcClsName, srcMethodName, srcMethodDesc));
+            }
+        }
+    }
 }

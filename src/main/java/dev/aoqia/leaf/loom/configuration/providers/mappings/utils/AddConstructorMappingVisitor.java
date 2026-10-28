@@ -54,49 +54,49 @@ import net.fabricmc.mappingio.adapter.ForwardingMappingVisitor;
  * as long as the source name is {@code <init>} and the destination mapping is null.
  */
 public class AddConstructorMappingVisitor extends ForwardingMappingVisitor {
-	private boolean inConstructor;
-	private boolean[] namespaceVisited;
+    private boolean inConstructor;
+    private boolean[] namespaceVisited;
 
-	public AddConstructorMappingVisitor(MappingVisitor next) {
-		super(next);
-	}
+    public AddConstructorMappingVisitor(MappingVisitor next) {
+        super(next);
+    }
 
-	@Override
-	public void visitNamespaces(String srcNamespace, List<String> dstNamespaces) throws IOException {
-		namespaceVisited = new boolean[dstNamespaces.size()];
-		super.visitNamespaces(srcNamespace, dstNamespaces);
-	}
+    @Override
+    public void visitDstName(MappedElementKind targetKind, int namespace, String name) throws IOException {
+        namespaceVisited[namespace] = true;
+        super.visitDstName(targetKind, namespace, name);
+    }
 
-	@Override
-	public boolean visitMethod(String srcName, String srcDesc) throws IOException {
-		if ("<init>".equals(srcName)) {
-			inConstructor = true;
-			Arrays.fill(namespaceVisited, false);
-		} else {
-			inConstructor = false;
-		}
+    @Override
+    public boolean visitElementContent(MappedElementKind targetKind) throws IOException {
+        if (inConstructor) {
+            inConstructor = false;
 
-		return super.visitMethod(srcName, srcDesc);
-	}
+            for (int i = 0; i < namespaceVisited.length; i++) {
+                if (!namespaceVisited[i]) {
+                    visitDstName(targetKind, i, "<init>");
+                }
+            }
+        }
 
-	@Override
-	public boolean visitElementContent(MappedElementKind targetKind) throws IOException {
-		if (inConstructor) {
-			inConstructor = false;
+        return super.visitElementContent(targetKind);
+    }
 
-			for (int i = 0; i < namespaceVisited.length; i++) {
-				if (!namespaceVisited[i]) {
-					visitDstName(targetKind, i, "<init>");
-				}
-			}
-		}
+    @Override
+    public boolean visitMethod(String srcName, String srcDesc) throws IOException {
+        if ("<init>".equals(srcName)) {
+            inConstructor = true;
+            Arrays.fill(namespaceVisited, false);
+        } else {
+            inConstructor = false;
+        }
 
-		return super.visitElementContent(targetKind);
-	}
+        return super.visitMethod(srcName, srcDesc);
+    }
 
-	@Override
-	public void visitDstName(MappedElementKind targetKind, int namespace, String name) throws IOException {
-		namespaceVisited[namespace] = true;
-		super.visitDstName(targetKind, namespace, name);
-	}
+    @Override
+    public void visitNamespaces(String srcNamespace, List<String> dstNamespaces) throws IOException {
+        namespaceVisited = new boolean[dstNamespaces.size()];
+        super.visitNamespaces(srcNamespace, dstNamespaces);
+    }
 }

@@ -63,77 +63,71 @@ import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.util.download.DownloadException;
 
 public record CertificateRevocationList(Collection<X509CRL> crls, boolean downloadFailure) {
-	/**
-	 * Hardcoded CRLs for Mojang's certificate, we don't want to add a large dependency just to parse this each time.
-	 */
-	public static final List<String> CSC3_2010 = List.of(
-			"http://crl.verisign.com/pca3-g5.crl",
-			"http://crl.verisign.com/pca3.crl",
-			"http://csc3-2010-crl.verisign.com/CSC3-2010.crl"
-	);
+    /**
+     * Hardcoded CRLs for Mojang's certificate, we don't want to add a large dependency just to parse this each time.
+     */
+    public static final List<String> CSC3_2010 = List.of("http://crl.verisign.com/pca3-g5.crl",
+        "http://crl.verisign.com/pca3.crl", "http://csc3-2010-crl.verisign.com/CSC3-2010.crl");
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(CertificateRevocationList.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(CertificateRevocationList.class);
 
-	/**
-	 * Attempt to download the CRL from the given URL, if we fail to get it its not the end of the world.
-	 */
-	public static CertificateRevocationList create(Project project, List<String> urls) throws IOException {
-		List<X509CRL> crls = new ArrayList<>();
+    /**
+     * Attempt to download the CRL from the given URL, if we fail to get it its not the end of the world.
+     */
+    public static CertificateRevocationList create(Project project, List<String> urls) throws IOException {
+        List<X509CRL> crls = new ArrayList<>();
 
-		boolean downloadFailure = false;
+        boolean downloadFailure = false;
 
-		for (String url : urls) {
-			try {
-				crls.add(download(project, url));
-			} catch (DownloadException e) {
-				LOGGER.info("Failed to download CRL from {}: {}", url, e.getMessage());
-				LOGGER.info("Loom will not be able to verify the integrity of the minecraft jar signature");
-				downloadFailure = true;
-			}
-		}
+        for (String url : urls) {
+            try {
+                crls.add(download(project, url));
+            } catch (DownloadException e) {
+                LOGGER.info("Failed to download CRL from {}: {}", url, e.getMessage());
+                LOGGER.info("Loom will not be able to verify the integrity of the minecraft jar signature");
+                downloadFailure = true;
+            }
+        }
 
-		return new CertificateRevocationList(crls, downloadFailure);
-	}
+        return new CertificateRevocationList(crls, downloadFailure);
+    }
 
-	static X509CRL download(Project project, String url) throws IOException {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final String name = url.substring(url.lastIndexOf('/') + 1);
-		final Path path = extension.getFiles().getUserCache().toPath()
-				.resolve("crl")
-				.resolve(name);
+    static X509CRL download(Project project, String url) throws IOException {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final String name = url.substring(url.lastIndexOf('/') + 1);
+        final Path path = extension.getFiles().getUserCache().toPath().resolve("crl").resolve(name);
 
-		LOGGER.info("Downloading CRL from {} to {}", url, path);
+        LOGGER.info("Downloading CRL from {} to {}", url, path);
 
-		extension.download(url)
-				.allowInsecureProtocol()
-				.maxAge(Duration.ofDays(7)) // Cache the CRL for a week
-				.downloadPath(path);
+        extension.download(url).allowInsecureProtocol().maxAge(Duration.ofDays(7)).downloadPath(path);
 
-		return parse(path);
-	}
+        return parse(path);
+    }
 
-	static X509CRL parse(Path path) throws IOException {
-		try (InputStream inStream = Files.newInputStream(path)) {
-			CertificateFactory cf = CertificateFactory.getInstance("X.509");
-			return (X509CRL) cf.generateCRL(inStream);
-		} catch (CRLException | CertificateException e) {
-			throw new RuntimeException(e);
-		}
-	}
+    static X509CRL parse(Path path) throws IOException {
+        try (InputStream inStream = Files.newInputStream(path)) {
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            return (X509CRL) cf.generateCRL(inStream);
+        } catch (CRLException | CertificateException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
-	/**
-	 * Verify that none of the certs in the chain are revoked.
-	 * @throws SignatureVerificationFailure if the certificate is revoked
-	 */
-	public void verify(CertificateChain certificateChain) throws SignatureVerificationFailure {
-		CertificateChain.visitAll(certificateChain, this::verify);
-	}
+    /**
+     * Verify that none of the certs in the chain are revoked.
+     *
+     * @throws SignatureVerificationFailure if the certificate is revoked
+     */
+    public void verify(CertificateChain certificateChain) throws SignatureVerificationFailure {
+        CertificateChain.visitAll(certificateChain, this::verify);
+    }
 
-	private void verify(X509Certificate certificate) throws SignatureVerificationFailure {
-		for (X509CRL crl : crls) {
-			if (crl.isRevoked(certificate)) {
-				throw new SignatureVerificationFailure("Certificate " + certificate.getSubjectX500Principal().getName() + " is revoked");
-			}
-		}
-	}
+    private void verify(X509Certificate certificate) throws SignatureVerificationFailure {
+        for (X509CRL crl : crls) {
+            if (crl.isRevoked(certificate)) {
+                throw new SignatureVerificationFailure(
+                    "Certificate " + certificate.getSubjectX500Principal().getName() + " is revoked");
+            }
+        }
+    }
 }

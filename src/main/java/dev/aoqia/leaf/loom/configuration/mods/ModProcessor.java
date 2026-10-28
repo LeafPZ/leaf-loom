@@ -90,208 +90,218 @@ import dev.aoqia.leaf.loom.util.kotlin.KotlinRemapperClassloader;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 public class ModProcessor {
-	private static final String toM = MappingsNamespace.NAMED.toString();
+    private static final Pattern COPY_CONFIGURATION_PATTERN = Pattern.compile("^(.+)Copy[0-9]*$");
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(ModProcessor.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModProcessor.class);
 
-	private static final Pattern COPY_CONFIGURATION_PATTERN = Pattern.compile("^(.+)Copy[0-9]*$");
+    private static final String toM = MappingsNamespace.NAMED.toString();
 
-	private final Project project;
-	private final Provider<? extends Configuration> sourceConfiguration;
-	private final ServiceFactory serviceFactory;
+    private final Project project;
+    private final ServiceFactory serviceFactory;
+    private final Provider<? extends Configuration> sourceConfiguration;
 
-	public ModProcessor(Project project, Provider<? extends Configuration> sourceConfiguration, ServiceFactory serviceFactory) {
-		this.project = project;
-		this.sourceConfiguration = sourceConfiguration;
-		this.serviceFactory = serviceFactory;
-	}
+    public ModProcessor(Project project, Provider<? extends Configuration> sourceConfiguration,
+        ServiceFactory serviceFactory)
+    {
+        this.project = project;
+        this.sourceConfiguration = sourceConfiguration;
+        this.serviceFactory = serviceFactory;
+    }
 
-	public void processMods(List<ModDependency> remapList) throws IOException {
-		try {
-			LOGGER.info(":remapping {} mods from {}", remapList.size(), describeConfiguration(sourceConfiguration));
-			remapJars(remapList);
-		} catch (Exception e) {
-			throw new RuntimeException(String.format(Locale.ENGLISH, "Failed to remap %d mods", remapList.size()), e);
-		}
-	}
+    public void processMods(List<ModDependency> remapList) throws IOException {
+        try {
+            LOGGER.info(":remapping {} mods from {}", remapList.size(), describeConfiguration(sourceConfiguration));
+            remapJars(remapList);
+        } catch (Exception e) {
+            throw new RuntimeException(String.format(Locale.ENGLISH, "Failed to remap %d mods", remapList.size()), e);
+        }
+    }
 
-	// Creates a human-readable descriptive string for the configuration.
-	// This consists primarily of the name with any copy suffixes stripped
-	// (they're not informative), and the usage attribute if present.
-	private String describeConfiguration(Provider<? extends Configuration> configuration) {
-		String description = configuration.get().getName();
-		final Matcher copyMatcher = COPY_CONFIGURATION_PATTERN.matcher(description);
+    // Creates a human-readable descriptive string for the configuration.
+    // This consists primarily of the name with any copy suffixes stripped
+    // (they're not informative), and the usage attribute if present.
+    private String describeConfiguration(Provider<? extends Configuration> configuration) {
+        String description = configuration.get().getName();
+        final Matcher copyMatcher = COPY_CONFIGURATION_PATTERN.matcher(description);
 
-		// If we find a copy suffix, remove it.
-		if (copyMatcher.matches()) {
-			final String realName = copyMatcher.group(1);
+        // If we find a copy suffix, remove it.
+        if (copyMatcher.matches()) {
+            final String realName = copyMatcher.group(1);
 
-			// It's only a copy if we find a non-copy version.
-			if (project.getConfigurations().findByName(realName) != null) {
-				description = realName;
-			}
-		}
+            // It's only a copy if we find a non-copy version.
+            if (project.getConfigurations().findByName(realName) != null) {
+                description = realName;
+            }
+        }
 
-		// Add the usage if present, e.g. "modImplementation (java-api)"
-		final Usage usage = configuration.get().getAttributes().getAttribute(Usage.USAGE_ATTRIBUTE);
+        // Add the usage if present, e.g. "modImplementation (java-api)"
+        final Usage usage = configuration.get().getAttributes().getAttribute(Usage.USAGE_ATTRIBUTE);
 
-		if (usage != null) {
-			description += " (" + usage.getName() + ")";
-		}
+        if (usage != null) {
+            description += " (" + usage.getName() + ")";
+        }
 
-		return description;
-	}
+        return description;
+    }
 
-	private void stripNestedJars(Path path) {
-		// Strip out all contained jar info as we dont want loader to try and load the jars contained in dev.
-		try {
-			ZipUtils.transformJson(JsonObject.class, path, Map.of("leaf.mod.json", json -> {
-				json.remove("jars");
-				return json;
-			}));
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to strip nested jars from %s".formatted(path), e);
-		}
-	}
+    private Path getRemappedOutput(ModDependency dependency) {
+        return dependency.getWorkingFile(project, null);
+    }
 
-	private void remapJars(List<ModDependency> remapList) throws IOException {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final MappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
+    private void remapJarManifestEntries(Path jar) throws IOException {
+        ZipUtils.transform(jar, Map.of(Constants.Manifest.PATH, bytes -> {
+            var manifest = new Manifest(new ByteArrayInputStream(bytes));
 
-		MappingsNamespace productionNamespace = extension.getProductionNamespaceEnum().get();
+            manifest.getMainAttributes().putValue(Constants.Manifest.MAPPING_NAMESPACE, toM);
 
-		Set<String> knownIndyBsms = new HashSet<>(extension.getKnownIndyBsms().get());
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            manifest.write(out);
+            return out.toByteArray();
+        }));
+    }
 
-		for (ModDependency modDependency : remapList) {
-			knownIndyBsms.addAll(modDependency.getMetadata().knownIdyBsms());
-		}
+    private void remapJars(List<ModDependency> remapList) throws IOException {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final MappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
 
-		TinyRemapper.Builder builder = TinyRemapper.newRemapper(TinyRemapperLoggerAdapter.INSTANCE)
-				.withKnownIndyBsm(knownIndyBsms)
-				.withMappings(TinyRemapperHelper.create(mappingConfiguration.getMappingsService(project, serviceFactory).getMappingTree(), productionNamespace.toString(), toM, true))
-				.renameInvalidLocals(false)
-				.extraAnalyzeVisitor(AccessWidenerAnalyzeVisitorProvider.createFromMods(productionNamespace.toString(), remapList));
+        MappingsNamespace productionNamespace = extension.getProductionNamespaceEnum().get();
 
-		final KotlinClasspathService kotlinClasspathService = serviceFactory.getOrNull(KotlinClasspathService.createOptions(project));
-		KotlinRemapperClassloader kotlinRemapperClassloader = null;
+        Set<String> knownIndyBsms = new HashSet<>(extension.getKnownIndyBsms().get());
 
-		if (kotlinClasspathService != null) {
-			kotlinRemapperClassloader = KotlinRemapperClassloader.create(kotlinClasspathService);
-			builder.extension(kotlinRemapperClassloader.getTinyRemapperExtension());
-		}
+        for (ModDependency modDependency : remapList) {
+            knownIndyBsms.addAll(modDependency.getMetadata().knownIdyBsms());
+        }
 
-		final IdentityBiMap<InputTag, ModDependency> inputTags = new IdentityBiMap<>();
-		final List<ModProcessorExtension> activeExtensions = ModProcessorExtension.EXTENSIONS.stream()
-				.filter(e -> remapList.stream().anyMatch(e::appliesTo))
-				.toList();
-		final ModProcessorExtension.Context context = new ModProcessorExtension.Context(productionNamespace.toString(), toM, remapList);
+        TinyRemapper.Builder builder = TinyRemapper.newRemapper(TinyRemapperLoggerAdapter.INSTANCE)
+            .withKnownIndyBsm(knownIndyBsms)
+            .withMappings(TinyRemapperHelper.create(
+                mappingConfiguration.getMappingsService(project, serviceFactory).getMappingTree(),
+                productionNamespace.toString(), toM, true))
+            .renameInvalidLocals(false)
+            .extraAnalyzeVisitor(
+                AccessWidenerAnalyzeVisitorProvider.createFromMods(productionNamespace.toString(), remapList));
 
-		for (ModProcessorExtension modProcessorExtension : activeExtensions) {
-			LOGGER.info("Applying mod processor extension: {}", modProcessorExtension.getClass().getSimpleName());
+        final KotlinClasspathService kotlinClasspathService = serviceFactory
+            .getOrNull(KotlinClasspathService.createOptions(project));
+        KotlinRemapperClassloader kotlinRemapperClassloader = null;
 
-			final Predicate<InputTag> applyPredicate = inputTag -> {
-				ModDependency mod = inputTags.getByKey(inputTag);
-				return mod != null && modProcessorExtension.appliesTo(mod);
-			};
+        if (kotlinClasspathService != null) {
+            kotlinRemapperClassloader = KotlinRemapperClassloader.create(kotlinClasspathService);
+            builder.extension(kotlinRemapperClassloader.getTinyRemapperExtension());
+        }
 
-			builder.extension(modProcessorExtension.createExtension(context, applyPredicate));
-		}
+        final IdentityBiMap<InputTag, ModDependency> inputTags = new IdentityBiMap<>();
+        final List<ModProcessorExtension> activeExtensions = ModProcessorExtension.EXTENSIONS.stream()
+            .filter(e -> remapList.stream().anyMatch(e::appliesTo))
+            .toList();
+        final ModProcessorExtension.Context context = new ModProcessorExtension.Context(productionNamespace.toString(),
+            toM, remapList);
 
-		for (RemapperExtensionHolder holder : extension.getRemapperExtensions().get()) {
-			holder.apply(builder, productionNamespace.toString(), toM);
-		}
+        for (ModProcessorExtension modProcessorExtension : activeExtensions) {
+            LOGGER.info("Applying mod processor extension: {}", modProcessorExtension.getClass().getSimpleName());
 
-		final TinyRemapper remapper = builder.build();
+            final Predicate<InputTag> applyPredicate = inputTag -> {
+                ModDependency mod = inputTags.getByKey(inputTag);
+                return mod != null && modProcessorExtension.appliesTo(mod);
+            };
 
-		remapper.readClassPath(extension.getZomboidJars(productionNamespace).toArray(Path[]::new));
+            builder.extension(modProcessorExtension.createExtension(context, applyPredicate));
+        }
 
-		final Map<ModDependency, OutputConsumerPath> outputConsumerMap = new HashMap<>();
-		final Map<ModDependency, Pair<byte[], String>> accessWidenerMap = new HashMap<>();
+        for (RemapperExtensionHolder holder : extension.getRemapperExtensions().get()) {
+            holder.apply(builder, productionNamespace.toString(), toM);
+        }
 
-		for (RemapConfigurationSettings entry : extension.getRemapConfigurations()) {
-			for (File inputFile : entry.getSourceConfiguration().get().getFiles()) {
-				if (remapList.stream().noneMatch(info -> info.getInputFile().toFile().equals(inputFile))) {
-					LOGGER.debug("Adding " + inputFile + " onto the remap classpath");
-					remapper.readClassPathAsync(inputFile.toPath());
-				}
-			}
-		}
+        final TinyRemapper remapper = builder.build();
 
-		for (ModDependency info : remapList) {
-			InputTag tag = remapper.createInputTag();
+        remapper.readClassPath(extension.getZomboidJars(productionNamespace).toArray(Path[]::new));
 
-			LOGGER.debug("Adding " + info.getInputFile() + " as a remap input");
-			inputTags.put(tag, info);
+        final Map<ModDependency, OutputConsumerPath> outputConsumerMap = new HashMap<>();
+        final Map<ModDependency, Pair<byte[], String>> accessWidenerMap = new HashMap<>();
 
-			remapper.readInputsAsync(tag, info.getInputFile());
-			Files.deleteIfExists(getRemappedOutput(info));
-		}
+        for (RemapConfigurationSettings entry : extension.getRemapConfigurations()) {
+            for (File inputFile : entry.getSourceConfiguration().get().getFiles()) {
+                if (remapList.stream().noneMatch(info -> info.getInputFile().toFile().equals(inputFile))) {
+                    LOGGER.debug("Adding " + inputFile + " onto the remap classpath");
+                    remapper.readClassPathAsync(inputFile.toPath());
+                }
+            }
+        }
 
-		try {
-			// Apply this in a second loop as we need to ensure all the inputs are on the classpath before remapping.
-			for (ModDependency dependency : remapList) {
-				try {
-					OutputConsumerPath outputConsumer = new OutputConsumerPath.Builder(getRemappedOutput(dependency)).build();
+        for (ModDependency info : remapList) {
+            InputTag tag = remapper.createInputTag();
 
-					outputConsumer.addNonClassFiles(dependency.getInputFile(), NonClassCopyMode.FIX_META_INF, remapper);
-					outputConsumerMap.put(dependency, outputConsumer);
+            LOGGER.debug("Adding " + info.getInputFile() + " as a remap input");
+            inputTags.put(tag, info);
 
-					final AccessWidenerUtils.AccessWidenerData accessWidenerData = AccessWidenerUtils.readAccessWidenerData(dependency.getInputFile());
+            remapper.readInputsAsync(tag, info.getInputFile());
+            Files.deleteIfExists(getRemappedOutput(info));
+        }
 
-					if (accessWidenerData != null) {
-						LOGGER.debug("Remapping access widener in {}", dependency.getInputFile());
-						byte[] remappedAw = AccessWidenerUtils.remapAccessWidener(accessWidenerData.content(), remapper.getEnvironment().getRemapper(), productionNamespace.toString(), toM);
-						accessWidenerMap.put(dependency, new Pair<>(remappedAw, accessWidenerData.path()));
-					}
+        try {
+            // Apply this in a second loop as we need to ensure all the inputs are on the classpath before remapping.
+            for (ModDependency dependency : remapList) {
+                try {
+                    OutputConsumerPath outputConsumer = new OutputConsumerPath.Builder(getRemappedOutput(dependency))
+                        .build();
 
-					remapper.apply(outputConsumer, inputTags.getByValue(dependency));
-				} catch (Exception e) {
-					throw new RuntimeException("Failed to remap: " + dependency, e);
-				}
-			}
-		} finally {
-			remapper.finish();
+                    outputConsumer.addNonClassFiles(dependency.getInputFile(), NonClassCopyMode.FIX_META_INF, remapper);
+                    outputConsumerMap.put(dependency, outputConsumer);
 
-			if (kotlinRemapperClassloader != null) {
-				kotlinRemapperClassloader.close();
-			}
-		}
+                    final AccessWidenerUtils.AccessWidenerData accessWidenerData = AccessWidenerUtils
+                        .readAccessWidenerData(dependency.getInputFile());
 
-		for (ModDependency dependency : remapList) {
-			outputConsumerMap.get(dependency).close();
+                    if (accessWidenerData != null) {
+                        LOGGER.debug("Remapping access widener in {}", dependency.getInputFile());
+                        byte[] remappedAw = AccessWidenerUtils.remapAccessWidener(accessWidenerData.content(),
+                            remapper.getEnvironment().getRemapper(), productionNamespace.toString(), toM);
+                        accessWidenerMap.put(dependency, new Pair<>(remappedAw, accessWidenerData.path()));
+                    }
 
-			final Path output = getRemappedOutput(dependency);
-			final Pair<byte[], String> accessWidener = accessWidenerMap.get(dependency);
+                    remapper.apply(outputConsumer, inputTags.getByValue(dependency));
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to remap: " + dependency, e);
+                }
+            }
+        } finally {
+            remapper.finish();
 
-			if (accessWidener != null) {
-				ZipUtils.replace(output, accessWidener.right(), accessWidener.left());
-			}
+            if (kotlinRemapperClassloader != null) {
+                kotlinRemapperClassloader.close();
+            }
+        }
 
-			for (ModProcessorExtension modProcessorExtension : activeExtensions) {
-				if (modProcessorExtension.appliesTo(dependency)) {
-					modProcessorExtension.finalise(dependency, output);
-				}
-			}
+        for (ModDependency dependency : remapList) {
+            outputConsumerMap.get(dependency).close();
 
-			stripNestedJars(output);
-			remapJarManifestEntries(output);
-			dependency.copyToCache(project, output, null);
-		}
-	}
+            final Path output = getRemappedOutput(dependency);
+            final Pair<byte[], String> accessWidener = accessWidenerMap.get(dependency);
 
-	private Path getRemappedOutput(ModDependency dependency) {
-		return dependency.getWorkingFile(project, null);
-	}
+            if (accessWidener != null) {
+                ZipUtils.replace(output, accessWidener.right(), accessWidener.left());
+            }
 
-	private void remapJarManifestEntries(Path jar) throws IOException {
-		ZipUtils.transform(jar, Map.of(Constants.Manifest.PATH, bytes -> {
-			var manifest = new Manifest(new ByteArrayInputStream(bytes));
+            for (ModProcessorExtension modProcessorExtension : activeExtensions) {
+                if (modProcessorExtension.appliesTo(dependency)) {
+                    modProcessorExtension.finalise(dependency, output);
+                }
+            }
 
-			manifest.getMainAttributes().putValue(Constants.Manifest.MAPPING_NAMESPACE, toM);
+            stripNestedJars(output);
+            remapJarManifestEntries(output);
+            dependency.copyToCache(project, output, null);
+        }
+    }
 
-			ByteArrayOutputStream out = new ByteArrayOutputStream();
-			manifest.write(out);
-			return out.toByteArray();
-		}));
-	}
+    private void stripNestedJars(Path path) {
+        // Strip out all contained jar info as we dont want loader to try and load the jars contained in dev.
+        try {
+            ZipUtils.transformJson(JsonObject.class, path, Map.of("leaf.mod.json", json -> {
+                json.remove("jars");
+                return json;
+            }));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to strip nested jars from %s".formatted(path), e);
+        }
+    }
 }

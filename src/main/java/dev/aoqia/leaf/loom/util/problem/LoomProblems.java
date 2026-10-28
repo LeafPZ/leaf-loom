@@ -48,12 +48,12 @@ import org.gradle.api.problems.ProblemId;
  * Contains the Loom problem group for the Gradle Problem API.
  */
 public final class LoomProblems {
-	public static final ProblemGroup PROBLEM_GROUP = ProblemGroup.create("loom", "Loom");
+    public static final ProblemGroup PROBLEM_GROUP = ProblemGroup.create("loom", "Loom");
 
-	private LoomProblems() {
-	}
+    private LoomProblems() {
+    }
 
-	public static ProblemId problemId(String name, String displayName) {
-		return ProblemId.create(name, displayName, PROBLEM_GROUP);
-	}
+    public static ProblemId problemId(String name, String displayName) {
+        return ProblemId.create(name, displayName, PROBLEM_GROUP);
+    }
 }

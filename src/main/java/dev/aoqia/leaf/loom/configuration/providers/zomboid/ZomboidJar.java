@@ -45,105 +45,87 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.Objects;
 
-public abstract sealed class ZomboidJar permits ZomboidJar.Client, ZomboidJar.ClientOnly, ZomboidJar.Common, ZomboidJar.Merged, ZomboidJar.Server, ZomboidJar.Complete {
-	private final Path path;
-	private final boolean merged, client, server;
-	private final Type type;
+public abstract sealed class ZomboidJar permits ZomboidJar.Client, ZomboidJar.ClientOnly, ZomboidJar.Common,
+    ZomboidJar.Merged, ZomboidJar.Server, ZomboidJar.Complete
+{
+    private final boolean merged, client, server;
 
-	protected ZomboidJar(Path path, boolean merged, boolean client, boolean server, Type type) {
-		this.path = Objects.requireNonNull(path);
-		this.merged = merged;
-		this.client = client;
-		this.server = server;
-		this.type = type;
-	}
+    private final Path path;
 
-	public Path getPath() {
-		return path;
-	}
+    private final Type type;
 
-	public File toFile() {
-		return getPath().toFile();
-	}
+    protected ZomboidJar(Path path, boolean merged, boolean client, boolean server, Type type) {
+        this.path = Objects.requireNonNull(path);
+        this.merged = merged;
+        this.client = client;
+        this.server = server;
+        this.type = type;
+    }
 
-	public boolean isMerged() {
-		return merged;
-	}
+    public abstract ZomboidJar forPath(Path path);
 
-	public boolean includesClient() {
-		return client;
-	}
+    public String getName() {
+        return type.toString();
+    }
 
-	public boolean includesServer() {
-		return server;
-	}
+    public Path getPath() {
+        return path;
+    }
 
-	public String getName() {
-		return type.toString();
-	}
+    public Type getType() {
+        return type;
+    }
 
-	public Type getType() {
-		return type;
-	}
+    public boolean includesClient() {
+        return client;
+    }
 
-	public abstract ZomboidJar forPath(Path path);
+    public boolean includesServer() {
+        return server;
+    }
 
-	public static final class Merged extends ZomboidJar {
-		public Merged(Path path) {
-			super(path, true, true, true, Type.MERGED);
-		}
+    public boolean isMerged() {
+        return merged;
+    }
 
-		@Override
-		public ZomboidJar forPath(Path path) {
-			return new Merged(path);
-		}
-	}
+    public File toFile() {
+        return getPath().toFile();
+    }
 
-	public static final class Common extends ZomboidJar {
-		public Common(Path path) {
-			super(path, false, false, true, Type.COMMON);
-		}
+    // Un-split client jar
+    public static final class Client extends ZomboidJar {
+        public Client(Path path) {
+            super(path, false, true, false, Type.CLIENT);
+        }
 
-		@Override
-		public ZomboidJar forPath(Path path) {
-			return new Common(path);
-		}
-	}
+        @Override
+        public ZomboidJar forPath(Path path) {
+            return new Client(path);
+        }
+    }
 
-	public static final class Server extends ZomboidJar {
-		public Server(Path path) {
-			super(path, false, false, true, Type.SERVER);
-		}
+    // Split client jar
+    public static final class ClientOnly extends ZomboidJar {
+        public ClientOnly(Path path) {
+            super(path, false, true, false, Type.CLIENT_ONLY);
+        }
 
-		@Override
-		public ZomboidJar forPath(Path path) {
-			return new Server(path);
-		}
-	}
+        @Override
+        public ZomboidJar forPath(Path path) {
+            return new ClientOnly(path);
+        }
+    }
 
-	// Un-split client jar
-	public static final class Client extends ZomboidJar {
-		public Client(Path path) {
-			super(path, false, true, false, Type.CLIENT);
-		}
+    public static final class Common extends ZomboidJar {
+        public Common(Path path) {
+            super(path, false, false, true, Type.COMMON);
+        }
 
-		@Override
-		public ZomboidJar forPath(Path path) {
-			return new Client(path);
-		}
-	}
-
-	// Split client jar
-	public static final class ClientOnly extends ZomboidJar {
-		public ClientOnly(Path path) {
-			super(path, false, true, false, Type.CLIENT_ONLY);
-		}
-
-		@Override
-		public ZomboidJar forPath(Path path) {
-			return new ClientOnly(path);
-		}
-	}
+        @Override
+        public ZomboidJar forPath(Path path) {
+            return new Common(path);
+        }
+    }
 
     public static final class Complete extends ZomboidJar {
         public Complete(Path path) {
@@ -156,31 +138,53 @@ public abstract sealed class ZomboidJar permits ZomboidJar.Client, ZomboidJar.Cl
         }
     }
 
-	public enum Type {
-		// Merged jar
-		MERGED("merged"),
+    public static final class Merged extends ZomboidJar {
+        public Merged(Path path) {
+            super(path, true, true, true, Type.MERGED);
+        }
 
-		// Regular jars, not merged or split
-		SERVER("server"),
-		CLIENT("client"),
+        @Override
+        public ZomboidJar forPath(Path path) {
+            return new Merged(path);
+        }
+    }
+
+    public static final class Server extends ZomboidJar {
+        public Server(Path path) {
+            super(path, false, false, true, Type.SERVER);
+        }
+
+        @Override
+        public ZomboidJar forPath(Path path) {
+            return new Server(path);
+        }
+    }
+
+    public enum Type {
+        CLIENT("client"),
+
+        CLIENT_ONLY("clientOnly"),
+        // Split jars
+        COMMON("common"),
 
         // Regular jar which contains client and server for both client and server installs
         // not merged or split
         COMPLETE("complete"),
 
-		// Split jars
-		COMMON("common"),
-		CLIENT_ONLY("clientOnly");
+        // Merged jar
+        MERGED("merged"),
+        // Regular jars, not merged or split
+        SERVER("server");
 
-		private final String name;
+        private final String name;
 
-		Type(String name) {
-			this.name = name;
-		}
+        Type(String name) {
+            this.name = name;
+        }
 
-		@Override
-		public String toString() {
-			return name;
-		}
-	}
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
 }

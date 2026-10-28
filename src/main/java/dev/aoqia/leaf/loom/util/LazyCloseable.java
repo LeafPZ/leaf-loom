@@ -48,28 +48,28 @@ import java.util.function.Supplier;
 
 // Not thread safe
 public class LazyCloseable<T> implements Closeable {
-	private final Supplier<T> valueSupplier;
-	private final Consumer<T> closeConsumer;
-	private T value;
+    private final Consumer<T> closeConsumer;
+    private T value;
+    private final Supplier<T> valueSupplier;
 
-	public LazyCloseable(Supplier<T> valueSupplier, Consumer<T> closeConsumer) {
-		this.valueSupplier = valueSupplier;
-		this.closeConsumer = closeConsumer;
-	}
+    public LazyCloseable(Supplier<T> valueSupplier, Consumer<T> closeConsumer) {
+        this.valueSupplier = valueSupplier;
+        this.closeConsumer = closeConsumer;
+    }
 
-	public T get() {
-		if (value == null) {
-			value = valueSupplier.get();
-		}
+    @Override
+    public void close() throws IOException {
+        if (value != null) {
+            closeConsumer.accept(value);
+            value = null;
+        }
+    }
 
-		return value;
-	}
+    public T get() {
+        if (value == null) {
+            value = valueSupplier.get();
+        }
 
-	@Override
-	public void close() throws IOException {
-		if (value != null) {
-			closeConsumer.accept(value);
-			value = null;
-		}
-	}
+        return value;
+    }
 }

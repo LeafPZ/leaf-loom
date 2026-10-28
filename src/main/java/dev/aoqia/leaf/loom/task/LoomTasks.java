@@ -71,23 +71,26 @@ import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 public abstract class LoomTasks implements Runnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(LoomTasks.class);
 
-	@Inject
-	protected abstract Project getProject();
+    public static Provider<Task> getIDELaunchConfigureTaskName(Project project) {
+        return project.provider(() -> project.getTasks().getByName("configureLaunch"));
+    }
 
-	@Inject
-	protected abstract TaskContainer getTasks();
+    public static String getRunConfigTaskName(RunConfiguration config) {
+        String configName = config.getName();
+        return "run" + configName.substring(0, 1).toUpperCase() + configName.substring(1);
+    }
 
-	@Override
-	public void run() {
+    @Override
+    public void run() {
         if (GradleUtils.getBooleanProperty(getProject(), Constants.Properties.MINIMAL_SETUP)) {
             return;
         }
 
-		LoomGradleExtension extension = LoomGradleExtension.get(getProject());
+        LoomGradleExtension extension = LoomGradleExtension.get(getProject());
 
-		if (!extension.disableObfuscation()) {
-			registerMigrateMappingsTasks();
-		}
+        if (!extension.disableObfuscation()) {
+            registerMigrateMappingsTasks();
+        }
 
         // Used for clearing loom cache from IDE when there are lots of
         // versions.
@@ -95,189 +98,189 @@ public abstract class LoomTasks implements Runnable {
             t.setDescription("Clears the leaf-loom gradle caches.");
         });
 
-		var generateLog4jConfig = getTasks().register("generateLog4jConfig", GenerateLog4jConfigTask.class, t -> {
-			t.setDescription("Generate the log4j config file");
-		});
+        var generateLog4jConfig = getTasks().register("generateLog4jConfig", GenerateLog4jConfigTask.class, t -> {
+            t.setDescription("Generate the log4j config file");
+        });
 
-		TaskProvider<GenerateRemapClasspathTask> generateRemapClasspath = null;
+        TaskProvider<GenerateRemapClasspathTask> generateRemapClasspath = null;
 
-		if (!extension.disableObfuscation()) {
-			generateRemapClasspath = getTasks().register("generateRemapClasspath", GenerateRemapClasspathTask.class, t -> {
-				t.setDescription("Generate the remap classpath file");
-			});
-		}
+        if (!extension.disableObfuscation()) {
+            generateRemapClasspath = getTasks().register("generateRemapClasspath", GenerateRemapClasspathTask.class,
+                t -> {
+                    t.setDescription("Generate the remap classpath file");
+                });
+        }
 
-		// Make the lambda happy
-		final TaskProvider<GenerateRemapClasspathTask> generateRemapClasspathTask = generateRemapClasspath;
+        // Make the lambda happy
+        final TaskProvider<GenerateRemapClasspathTask> generateRemapClasspathTask = generateRemapClasspath;
 
-		getTasks().register("generateDLIConfig", GenerateDLIConfigTask.class, t -> {
-			t.setDescription("Generate the DevLaunchInjector config file");
+        getTasks().register("generateDLIConfig", GenerateDLIConfigTask.class, t -> {
+            t.setDescription("Generate the DevLaunchInjector config file");
 
-			// Must allow these IDE files to be generated first
-			t.mustRunAfter("eclipse");
+            // Must allow these IDE files to be generated first
+            t.mustRunAfter("eclipse");
 
-			t.dependsOn(generateLog4jConfig);
+            t.dependsOn(generateLog4jConfig);
 
-			if (!extension.disableObfuscation()) {
-				GenerateRemapClasspathTask remapClasspath = Objects.requireNonNull(generateRemapClasspathTask.get());
-				t.getRemapClasspathFile().set(remapClasspath.getRemapClasspathFile());
-			}
-		});
+            if (!extension.disableObfuscation()) {
+                GenerateRemapClasspathTask remapClasspath = Objects.requireNonNull(generateRemapClasspathTask.get());
+                t.getRemapClasspathFile().set(remapClasspath.getRemapClasspathFile());
+            }
+        });
 
-		getTasks().register("configureLaunch", task -> {
-			task.dependsOn(getTasks().named("generateDLIConfig"));
-			task.dependsOn(getTasks().named("generateLog4jConfig"));
+        getTasks().register("configureLaunch", task -> {
+            task.dependsOn(getTasks().named("generateDLIConfig"));
+            task.dependsOn(getTasks().named("generateLog4jConfig"));
 
-			if (!extension.disableObfuscation()) {
-				task.dependsOn(getTasks().named("generateRemapClasspath"));
-			}
+            if (!extension.disableObfuscation()) {
+                task.dependsOn(getTasks().named("generateRemapClasspath"));
+            }
 
-			task.setDescription("Setup the required files to launch Zomboid");
-			task.setGroup(Constants.TaskGroup.LEAF);
-		});
+            task.setDescription("Setup the required files to launch Zomboid");
+            task.setGroup(Constants.TaskGroup.LEAF);
+        });
 
-		TaskProvider<ValidateAccessWidenerTask> validateAccessWidener = getTasks().register("validateAccessWidener", ValidateAccessWidenerTask.class, t -> {
-			t.setDescription("Validate all the rules in the access widener against the Zomboid jar");
-			t.setGroup("verification");
-		});
+        TaskProvider<ValidateAccessWidenerTask> validateAccessWidener = getTasks().register("validateAccessWidener",
+            ValidateAccessWidenerTask.class, t -> {
+                t.setDescription("Validate all the rules in the access widener against the Zomboid jar");
+                t.setGroup("verification");
+            });
 
-		getTasks().named("check").configure(task -> task.dependsOn(validateAccessWidener));
+        getTasks().named("check").configure(task -> task.dependsOn(validateAccessWidener));
 
-		registerIDETasks();
-		registerRunTasks();
-	}
+        registerIDETasks();
+        registerRunTasks();
+    }
 
-	private void registerMigrateMappingsTasks() {
-		SourceSetHelper.getSourceSets(getProject()).all(sourceSet -> {
-			if (SourceSetHelper.isMainSourceSet(sourceSet)) {
-				getTasks().register("migrateMappings", MigrateMappingsTask.class, t -> {
-					t.setDescription("Migrates source code mappings to a new version.");
-				});
+    @Inject
+    protected abstract Project getProject();
 
-				return;
-			}
+    @Inject
+    protected abstract TaskContainer getTasks();
 
-			if (!SourceSetHelper.getFirstSrcDir(sourceSet).exists()) {
-				return;
-			}
+    private void configureRenderDocTasks() {
+        final Platform.OperatingSystem operatingSystem = Platform.CURRENT.getOperatingSystem();
+        final String renderDocVersion = LoomVersions.RENDERDOC.version();
+        final String renderDocBaseName = operatingSystem.isWindows() ? "RenderDoc_%s_64".formatted(renderDocVersion)
+            : "renderdoc_%s".formatted(renderDocVersion);
+        final String renderDocFilename = operatingSystem.isWindows() ? "%s.zip".formatted(renderDocBaseName)
+            : "%s.tar.gz".formatted(renderDocBaseName);
+        final String renderDocUrl = "https://maven.fabricmc.net/org/renderdoc/%s".formatted(renderDocFilename);
+        final String executableExt = operatingSystem.isWindows() ? ".exe" : "";
 
-			getTasks().register(sourceSet.getTaskName("migrate", "mappings"), MigrateMappingsTask.class, t -> {
-				t.setDescription("Migrates source code mappings to a new version.");
-				t.getInputDir().set(SourceSetHelper.getFirstSrcDir(sourceSet));
-				t.getOutputDir().convention(getProject().getLayout().getProjectDirectory().dir(sourceSet.getTaskName("remapped", "src")));
-			});
-		});
+        var downloadRenderDoc = getTasks().register("downloadRenderDoc", DownloadTask.class, task -> {
+            task.setGroup(Constants.TaskGroup.LEAF);
 
-		getTasks().register("migrateClassTweakerMappings", MigrateClassTweakerMappingsTask.class, t -> {
-			t.setDescription("Migrates access widener and class tweaker mappings to a new version.");
-		});
-	}
+            task.getUrl().set(renderDocUrl);
+            task.getOutput().set(getProject().getLayout().getBuildDirectory().file(renderDocFilename));
+        });
 
-	private void registerIDETasks() {
-		getTasks().register("genEclipseRuns", GenEclipseRunsTask.class, t -> {
-			t.setDescription("Generates Eclipse run configurations for this project.");
-			t.dependsOn(getIDELaunchConfigureTaskName(getProject()));
-			t.setGroup(Constants.TaskGroup.IDE);
-		});
+        var extractRenderDoc = getTasks().register("extractRenderDoc", Sync.class, task -> {
+            task.setGroup(Constants.TaskGroup.LEAF);
 
-		getTasks().register("vscode", GenVsCodeProjectTask.class, t -> {
-			t.setDescription("Generates VSCode launch configurations.");
-			t.dependsOn(getIDELaunchConfigureTaskName(getProject()));
-			t.setGroup(Constants.TaskGroup.IDE);
-		});
-	}
+            if (operatingSystem.isWindows()) {
+                task.from(getProject().zipTree(downloadRenderDoc.flatMap(DownloadTask::getOutput)));
+            } else {
+                task.from(getProject().tarTree(downloadRenderDoc.flatMap(DownloadTask::getOutput)));
+            }
 
-	public static String getRunConfigTaskName(RunConfiguration config) {
-		String configName = config.getName();
-		return "run" + configName.substring(0, 1).toUpperCase() + configName.substring(1);
-	}
+            task.into(getProject().getLayout().getBuildDirectory().dir("renderdoc"));
+        });
 
-	private void registerRunTasks() {
-		LoomGradleExtension extension = LoomGradleExtension.get(getProject());
-		final boolean renderDocSupported = RenderDocRunTask.isSupported(Platform.CURRENT);
+        Provider<File> renderDocDir = extractRenderDoc.map(Sync::getOutputs)
+            .map(TaskOutputs::getFiles)
+            .map(FileCollection::getSingleFile)
+            .map(dir -> new File(dir, renderDocBaseName));
 
-		Check.require(extension.getRunConfigs().isEmpty(), "Run configurations must not be registered before loom");
+        if (operatingSystem.isLinux()) {
+            renderDocDir = renderDocDir.map(dir -> new File(dir, "bin"));
+        }
 
-		extension.getRunConfigs().whenObjectAdded(config -> {
-			var runTask = getTasks().register(getRunConfigTaskName(config), RunGameTask.class, config);
+        Provider<File> renderDocCMD = renderDocDir.map(dir -> new File(dir, "renderdoccmd" + executableExt));
+        Provider<File> renderDocUI = renderDocDir.map(dir -> new File(dir, "qrenderdoc" + executableExt));
 
-			runTask.configure(t -> {
-				t.setDescription("Starts the '" + config.getName() + "' run configuration");
-				t.dependsOn("configureLaunch");
-			});
+        getTasks().register("startRenderDocUI", RenderDocRunUITask.class,
+            task -> task.getRenderDocExecutable().fileProvider(renderDocUI));
 
-			if (config.getName().equals("client") && renderDocSupported) {
-				getTasks().register("runClientRenderDoc", RenderDocRunTask.class, config);
-			}
-		});
+        getTasks().withType(RenderDocRunTask.class).configureEach(task -> {
+            task.getRenderDocExecutable().fileProvider(renderDocCMD);
+        });
+    }
 
-		if (renderDocSupported) {
-			configureRenderDocTasks();
-		}
+    private void registerIDETasks() {
+        getTasks().register("genEclipseRuns", GenEclipseRunsTask.class, t -> {
+            t.setDescription("Generates Eclipse run configurations for this project.");
+            t.dependsOn(getIDELaunchConfigureTaskName(getProject()));
+            t.setGroup(Constants.TaskGroup.IDE);
+        });
 
-		extension.getRunConfigs().whenObjectRemoved(runConfigSettings -> {
-			getTasks().named(getRunConfigTaskName(runConfigSettings), task -> {
-				// Disable the task so it can't be run
-				task.setEnabled(false);
-				task.setGroup("other");
-			});
-		});
+        getTasks().register("vscode", GenVsCodeProjectTask.class, t -> {
+            t.setDescription("Generates VSCode launch configurations.");
+            t.dependsOn(getIDELaunchConfigureTaskName(getProject()));
+            t.setGroup(Constants.TaskGroup.IDE);
+        });
+    }
 
-		extension.getRunConfigs().create("client", RunConfiguration::client);
-		extension.getRunConfigs().create("server", RunConfiguration::server);
-	}
+    private void registerMigrateMappingsTasks() {
+        SourceSetHelper.getSourceSets(getProject()).all(sourceSet -> {
+            if (SourceSetHelper.isMainSourceSet(sourceSet)) {
+                getTasks().register("migrateMappings", MigrateMappingsTask.class, t -> {
+                    t.setDescription("Migrates source code mappings to a new version.");
+                });
 
-	private void configureRenderDocTasks() {
-		final Platform.OperatingSystem operatingSystem = Platform.CURRENT.getOperatingSystem();
-		final String renderDocVersion = LoomVersions.RENDERDOC.version();
-		final String renderDocBaseName = operatingSystem.isWindows()
-				? "RenderDoc_%s_64".formatted(renderDocVersion)
-				: "renderdoc_%s".formatted(renderDocVersion);
-		final String renderDocFilename = operatingSystem.isWindows()
-				? "%s.zip".formatted(renderDocBaseName)
-				: "%s.tar.gz".formatted(renderDocBaseName);
-		final String renderDocUrl = "https://maven.fabricmc.net/org/renderdoc/%s".formatted(renderDocFilename);
-		final String executableExt = operatingSystem.isWindows() ? ".exe" : "";
+                return;
+            }
 
-		var downloadRenderDoc = getTasks().register("downloadRenderDoc", DownloadTask.class, task -> {
-			task.setGroup(Constants.TaskGroup.LEAF);
+            if (!SourceSetHelper.getFirstSrcDir(sourceSet).exists()) {
+                return;
+            }
 
-			task.getUrl().set(renderDocUrl);
-			task.getOutput().set(getProject().getLayout().getBuildDirectory().file(renderDocFilename));
-		});
+            getTasks().register(sourceSet.getTaskName("migrate", "mappings"), MigrateMappingsTask.class, t -> {
+                t.setDescription("Migrates source code mappings to a new version.");
+                t.getInputDir().set(SourceSetHelper.getFirstSrcDir(sourceSet));
+                t.getOutputDir()
+                    .convention(
+                        getProject().getLayout().getProjectDirectory().dir(sourceSet.getTaskName("remapped", "src")));
+            });
+        });
 
-		var extractRenderDoc = getTasks().register("extractRenderDoc", Sync.class, task -> {
-			task.setGroup(Constants.TaskGroup.LEAF);
+        getTasks().register("migrateClassTweakerMappings", MigrateClassTweakerMappingsTask.class, t -> {
+            t.setDescription("Migrates access widener and class tweaker mappings to a new version.");
+        });
+    }
 
-			if (operatingSystem.isWindows()) {
-				task.from(getProject().zipTree(downloadRenderDoc.flatMap(DownloadTask::getOutput)));
-			} else {
-				task.from(getProject().tarTree(downloadRenderDoc.flatMap(DownloadTask::getOutput)));
-			}
+    private void registerRunTasks() {
+        LoomGradleExtension extension = LoomGradleExtension.get(getProject());
+        final boolean renderDocSupported = RenderDocRunTask.isSupported(Platform.CURRENT);
 
-			task.into(getProject().getLayout().getBuildDirectory().dir("renderdoc"));
-		});
+        Check.require(extension.getRunConfigs().isEmpty(), "Run configurations must not be registered before loom");
 
-		Provider<File> renderDocDir = extractRenderDoc.map(Sync::getOutputs)
-				.map(TaskOutputs::getFiles)
-				.map(FileCollection::getSingleFile)
-				.map(dir -> new File(dir, renderDocBaseName));
+        extension.getRunConfigs().whenObjectAdded(config -> {
+            var runTask = getTasks().register(getRunConfigTaskName(config), RunGameTask.class, config);
 
-		if (operatingSystem.isLinux()) {
-			renderDocDir = renderDocDir.map(dir -> new File(dir, "bin"));
-		}
+            runTask.configure(t -> {
+                t.setDescription("Starts the '" + config.getName() + "' run configuration");
+                t.dependsOn("configureLaunch");
+            });
 
-		Provider<File> renderDocCMD = renderDocDir.map(dir -> new File(dir, "renderdoccmd" + executableExt));
-		Provider<File> renderDocUI = renderDocDir.map(dir -> new File(dir, "qrenderdoc" + executableExt));
+            if (config.getName().equals("client") && renderDocSupported) {
+                getTasks().register("runClientRenderDoc", RenderDocRunTask.class, config);
+            }
+        });
 
-		getTasks().register("startRenderDocUI", RenderDocRunUITask.class, task -> task.getRenderDocExecutable().fileProvider(renderDocUI));
+        if (renderDocSupported) {
+            configureRenderDocTasks();
+        }
 
-		getTasks().withType(RenderDocRunTask.class).configureEach(task -> {
-			task.getRenderDocExecutable().fileProvider(renderDocCMD);
-		});
-	}
+        extension.getRunConfigs().whenObjectRemoved(runConfigSettings -> {
+            getTasks().named(getRunConfigTaskName(runConfigSettings), task -> {
+                // Disable the task so it can't be run
+                task.setEnabled(false);
+                task.setGroup("other");
+            });
+        });
 
-	public static Provider<Task> getIDELaunchConfigureTaskName(Project project) {
-		return project.provider(() -> project.getTasks().getByName("configureLaunch"));
-	}
+        extension.getRunConfigs().create("client", RunConfiguration::client);
+        extension.getRunConfigs().create("server", RunConfiguration::server);
+    }
 }

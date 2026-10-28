@@ -64,28 +64,6 @@ public abstract class RunConfigSettings implements Named, RunConfiguration, RunC
         DefaultRunConfigurationSettings.configureDefaults(this, project);
     }
 
-    @Override
-    public String getName() {
-        return name;
-    }
-
-    @Override
-    public void task(Action<RunGameTask> action) {
-        String taskName = LoomTasks.getRunConfigTaskName(this);
-
-        project.getTasks().named(taskName::equals).withType(RunGameTask.class).configureEach(action);
-    }
-
-    // Backwards compatibility shims:
-
-    // Note: Overridden for backwards compatibility
-    @Override
-    public abstract Property<Boolean> getAppendProjectPathToDisplayName();
-
-    // Note: Overridden for backwards compatibility
-    @Override
-    public abstract Property<String> getMainClass();
-
     // Note: Overridden for backwards compatibility
     @Override
     public void client() {
@@ -94,8 +72,29 @@ public abstract class RunConfigSettings implements Named, RunConfiguration, RunC
 
     // Note: Overridden for backwards compatibility
     @Override
-    public void server() {
-        RunConfigurationInternal.super.server();
+    public abstract Property<Boolean> getAppendProjectPathToDisplayName();
+
+    // Backwards compatibility shims:
+
+    // Note: Overridden for backwards compatibility
+    @Override
+    public abstract Property<String> getIdeConfigFolder();
+
+    // Note: Overridden for backwards compatibility
+    @Override
+    public abstract Property<String> getMainClass();
+
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * Technically deprecated, but as it shadows the "project" property from the parent class, it reports as
+     * deprecated in IDEs, which is undesirable.
+     */
+    public Project getProject() {
+        return project;
     }
 
     // Note: Overload method for backwards compatibility
@@ -105,15 +104,16 @@ public abstract class RunConfigSettings implements Named, RunConfiguration, RunC
 
     // Note: Overridden for backwards compatibility
     @Override
-    public abstract Property<String> getIdeConfigFolder();
+    public void server() {
+        RunConfigurationInternal.super.server();
+    }
 
     // Deprecated methods:
 
-    /**
-     * Technically deprecated, but as it shadows the "project" property from the parent class, it reports as
-     * deprecated in IDEs, which is undesirable.
-     */
-    public Project getProject() {
-        return project;
+    @Override
+    public void task(Action<RunGameTask> action) {
+        String taskName = LoomTasks.getRunConfigTaskName(this);
+
+        project.getTasks().named(taskName::equals).withType(RunGameTask.class).configureEach(action);
     }
 }

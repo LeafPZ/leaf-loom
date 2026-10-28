@@ -75,108 +75,105 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public class ClasspathGroupService extends Service<ClasspathGroupService.Options> {
-	public static ServiceType<Options, ClasspathGroupService> TYPE = new ServiceType<Options, ClasspathGroupService>(Options.class, ClasspathGroupService.class);
+    public static ServiceType<Options, ClasspathGroupService> TYPE = new ServiceType<Options, ClasspathGroupService>(
+        Options.class, ClasspathGroupService.class);
 
-	public interface Options extends Service.Options {
-		@Input
-		@Optional
-		ListProperty<ClasspathGroup> getClasspathGroups();
+    private final Supplier<Map<String, ExternalClasspathGroupDTO>> externalClasspathGroups = Lazy
+        .of(() -> ExternalClasspathGroupDTO.resolveExternal(getOptions().getExternalClasspathGroups().getFiles()));
 
-		@InputFiles
-		@Optional
-		@PathSensitive(PathSensitivity.NONE)
-		ConfigurableFileCollection getExternalClasspathGroups();
-	}
+    public ClasspathGroupService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	public static Provider<Options> create(Project project) {
-		return TYPE.create(project, options -> {
-			LoomGradleExtension extension = LoomGradleExtension.get(project);
-			NamedDomainObjectContainer<ModSettings> modSettings = extension.getMods();
+    public static Provider<Options> create(Project project) {
+        return TYPE.create(project, options -> {
+            LoomGradleExtension extension = LoomGradleExtension.get(project);
+            NamedDomainObjectContainer<ModSettings> modSettings = extension.getMods();
 
-			if (modSettings.isEmpty()) {
-				return;
-			}
+            if (modSettings.isEmpty()) {
+                return;
+            }
 
-			options.getClasspathGroups().set(ClasspathGroup.fromModSettings(modSettings));
+            options.getClasspathGroups().set(ClasspathGroup.fromModSettings(modSettings));
 
-			if (!hasExternalClasspathGroups(modSettings)) {
-				return;
-			}
+            if (!hasExternalClasspathGroups(modSettings)) {
+                return;
+            }
 
-			List<Dependency> externalDependencies = getExternalDependencies(project, modSettings);
-			Configuration externalClasspathGroups = project.getConfigurations().detachedConfiguration(externalDependencies.toArray(new Dependency[0]));
-			options.getExternalClasspathGroups().from(externalClasspathGroups);
-		});
-	}
+            List<Dependency> externalDependencies = getExternalDependencies(project, modSettings);
+            Configuration externalClasspathGroups = project.getConfigurations()
+                .detachedConfiguration(externalDependencies.toArray(new Dependency[0]));
+            options.getExternalClasspathGroups().from(externalClasspathGroups);
+        });
+    }
 
-	private static boolean hasExternalClasspathGroups(Set<ModSettings> modSettings) {
-		return modSettings.stream()
-			.anyMatch(s ->
-				s.getExternalGroups().isPresent()
-				&& !s.getExternalGroups().get().isEmpty()
-		);
-	}
+    private static List<Dependency> getExternalDependencies(Project project, Set<ModSettings> modSettings) {
+        List<String> requiredProjects = modSettings.stream()
+            .flatMap(s -> s.getExternalGroups().get().stream())
+            .map(ExternalClasspathGroup::projectPath)
+            .distinct()
+            .toList();
 
-	private static List<Dependency> getExternalDependencies(Project project, Set<ModSettings> modSettings) {
-		List<String> requiredProjects = modSettings.stream()
-				.flatMap(s -> s.getExternalGroups().get().stream())
-				.map(ExternalClasspathGroup::projectPath)
-				.distinct()
-				.toList();
+        List<Dependency> dependencies = new ArrayList<>();
 
-		List<Dependency> dependencies = new ArrayList<>();
+        for (String projectPath : requiredProjects) {
+            Dependency externalDependency = project.getDependencies()
+                .project(Map.of("path", projectPath, "configuration", Constants.Configurations.EXPORTED_CLASSPATH));
+            dependencies.add(externalDependency);
+        }
 
-		for (String projectPath : requiredProjects) {
-			Dependency externalDependency = project.getDependencies()
-					.project(Map.of(
-							"path", projectPath,
-							"configuration", Constants.Configurations.EXPORTED_CLASSPATH
-					));
-			dependencies.add(externalDependency);
-		}
+        return Collections.unmodifiableList(dependencies);
+    }
 
-		return Collections.unmodifiableList(dependencies);
-	}
+    private static boolean hasExternalClasspathGroups(Set<ModSettings> modSettings) {
+        return modSettings.stream()
+            .anyMatch(s -> s.getExternalGroups().isPresent() && !s.getExternalGroups().get().isEmpty());
+    }
 
-	private final Supplier<Map<String, ExternalClasspathGroupDTO>> externalClasspathGroups = Lazy.of(() -> ExternalClasspathGroupDTO.resolveExternal(getOptions().getExternalClasspathGroups().getFiles()));
+    public List<File> getClasspath(ClasspathGroup classpathGroup) {
+        final List<String> paths = new ArrayList<>();
 
-	public ClasspathGroupService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+        for (ExternalClasspathGroup externalGroup : classpathGroup.externalGroups()) {
+            ExternalClasspathGroupDTO dto = externalClasspathGroups.get().get(externalGroup.projectPath());
 
-	public List<File> getClasspath(ClasspathGroup classpathGroup) {
-		final List<String> paths = new ArrayList<>();
+            if (dto == null) {
+                throw new IllegalStateException(
+                    "Could not find resolved external classpath group for project: " + externalGroup.projectPath());
+            }
 
-		for (ExternalClasspathGroup externalGroup : classpathGroup.externalGroups()) {
-			ExternalClasspathGroupDTO dto = externalClasspathGroups.get().get(externalGroup.projectPath());
+            paths.addAll(dto.getForSourceSet(externalGroup.sourceSetName()));
+        }
 
-			if (dto == null) {
-				throw new IllegalStateException("Could not find resolved external classpath group for project: " + externalGroup.projectPath());
-			}
+        paths.addAll(classpathGroup.paths());
 
-			paths.addAll(dto.getForSourceSet(externalGroup.sourceSetName()));
-		}
+        return paths.stream().map(File::new).toList();
+    }
 
-		paths.addAll(classpathGroup.paths());
+    /**
+     * See: https://github.com/FabricMC/fabric-loader/pull/585.
+     */
+    public String getClasspathGroupsPropertyValue() {
+        return getOptions().getClasspathGroups()
+            .get()
+            .stream()
+            .map(group -> getClasspath(group).stream()
+                .map(File::getAbsolutePath)
+                .collect(Collectors.joining(File.pathSeparator)))
+            .collect(Collectors.joining(File.pathSeparator + File.pathSeparator));
+    }
 
-		return paths.stream().map(File::new).toList();
-	}
+    public boolean hasGroups() {
+        return getOptions().getClasspathGroups().isPresent() && !getOptions().getClasspathGroups().get().isEmpty();
+    }
 
-	/**
-	 * See: https://github.com/FabricMC/fabric-loader/pull/585.
-	 */
-	public String getClasspathGroupsPropertyValue() {
-		return getOptions().getClasspathGroups().get()
-				.stream()
-				.map(group ->
-					getClasspath(group).stream()
-						.map(File::getAbsolutePath)
-						.collect(Collectors.joining(File.pathSeparator))
-				)
-				.collect(Collectors.joining(File.pathSeparator+File.pathSeparator));
-	}
+    public interface Options extends Service.Options {
+        @Input
+        @Optional
+        ListProperty<ClasspathGroup> getClasspathGroups();
 
-	public boolean hasGroups() {
-		return getOptions().getClasspathGroups().isPresent() && !getOptions().getClasspathGroups().get().isEmpty();
-	}
+        @InputFiles
+        @Optional
+        @PathSensitive(PathSensitivity.NONE)
+        ConfigurableFileCollection getExternalClasspathGroups();
+    }
 }

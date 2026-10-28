@@ -66,52 +66,48 @@ import dev.aoqia.leaf.loom.util.LibraryLocationLogger;
 import dev.aoqia.leaf.loom.util.OneDrive;
 
 public class LoomGradlePlugin implements Plugin<PluginAware> {
-	public static final String NAME = "dev.aoqia.leaf.loom";
-	public static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-	public static final String LOOM_VERSION = Objects.requireNonNullElse(LoomGradlePlugin.class.getPackage().getImplementationVersion(), "0.0.0+unknown");
+    public static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    public static final String LOOM_VERSION = Objects
+        .requireNonNullElse(LoomGradlePlugin.class.getPackage().getImplementationVersion(), "0.0.0+unknown");
+    public static final String NAME = "dev.aoqia.leaf.loom";
 
-	/**
-	 * An ordered list of setup job classes.
-	 */
-	private static final List<Class<? extends Runnable>> SETUP_JOBS = List.of(
-			LoomConfigurations.class,
-			CompileConfiguration.class,
-			MavenPublication.class,
-			RemapTaskConfiguration.class,
-			LoomTasks.class,
-			DecompilerConfiguration.class,
-			IdeaConfiguration.class,
-			SandboxConfiguration.class
-	);
+    /**
+     * An ordered list of setup job classes.
+     */
+    private static final List<Class<? extends Runnable>> SETUP_JOBS = List.of(LoomConfigurations.class,
+        CompileConfiguration.class, MavenPublication.class, RemapTaskConfiguration.class, LoomTasks.class,
+        DecompilerConfiguration.class, IdeaConfiguration.class, SandboxConfiguration.class);
 
-	@Override
-	public void apply(PluginAware target) {
-		target.getPlugins().apply(LoomRepositoryPlugin.class);
+    @Override
+    public void apply(PluginAware target) {
+        target.getPlugins().apply(LoomRepositoryPlugin.class);
 
-		if (target instanceof Project project) {
-			apply(project);
-		}
-	}
+        if (target instanceof Project project) {
+            apply(project);
+        }
+    }
 
-	private void apply(Project project) {
-		project.getLogger().lifecycle("Leaf Loom: " + LOOM_VERSION);
+    private void apply(Project project) {
+        project.getLogger().lifecycle("Leaf Loom: " + LOOM_VERSION);
 
-		LibraryLocationLogger.logLibraryVersions();
-		OneDrive.verify(project);
+        LibraryLocationLogger.logLibraryVersions();
+        OneDrive.verify(project);
 
-		// Apply default plugins
-		project.apply(Map.of("plugin", "java-library"));
-		project.apply(Map.of("plugin", "eclipse"));
+        // Apply default plugins
+        project.apply(Map.of("plugin", "java-library"));
+        project.apply(Map.of("plugin", "eclipse"));
 
-		// Setup extensions
-		project.getExtensions().create(LoomGradleExtensionAPI.class, "loom", LoomGradleExtensionImpl.class, project, LoomFiles.create(project));
-		// NOTE(leaf): Disable leaf API
-		// project.getExtensions().create(LeafApiExtension.class, "fabricApi", LeafApiExtensionImpl.class);
+        // Setup extensions
+        project.getExtensions()
+            .create(LoomGradleExtensionAPI.class, "loom", LoomGradleExtensionImpl.class, project,
+                LoomFiles.create(project));
+        // NOTE(leaf): Disable leaf API
+        // project.getExtensions().create(LeafApiExtension.class, "fabricApi", LeafApiExtensionImpl.class);
 
-		for (Class<? extends Runnable> jobClass : SETUP_JOBS) {
-			project.getObjects().newInstance(jobClass).run();
-		}
+        for (Class<? extends Runnable> jobClass : SETUP_JOBS) {
+            project.getObjects().newInstance(jobClass).run();
+        }
 
-		project.apply(Map.of("plugin", LoomCompanionGradlePlugin.NAME));
-	}
+        project.apply(Map.of("plugin", LoomCompanionGradlePlugin.NAME));
+    }
 }

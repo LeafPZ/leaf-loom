@@ -47,35 +47,35 @@ import java.util.Objects;
 import org.gradle.api.initialization.Settings;
 
 public final class LoomFilesSettingsImpl extends LoomFilesBaseImpl {
-	private final Settings settings;
+    private final Settings settings;
 
-	public LoomFilesSettingsImpl(Settings settings) {
-		this.settings = Objects.requireNonNull(settings);
-	}
+    public LoomFilesSettingsImpl(Settings settings) {
+        this.settings = Objects.requireNonNull(settings);
+    }
 
-	@Override
-	protected File getGradleUserHomeDir() {
-		return settings.getGradle().getGradleUserHomeDir();
-	}
+    @Override
+    protected File getBuildDir() {
+        throw new IllegalStateException("You can not access project build directory from setting stage");
+    }
 
-	@Override
-	protected File getRootDir() {
-		return settings.getRootDir();
-	}
+    @Override
+    protected File getGradleUserHomeDir() {
+        return settings.getGradle().getGradleUserHomeDir();
+    }
 
-	@Override
-	protected File getProjectCacheDir() {
-		var overridden = settings.getGradle().getStartParameter().getProjectCacheDir();
-		return overridden == null ? new File(getRootDir(), ".gradle") : overridden;
-	}
+    @Override
+    protected File getProjectCacheDir() {
+        var overridden = settings.getGradle().getStartParameter().getProjectCacheDir();
+        return overridden == null ? new File(getRootDir(), ".gradle") : overridden;
+    }
 
-	@Override
-	protected String getProjectPath() {
-		throw new IllegalStateException("You can not access project path from setting stage");
-	}
+    @Override
+    protected String getProjectPath() {
+        throw new IllegalStateException("You can not access project path from setting stage");
+    }
 
-	@Override
-	protected File getBuildDir() {
-		throw new IllegalStateException("You can not access project build directory from setting stage");
-	}
+    @Override
+    protected File getRootDir() {
+        return settings.getRootDir();
+    }
 }

@@ -57,44 +57,49 @@ import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 import dev.aoqia.leaf.loom.util.gradle.SourceSetReference;
 
 public final class ApplicationIntellijRunConfigWriter extends AbstractIntellijRunConfigWriter {
-	private final List<String> excludedLibraryPaths;
+    private final List<String> excludedLibraryPaths;
 
-	public ApplicationIntellijRunConfigWriter(RunConfiguration run, Project project, List<String> excludedLibraryPaths) {
-		super(run, project);
-		this.excludedLibraryPaths = excludedLibraryPaths;
-	}
+    public ApplicationIntellijRunConfigWriter(RunConfiguration run, Project project,
+        List<String> excludedLibraryPaths)
+    {
+        super(run, project);
+        this.excludedLibraryPaths = excludedLibraryPaths;
+    }
 
-	@Override
-	public String render() throws IOException {
-		final String xml;
+    @Override
+    public String getType() {
+        return APPLICATION_TYPE;
+    }
 
-		try (InputStream input = IdeaSyncTask.class.getClassLoader().getResourceAsStream("idea_run_config_template.xml")) {
-			xml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-		}
+    @Override
+    public String render() throws IOException {
+        final String xml;
+
+        try (InputStream input = IdeaSyncTask.class.getClassLoader()
+            .getResourceAsStream("idea_run_config_template.xml"))
+        {
+            xml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
 
         String workingDir = run.getWorkingDirectory().get().getAsFile().getAbsolutePath();
-		String folderName = run.getIdeConfigFolder().getOrNull();
-		SourceSet sourceSet = SourceSetHelper.getSourceSetByName(run.getSourceSet().get(), project);
+        String folderName = run.getIdeConfigFolder().getOrNull();
+        SourceSet sourceSet = SourceSetHelper.getSourceSetByName(run.getSourceSet().get(), project);
 
-		final String runConfigXml = xml.replace("%NAME%", RunConfigUtils.getDisplayName(run, project))
-				.replace("%MAIN_CLASS%", run.getDevLaunchMainClass().get())
-				.replace("%IDEA_MODULE%", IdeaUtils.getIdeaModuleName(new SourceSetReference(sourceSet, project)))
-				.replace("%WORKING_DIRECTORY%", workingDir)
-				.replace("%PROGRAM_ARGS%", Arguments.join(run.getProgramArguments().get()).replace("\"", "&quot;"))
-				.replace("%VM_ARGS%", Arguments.join(run.getJvmArguments().get()).replace("\"", "&quot;"))
-				.replace("%IDEA_ENV_VARS%", RunConfigUtils.formatEnvVars(run, "<env name=\"%s\" value=\"%s\"/>"))
-				.replace("%IDEA_FOLDER_NAME%", folderName == null ? "" : "folderName=\"" + XmlUtil.escapeXml(folderName) + "\"")
-				.replaceAll("(?m)^[ \\t]+$", "");
+        final String runConfigXml = xml.replace("%NAME%", RunConfigUtils.getDisplayName(run, project))
+            .replace("%MAIN_CLASS%", run.getDevLaunchMainClass().get())
+            .replace("%IDEA_MODULE%", IdeaUtils.getIdeaModuleName(new SourceSetReference(sourceSet, project)))
+            .replace("%WORKING_DIRECTORY%", workingDir)
+            .replace("%PROGRAM_ARGS%", Arguments.join(run.getProgramArguments().get()).replace("\"", "&quot;"))
+            .replace("%VM_ARGS%", Arguments.join(run.getJvmArguments().get()).replace("\"", "&quot;"))
+            .replace("%IDEA_ENV_VARS%", RunConfigUtils.formatEnvVars(run, "<env name=\"%s\" value=\"%s\"/>"))
+            .replace("%IDEA_FOLDER_NAME%",
+                folderName == null ? "" : "folderName=\"" + XmlUtil.escapeXml(folderName) + "\"")
+            .replaceAll("(?m)^[ \\t]+$", "");
 
-		try {
-			return IdeaSyncTask.setClasspathModificationsInXml(runConfigXml, excludedLibraryPaths);
-		} catch (Exception e) {
-			throw new IOException("Failed to apply IntelliJ classpath modifications", e);
-		}
-	}
-
-	@Override
-	public String getType() {
-		return APPLICATION_TYPE;
-	}
+        try {
+            return IdeaSyncTask.setClasspathModificationsInXml(runConfigXml, excludedLibraryPaths);
+        } catch (Exception e) {
+            throw new IOException("Failed to apply IntelliJ classpath modifications", e);
+        }
+    }
 }

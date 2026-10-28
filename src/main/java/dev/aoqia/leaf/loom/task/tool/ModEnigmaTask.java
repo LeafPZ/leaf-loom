@@ -70,8 +70,9 @@ import dev.aoqia.leaf.loom.util.problem.LoomProblems;
  * Add this task to a mod development environment to use Enigma against the game jars.
  * This can be used for writing mod-provided javadoc etc.
  *
- * <p>Usage:
- * {@snippet lang=groovy :
+ * <p>
+ * Usage:
+ * {@snippet lang = groovy:
  * tasks.register('enigma', ModEnigmaTask) {
  * 	// Must be a single Enigma-formatted mapping file:
  * 	mappingFile = file('src/main/resources/my_mod_data.mapping')
@@ -80,65 +81,65 @@ import dev.aoqia.leaf.loom.util.problem.LoomProblems;
  */
 @UntrackedTask(because = "Enigma should always launch")
 public abstract class ModEnigmaTask extends AbstractLoomTask {
-	private static final ProblemId MAPPINGS_MISSING_PROBLEM = LoomProblems.problemId("mappings-missing", "Mapping file doesn't exist");
-	private static final String ENIGMA_MAIN_CLASS = "cuchaz.enigma.gui.Main";
+    private static final String ENIGMA_MAIN_CLASS = "cuchaz.enigma.gui.Main";
+    private static final ProblemId MAPPINGS_MISSING_PROBLEM = LoomProblems.problemId("mappings-missing",
+        "Mapping file doesn't exist");
 
-	// Must be a ListProperty because the order matters.
-	@Input
-	public abstract ListProperty<Path> getZomboidJars();
+    public ModEnigmaTask() {
+        getZomboidJars().convention(getExtension().getProductionNamespaceEnum().map(getExtension()::getZomboidJars));
+        getToolClasspath().from(getEnigmaClasspath(getProject()));
+    }
 
-	/**
-	 * The mapping file path. It must be a single Enigma-formatted file.
-	 */
-	@OutputFile
-	public abstract RegularFileProperty getMappingFile();
+    private static FileCollection getEnigmaClasspath(Project project) {
+        final Dependency enigmaDep = project.getDependencies().create(LoomVersions.ENIGMA_SWING.mavenNotation());
+        return project.getConfigurations().detachedConfiguration(enigmaDep);
+    }
 
-	/**
-	 * The Enigma classpath. You can add any Enigma plugin files to this file collection.
-	 */
-	@Classpath
-	public abstract ConfigurableFileCollection getToolClasspath();
+    /**
+     * The mapping file path. It must be a single Enigma-formatted file.
+     */
+    @OutputFile
+    public abstract RegularFileProperty getMappingFile();
 
-	@ApiStatus.Internal
-	@Inject
-	protected abstract ExecOperations getExecOperations();
+    /**
+     * The Enigma classpath. You can add any Enigma plugin files to this file collection.
+     */
+    @Classpath
+    public abstract ConfigurableFileCollection getToolClasspath();
 
-	@ApiStatus.Internal
-	@Inject
-	protected abstract Problems getProblems();
+    // Must be a ListProperty because the order matters.
+    @Input
+    public abstract ListProperty<Path> getZomboidJars();
 
-	public ModEnigmaTask() {
-		getZomboidJars().convention(getExtension().getProductionNamespaceEnum().map(getExtension()::getZomboidJars));
-		getToolClasspath().from(getEnigmaClasspath(getProject()));
-	}
+    @TaskAction
+    public void launch() {
+        final Path mappingFile = getMappingFile().get().getAsFile().toPath().toAbsolutePath();
 
-	private static FileCollection getEnigmaClasspath(Project project) {
-		final Dependency enigmaDep = project.getDependencies().create(LoomVersions.ENIGMA_SWING.mavenNotation());
-		return project.getConfigurations().detachedConfiguration(enigmaDep);
-	}
+        if (Files.notExists(mappingFile)) {
+            final ProblemReporter reporter = getProblems().getReporter();
+            reporter.throwing(new RuntimeException("Mapping file " + mappingFile + " doesn't exist"),
+                MAPPINGS_MISSING_PROBLEM, spec -> spec.fileLocation(mappingFile.toString())
+                    .solution("Create the missing mapping file. Remember to add it to the leaf.mod.json if needed!"));
+        }
 
-	@TaskAction
-	public void launch() {
-		final Path mappingFile = getMappingFile().get().getAsFile().toPath().toAbsolutePath();
+        getExecOperations().javaexec(spec -> {
+            spec.getMainClass().set(ENIGMA_MAIN_CLASS);
+            spec.setClasspath(getToolClasspath());
+            spec.jvmArgs("-Xmx2048m");
 
-		if (Files.notExists(mappingFile)) {
-			final ProblemReporter reporter = getProblems().getReporter();
-			reporter.throwing(new RuntimeException("Mapping file " + mappingFile + " doesn't exist"), MAPPINGS_MISSING_PROBLEM,
-					spec -> spec
-							.fileLocation(mappingFile.toString())
-							.solution("Create the missing mapping file. Remember to add it to the leaf.mod.json if needed!"));
-		}
+            for (Path path : getZomboidJars().get()) {
+                spec.args("-jar", path.toAbsolutePath().toString());
+            }
 
-		getExecOperations().javaexec(spec -> {
-			spec.getMainClass().set(ENIGMA_MAIN_CLASS);
-			spec.setClasspath(getToolClasspath());
-			spec.jvmArgs("-Xmx2048m");
+            spec.args("-mappings", mappingFile.toString());
+        });
+    }
 
-			for (Path path : getZomboidJars().get()) {
-				spec.args("-jar", path.toAbsolutePath().toString());
-			}
+    @ApiStatus.Internal
+    @Inject
+    protected abstract ExecOperations getExecOperations();
 
-			spec.args("-mappings", mappingFile.toString());
-		});
-	}
+    @ApiStatus.Internal
+    @Inject
+    protected abstract Problems getProblems();
 }

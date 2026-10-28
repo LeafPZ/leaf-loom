@@ -76,231 +76,231 @@ import dev.aoqia.leaf.loom.util.SnowmanClassVisitor;
 import dev.aoqia.leaf.loom.util.SyntheticParameterClassVisitor;
 
 public class ZomboidJarMerger implements AutoCloseable {
-	private final ZomboidClassMerger classMerger = new ZomboidClassMerger();
-	private final FileSystemUtil.Delegate inputClientFs, inputServerFs, outputFs;
-	private final Path inputClient, inputServer;
-	private final Map<String, Entry> entriesClient, entriesServer;
-	private final Set<String> entriesAll;
-	private boolean removeSnowmen = false;
-	private boolean offsetSyntheticsParams = false;
+    private final ZomboidClassMerger classMerger = new ZomboidClassMerger();
 
-	public ZomboidJarMerger(File inputClient, File inputServer, File output) throws IOException {
-		if (output.exists()) {
-			if (!output.delete()) {
-				throw new IOException("Could not delete " + output.getName());
-			}
-		}
+    private final Set<String> entriesAll;
 
-		Files.createDirectories(output.toPath().getParent());
+    private final Map<String, Entry> entriesClient, entriesServer;
+    private final Path inputClient, inputServer;
+    private final FileSystemUtil.Delegate inputClientFs, inputServerFs, outputFs;
+    private boolean offsetSyntheticsParams = false;
+    private boolean removeSnowmen = false;
 
-		this.inputClient = (inputClientFs = FileSystemUtil.getJarFileSystem(inputClient, false)).get().getPath("/");
-		this.inputServer = (inputServerFs = FileSystemUtil.getJarFileSystem(inputServer, false)).get().getPath("/");
-		this.outputFs = FileSystemUtil.getJarFileSystem(output, true);
+    public ZomboidJarMerger(File inputClient, File inputServer, File output) throws IOException {
+        if (output.exists()) {
+            if (!output.delete()) {
+                throw new IOException("Could not delete " + output.getName());
+            }
+        }
 
-		this.entriesClient = new HashMap<>();
-		this.entriesServer = new HashMap<>();
-		this.entriesAll = new TreeSet<>();
-	}
+        Files.createDirectories(output.toPath().getParent());
 
-	public void enableSnowmanRemoval() {
-		removeSnowmen = true;
-	}
+        this.inputClient = (inputClientFs = FileSystemUtil.getJarFileSystem(inputClient, false)).get().getPath("/");
+        this.inputServer = (inputServerFs = FileSystemUtil.getJarFileSystem(inputServer, false)).get().getPath("/");
+        this.outputFs = FileSystemUtil.getJarFileSystem(output, true);
 
-	public void enableSyntheticParamsOffset() {
-		offsetSyntheticsParams = true;
-	}
+        this.entriesClient = new HashMap<>();
+        this.entriesServer = new HashMap<>();
+        this.entriesAll = new TreeSet<>();
+    }
 
-	@Override
-	public void close() throws IOException {
-		inputClientFs.close();
-		inputServerFs.close();
-		outputFs.close();
-	}
+    @Override
+    public void close() throws IOException {
+        inputClientFs.close();
+        inputServerFs.close();
+        outputFs.close();
+    }
 
-	private void readToMap(Map<String, Entry> map, Path input) {
-		try {
-			Files.walkFileTree(input, new SimpleFileVisitor<>() {
-				@Override
-				public FileVisitResult visitFile(Path path, BasicFileAttributes attr) throws IOException {
-					if (attr.isDirectory()) {
-						return FileVisitResult.CONTINUE;
-					}
+    public void enableSnowmanRemoval() {
+        removeSnowmen = true;
+    }
 
-					if (!path.getFileName().toString().endsWith(".class")) {
-						if (path.toString().equals("/META-INF/MANIFEST.MF")) {
-							map.put("META-INF/MANIFEST.MF", new Entry(path, attr,
-									"Manifest-Version: 1.0\nMain-Class: net.minecraft.client.Main\n".getBytes(StandardCharsets.UTF_8)));
-						} else {
-							if (path.toString().startsWith("/META-INF/")) {
-								if (path.toString().endsWith(".SF") || path.toString().endsWith(".RSA")) {
-									return FileVisitResult.CONTINUE;
-								}
-							}
+    public void enableSyntheticParamsOffset() {
+        offsetSyntheticsParams = true;
+    }
 
-							map.put(path.toString().substring(1), new Entry(path, attr));
-						}
+    public void merge() throws IOException {
+        try (ExecutorService service = Executors.newFixedThreadPool(2)) {
+            service.submit(() -> readToMap(entriesClient, inputClient));
+            service.submit(() -> readToMap(entriesServer, inputServer));
+        }
 
-						return FileVisitResult.CONTINUE;
-					}
+        entriesAll.addAll(entriesClient.keySet());
+        entriesAll.addAll(entriesServer.keySet());
 
-					map.put(path.toString().substring(1), new Entry(path, attr, Lazy.of(() -> {
-						try {
-							return Files.readAllBytes(path);
-						} catch (IOException e) {
-							throw new UncheckedIOException("Failed to read " + path, e);
-						}
-					})));
+        try (ExecutorService service = Executors.newWorkStealingPool()) {
+            for (String entry : entriesAll) {
+                processEntry(entry, service);
+            }
+        }
+    }
 
-					return FileVisitResult.CONTINUE;
-				}
-			});
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read", e);
-		}
-	}
+    private void add(Entry entry) {
+        try {
+            Path outPath = outputFs.get().getPath(entry.path.toString());
 
-	private void add(Entry entry) {
-		try {
-			Path outPath = outputFs.get().getPath(entry.path.toString());
+            if (outPath.getParent() != null) {
+                Files.createDirectories(outPath.getParent());
+            }
 
-			if (outPath.getParent() != null) {
-				Files.createDirectories(outPath.getParent());
-			}
+            final byte[] data = entry.data();
 
-			final byte[] data = entry.data();
+            if (data != null) {
+                Files.write(outPath, data, StandardOpenOption.CREATE_NEW);
+            } else {
+                Files.copy(entry.path, outPath);
+            }
 
-			if (data != null) {
-				Files.write(outPath, data, StandardOpenOption.CREATE_NEW);
-			} else {
-				Files.copy(entry.path, outPath);
-			}
+            Files.getFileAttributeView(outPath, BasicFileAttributeView.class)
+                .setTimes(entry.metadata.creationTime(), entry.metadata.lastAccessTime(),
+                    entry.metadata.lastModifiedTime());
+        } catch (IOException ioe) {
+            throw new UncheckedIOException("Failed to write " + entry.path, ioe);
+        }
+    }
 
-			Files.getFileAttributeView(outPath, BasicFileAttributeView.class)
-					.setTimes(
-							entry.metadata.creationTime(),
-							entry.metadata.lastAccessTime(),
-							entry.metadata.lastModifiedTime()
-					);
-		} catch (IOException ioe) {
-			throw new UncheckedIOException("Failed to write " + entry.path, ioe);
-		}
-	}
+    private Result getResult(String entry, boolean isClass) {
+        Entry result;
+        String side = null;
 
-	public void merge() throws IOException {
-		try (ExecutorService service = Executors.newFixedThreadPool(2)) {
-			service.submit(() -> readToMap(entriesClient, inputClient));
-			service.submit(() -> readToMap(entriesServer, inputServer));
-		}
+        Entry clientEntry = entriesClient.get(entry);
+        Entry serverEntry = entriesServer.get(entry);
 
-		entriesAll.addAll(entriesClient.keySet());
-		entriesAll.addAll(entriesServer.keySet());
+        // Entry is common
+        if (clientEntry != null && serverEntry != null) {
+            byte[] clientData = clientEntry.data();
+            byte[] serverData = serverEntry.data();
 
-		try (ExecutorService service = Executors.newWorkStealingPool()) {
-			for (String entry : entriesAll) {
-				processEntry(entry, service);
-			}
-		}
-	}
+            if (Arrays.equals(clientData, serverData)) {
+                result = clientEntry;
+            } else {
+                if (isClass) {
+                    Objects.requireNonNull(clientData);
+                    Objects.requireNonNull(serverData);
+                    result = new Entry(clientEntry.path, clientEntry.metadata,
+                        classMerger.merge(clientData, serverData));
+                } else {
+                    // FIXME: More heuristics?
+                    result = clientEntry;
+                }
+            }
+        } else if ((result = clientEntry) != null) {
+            side = "CLIENT";
+        } else if ((result = serverEntry) != null) {
+            side = "SERVER";
+        }
 
-	private void processEntry(String entry, Executor executor) {
-		boolean isClass = entry.endsWith(".class");
-		boolean isMinecraft = entriesClient.containsKey(entry) || entry.startsWith("net/minecraft") || !entry.contains("/");
-		Result r = getResult(entry, isClass);
+        return new Result(result, side);
+    }
 
-		if (isClass && !isMinecraft && "SERVER".equals(r.side())) {
-			// Server bundles libraries, client doesn't - skip them
-			return;
-		}
+    private Entry mergeClass(String entry, Result result) {
+        byte[] data = result.entry().data();
+        Objects.requireNonNull(data, "Class data cannot be null");
+        ClassReader reader = new ClassReader(data);
+        ClassWriter writer = new ClassWriter(0);
+        ClassVisitor visitor = writer;
 
-		if (isMinecraft && isClass) {
-			CompletableFuture.supplyAsync(() -> mergeClass(entry, r), executor)
-					.thenAccept(this::add);
-			return;
-		}
+        if (result.side() != null) {
+            visitor = new ZomboidClassMerger.SidedClassVisitor(Constants.ASM_VERSION, visitor, result.side());
+        }
 
-		CompletableFuture.runAsync(() -> add(r.entry), executor);
-	}
+        if (removeSnowmen) {
+            visitor = new SnowmanClassVisitor(Constants.ASM_VERSION, visitor);
+        }
 
-	private Result getResult(String entry, boolean isClass) {
-		Entry result;
-		String side = null;
+        if (offsetSyntheticsParams && !entry.contains("/")) {
+            visitor = new SyntheticParameterClassVisitor(Constants.ASM_VERSION, visitor);
+        }
 
-		Entry clientEntry = entriesClient.get(entry);
-		Entry serverEntry = entriesServer.get(entry);
+        if (visitor != writer) {
+            reader.accept(visitor, 0);
+            data = writer.toByteArray();
+            return new Entry(result.entry().path, result.entry().metadata, data);
+        }
 
-		// Entry is common
-		if (clientEntry != null && serverEntry != null) {
-			byte[] clientData = clientEntry.data();
-			byte[] serverData = serverEntry.data();
+        return result.entry();
+    }
 
-			if (Arrays.equals(clientData, serverData)) {
-				result = clientEntry;
-			} else {
-				if (isClass) {
-					Objects.requireNonNull(clientData);
-					Objects.requireNonNull(serverData);
-					result = new Entry(clientEntry.path, clientEntry.metadata, classMerger.merge(clientData, serverData));
-				} else {
-					// FIXME: More heuristics?
-					result = clientEntry;
-				}
-			}
-		} else if ((result = clientEntry) != null) {
-			side = "CLIENT";
-		} else if ((result = serverEntry) != null) {
-			side = "SERVER";
-		}
+    private void processEntry(String entry, Executor executor) {
+        boolean isClass = entry.endsWith(".class");
+        boolean isMinecraft = entriesClient.containsKey(entry) || entry.startsWith("net/minecraft")
+            || !entry.contains("/");
+        Result r = getResult(entry, isClass);
 
-		return new Result(result, side);
-	}
+        if (isClass && !isMinecraft && "SERVER".equals(r.side())) {
+            // Server bundles libraries, client doesn't - skip them
+            return;
+        }
 
-	private Entry mergeClass(String entry, Result result) {
-		byte[] data = result.entry().data();
-		Objects.requireNonNull(data, "Class data cannot be null");
-		ClassReader reader = new ClassReader(data);
-		ClassWriter writer = new ClassWriter(0);
-		ClassVisitor visitor = writer;
+        if (isMinecraft && isClass) {
+            CompletableFuture.supplyAsync(() -> mergeClass(entry, r), executor).thenAccept(this::add);
+            return;
+        }
 
-		if (result.side() != null) {
-			visitor = new ZomboidClassMerger.SidedClassVisitor(Constants.ASM_VERSION, visitor, result.side());
-		}
+        CompletableFuture.runAsync(() -> add(r.entry), executor);
+    }
 
-		if (removeSnowmen) {
-			visitor = new SnowmanClassVisitor(Constants.ASM_VERSION, visitor);
-		}
+    private void readToMap(Map<String, Entry> map, Path input) {
+        try {
+            Files.walkFileTree(input, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path path, BasicFileAttributes attr) throws IOException {
+                    if (attr.isDirectory()) {
+                        return FileVisitResult.CONTINUE;
+                    }
 
-		if (offsetSyntheticsParams && !entry.contains("/")) {
-			visitor = new SyntheticParameterClassVisitor(Constants.ASM_VERSION, visitor);
-		}
+                    if (!path.getFileName().toString().endsWith(".class")) {
+                        if (path.toString().equals("/META-INF/MANIFEST.MF")) {
+                            map.put("META-INF/MANIFEST.MF",
+                                new Entry(path, attr, "Manifest-Version: 1.0\nMain-Class: net.minecraft.client.Main\n"
+                                    .getBytes(StandardCharsets.UTF_8)));
+                        } else {
+                            if (path.toString().startsWith("/META-INF/")) {
+                                if (path.toString().endsWith(".SF") || path.toString().endsWith(".RSA")) {
+                                    return FileVisitResult.CONTINUE;
+                                }
+                            }
 
-		if (visitor != writer) {
-			reader.accept(visitor, 0);
-			data = writer.toByteArray();
-			return new Entry(result.entry().path, result.entry().metadata, data);
-		}
+                            map.put(path.toString().substring(1), new Entry(path, attr));
+                        }
 
-		return result.entry();
-	}
+                        return FileVisitResult.CONTINUE;
+                    }
 
-	// Data is null for non-class files, in this case the entry can be copied without uncompressing
-	public record Entry(Path path, BasicFileAttributes metadata, @Nullable Supplier<byte[]> dataSupplier) {
-		public Entry(Path path, BasicFileAttributes metadata, byte @Nullable [] data) {
-			this(path, metadata, () -> data);
-		}
+                    map.put(path.toString().substring(1), new Entry(path, attr, Lazy.of(() -> {
+                        try {
+                            return Files.readAllBytes(path);
+                        } catch (IOException e) {
+                            throw new UncheckedIOException("Failed to read " + path, e);
+                        }
+                    })));
 
-		public Entry(Path path, BasicFileAttributes metadata) {
-			this(path, metadata, (Supplier<byte[]>) null);
-		}
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read", e);
+        }
+    }
 
-		byte @Nullable [] data() {
-			if (dataSupplier == null) {
-				return null;
-			}
+    // Data is null for non-class files, in this case the entry can be copied without uncompressing
+    public record Entry(Path path, BasicFileAttributes metadata, @Nullable Supplier<byte[]> dataSupplier) {
+        public Entry(Path path, BasicFileAttributes metadata, byte @Nullable [] data) {
+            this(path, metadata, () -> data);
+        }
 
-			return dataSupplier.get();
-		}
-	}
+        public Entry(Path path, BasicFileAttributes metadata) {
+            this(path, metadata, (Supplier<byte[]>) null);
+        }
 
-	private record Result(Entry entry, @Nullable String side) {
-	}
+        byte @Nullable [] data() {
+            if (dataSupplier == null) {
+                return null;
+            }
+
+            return dataSupplier.get();
+        }
+    }
+
+    private record Result(Entry entry, @Nullable String side) {}
 }

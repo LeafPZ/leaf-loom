@@ -42,43 +42,41 @@
 package dev.aoqia.leaf.loom.util;
 
 public interface Platform {
-	Platform CURRENT = CurrentPlatform.INSTANCE;
+    Platform CURRENT = CurrentPlatform.INSTANCE;
 
-	enum OperatingSystem {
-		WINDOWS,
-		MAC_OS,
-		LINUX; // Or Unknown
+    Architecture getArchitecture();
 
-		public boolean isWindows() {
-			return this == WINDOWS;
-		}
+    OperatingSystem getOperatingSystem();
 
-		public boolean isMacOS() {
-			return this == MAC_OS;
-		}
+    boolean isRaspberryPi();
 
-		public boolean isLinux() {
-			return this == LINUX;
-		}
-	}
+    boolean supportsUnixDomainSockets();
 
-	OperatingSystem getOperatingSystem();
+    interface Architecture {
+        boolean is64Bit();
 
-	interface Architecture {
-		boolean is64Bit();
+        boolean isArm();
 
-		boolean isArm();
+        boolean isRiscV();
 
-		boolean isRiscV();
+        default boolean isX64() {
+            return is64Bit() && !isArm() && !isRiscV();
+        }
+    }
 
-		default boolean isX64() {
-			return is64Bit() && !isArm() && !isRiscV();
-		}
-	}
+    enum OperatingSystem {
+        LINUX, MAC_OS, WINDOWS;
 
-	Architecture getArchitecture();
+        public boolean isLinux() {
+            return this == LINUX;
+        }
 
-	boolean supportsUnixDomainSockets();
+        public boolean isMacOS() {
+            return this == MAC_OS;
+        }
 
-	boolean isRaspberryPi();
+        public boolean isWindows() {
+            return this == WINDOWS;
+        }
+    }
 }

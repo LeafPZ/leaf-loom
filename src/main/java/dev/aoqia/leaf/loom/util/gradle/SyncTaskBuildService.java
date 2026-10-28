@@ -46,7 +46,8 @@ import org.gradle.api.services.BuildService;
 import org.gradle.api.services.BuildServiceParameters;
 
 /**
- * Add the following snippet to task to prevent tasks running asynchronously with any other task with the same build service.
+ * Add the following snippet to task to prevent tasks running asynchronously with any other task with the same build
+ * service.
  *
  * <pre>{@code
  * @ServiceReference(SyncTaskBuildService.NAME)
@@ -54,16 +55,14 @@ import org.gradle.api.services.BuildServiceParameters;
  * }</pre>
  */
 public abstract class SyncTaskBuildService implements BuildService<SyncTaskBuildService.Params> {
-	public static final String NAME = "loomSyncTask";
+    public static final String NAME = "loomSyncTask";
 
-	public static void register(Project project) {
-		project.getGradle().getSharedServices().registerIfAbsent(
-					NAME,
-					SyncTaskBuildService.class,
-					spec -> spec.getMaxParallelUsages().set(1)
-		);
-	}
+    public static void register(Project project) {
+        project.getGradle()
+            .getSharedServices()
+            .registerIfAbsent(NAME, SyncTaskBuildService.class, spec -> spec.getMaxParallelUsages().set(1));
+    }
 
-	public interface Params extends BuildServiceParameters {
-	}
+    public interface Params extends BuildServiceParameters {
+    }
 }

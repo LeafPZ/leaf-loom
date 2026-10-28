@@ -48,13 +48,13 @@ import org.gradle.api.tasks.Input;
  * Options for tasks that report problems.
  */
 public abstract class ProblemReportingOptions {
-	/**
-	 * If true, GitHub Actions file annotations will be displayed for detected problems.
-	 */
-	@Input
-	public abstract Property<Boolean> getDisplayGithubActionsAnnotations();
+    public ProblemReportingOptions() {
+        getDisplayGithubActionsAnnotations().convention(false);
+    }
 
-	public ProblemReportingOptions() {
-		getDisplayGithubActionsAnnotations().convention(false);
-	}
+    /**
+     * If true, GitHub Actions file annotations will be displayed for detected problems.
+     */
+    @Input
+    public abstract Property<Boolean> getDisplayGithubActionsAnnotations();
 }

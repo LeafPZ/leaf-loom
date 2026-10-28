@@ -47,9 +47,9 @@ import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.util.LazyCloseable;
 
 public interface MappingProcessorContext {
-	LazyCloseable<TinyRemapper> createRemapper(MappingsNamespace from, MappingsNamespace to);
+    LazyCloseable<TinyRemapper> createRemapper(MappingsNamespace from, MappingsNamespace to);
 
-	MappingsNamespace getProductionNamespace();
+    boolean disableObfuscation();
 
-	boolean disableObfuscation();
+    MappingsNamespace getProductionNamespace();
 }

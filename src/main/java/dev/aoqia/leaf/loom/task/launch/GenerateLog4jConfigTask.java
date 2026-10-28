@@ -56,23 +56,23 @@ import dev.aoqia.leaf.loom.task.AbstractLoomTask;
 
 @DisableCachingByDefault
 public abstract class GenerateLog4jConfigTask extends AbstractLoomTask {
-	@OutputFile
-	public abstract RegularFileProperty getOutputFile();
+    @Inject
+    public GenerateLog4jConfigTask() {
+        getOutputFile().set(getExtension().getFiles().getDefaultLog4jConfigFile());
+    }
 
-	@Inject
-	public GenerateLog4jConfigTask() {
-		getOutputFile().set(getExtension().getFiles().getDefaultLog4jConfigFile());
-	}
+    @OutputFile
+    public abstract RegularFileProperty getOutputFile();
 
-	@TaskAction
-	public void run() {
-		Path outputFile = getOutputFile().get().getAsFile().toPath();
+    @TaskAction
+    public void run() {
+        Path outputFile = getOutputFile().get().getAsFile().toPath();
 
-		try (InputStream is = GenerateLog4jConfigTask.class.getClassLoader().getResourceAsStream("log4j2.leaf.xml")) {
-			Files.deleteIfExists(outputFile);
-			Files.copy(is, outputFile);
-		} catch (IOException e) {
-			throw new RuntimeException("Failed to generate log4j config", e);
-		}
-	}
+        try (InputStream is = GenerateLog4jConfigTask.class.getClassLoader().getResourceAsStream("log4j2.leaf.xml")) {
+            Files.deleteIfExists(outputFile);
+            Files.copy(is, outputFile);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to generate log4j config", e);
+        }
+    }
 }

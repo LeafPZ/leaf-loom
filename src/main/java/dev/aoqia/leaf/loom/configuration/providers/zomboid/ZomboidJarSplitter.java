@@ -58,129 +58,131 @@ import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;
 
 public class ZomboidJarSplitter implements AutoCloseable {
-	private final Path clientInputJar;
-	private final Path serverInputJar;
+    private final Path clientInputJar;
 
-	private EntryData entryData;
-	private Set<String> sharedEntries = new HashSet<>();
-	private Set<String> forcedClientEntries = new HashSet<>();
+    private EntryData entryData;
+    private final Set<String> forcedClientEntries = new HashSet<>();
+    private final Path serverInputJar;
+    private final Set<String> sharedEntries = new HashSet<>();
 
-	public ZomboidJarSplitter(Path clientInputJar, Path serverInputJar) {
-		this.clientInputJar = Objects.requireNonNull(clientInputJar);
-		this.serverInputJar = Objects.requireNonNull(serverInputJar);
-	}
+    public ZomboidJarSplitter(Path clientInputJar, Path serverInputJar) {
+        this.clientInputJar = Objects.requireNonNull(clientInputJar);
+        this.serverInputJar = Objects.requireNonNull(serverInputJar);
+    }
 
-	public void split(Path clientOnlyOutputJar, Path commonOutputJar) throws IOException {
-		Objects.requireNonNull(clientOnlyOutputJar);
-		Objects.requireNonNull(commonOutputJar);
+    @Override
+    public void close() throws Exception {
+    }
 
-		if (entryData == null) {
-			entryData = new EntryData(getJarEntries(clientInputJar), getJarEntries(serverInputJar));
-		}
+    public void forcedClientEntry(String path) {
+        this.forcedClientEntries.add(path);
+    }
 
-		// Not something we expect, will require 3 jars, server, client and common.
-		assert entryData.serverOnlyEntries.isEmpty();
+    public void sharedEntry(String path) {
+        this.sharedEntries.add(path);
+    }
 
-		copyEntriesToJar(entryData.commonEntries, serverInputJar, commonOutputJar, "common");
-		copyEntriesToJar(entryData.clientOnlyEntries, clientInputJar, clientOnlyOutputJar, "client");
-	}
+    public void split(Path clientOnlyOutputJar, Path commonOutputJar) throws IOException {
+        Objects.requireNonNull(clientOnlyOutputJar);
+        Objects.requireNonNull(commonOutputJar);
 
-	public void sharedEntry(String path) {
-		this.sharedEntries.add(path);
-	}
+        if (entryData == null) {
+            entryData = new EntryData(getJarEntries(clientInputJar), getJarEntries(serverInputJar));
+        }
 
-	public void forcedClientEntry(String path) {
-		this.forcedClientEntries.add(path);
-	}
+        // Not something we expect, will require 3 jars, server, client and common.
+        assert entryData.serverOnlyEntries.isEmpty();
 
-	private Set<String> getJarEntries(Path input) throws IOException {
-		Set<String> entries = new HashSet<>();
+        copyEntriesToJar(entryData.commonEntries, serverInputJar, commonOutputJar, "common");
+        copyEntriesToJar(entryData.clientOnlyEntries, clientInputJar, clientOnlyOutputJar, "client");
+    }
 
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(input);
-				Stream<Path> walk = Files.walk(fs.get().getPath("/"))) {
-			Iterator<Path> iterator = walk.iterator();
+    private void copyEntriesToJar(Set<String> entries, Path inputJar, Path outputJar, String env) throws IOException {
+        Files.deleteIfExists(outputJar);
 
-			while (iterator.hasNext()) {
-				Path fsPath = iterator.next();
+        try (FileSystemUtil.Delegate inputFs = FileSystemUtil.getJarFileSystem(inputJar);
+             FileSystemUtil.Delegate outputFs = FileSystemUtil.getJarFileSystem(outputJar, true))
+        {
+            for (String entry : entries) {
+                Path inputPath = inputFs.get().getPath(entry);
+                Path outputPath = outputFs.get().getPath(entry);
 
-				if (!Files.isRegularFile(fsPath)) {
-					continue;
-				}
+                assert Files.isRegularFile(inputPath);
 
-				String entryPath = fs.get().getPath("/").relativize(fsPath).toString();
+                Path outputPathParent = outputPath.getParent();
 
-				if (entryPath.startsWith("META-INF/")) {
-					continue;
-				}
+                if (outputPathParent != null) {
+                    Files.createDirectories(outputPathParent);
+                }
 
-				entries.add(entryPath);
-			}
-		}
+                Files.copy(inputPath, outputPath, StandardCopyOption.COPY_ATTRIBUTES);
+            }
 
-		return entries;
-	}
+            writeManifest(outputFs, env);
+        }
+    }
 
-	private void copyEntriesToJar(Set<String> entries, Path inputJar, Path outputJar, String env) throws IOException {
-		Files.deleteIfExists(outputJar);
+    private Set<String> getJarEntries(Path input) throws IOException {
+        Set<String> entries = new HashSet<>();
 
-		try (FileSystemUtil.Delegate inputFs = FileSystemUtil.getJarFileSystem(inputJar);
-				FileSystemUtil.Delegate outputFs = FileSystemUtil.getJarFileSystem(outputJar, true)) {
-			for (String entry : entries) {
-				Path inputPath = inputFs.get().getPath(entry);
-				Path outputPath = outputFs.get().getPath(entry);
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(input);
+             Stream<Path> walk = Files.walk(fs.get().getPath("/")))
+        {
+            Iterator<Path> iterator = walk.iterator();
 
-				assert Files.isRegularFile(inputPath);
+            while (iterator.hasNext()) {
+                Path fsPath = iterator.next();
 
-				Path outputPathParent = outputPath.getParent();
+                if (!Files.isRegularFile(fsPath)) {
+                    continue;
+                }
 
-				if (outputPathParent != null) {
-					Files.createDirectories(outputPathParent);
-				}
+                String entryPath = fs.get().getPath("/").relativize(fsPath).toString();
 
-				Files.copy(inputPath, outputPath, StandardCopyOption.COPY_ATTRIBUTES);
-			}
+                if (entryPath.startsWith("META-INF/")) {
+                    continue;
+                }
 
-			writeManifest(outputFs, env);
-		}
-	}
+                entries.add(entryPath);
+            }
+        }
 
-	private void writeManifest(FileSystemUtil.Delegate outputFs, String env) throws IOException {
-		final Manifest manifest = new Manifest();
-		manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
-		manifest.getMainAttributes().putValue(Constants.Manifest.SPLIT_ENV_NAME, env);
-		ByteArrayOutputStream out = new ByteArrayOutputStream();
-		manifest.write(out);
-		Files.createDirectories(outputFs.get().getPath("META-INF"));
-		Files.write(outputFs.get().getPath(Constants.Manifest.PATH), out.toByteArray());
-	}
+        return entries;
+    }
 
-	@Override
-	public void close() throws Exception {
-	}
+    private void writeManifest(FileSystemUtil.Delegate outputFs, String env) throws IOException {
+        final Manifest manifest = new Manifest();
+        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+        manifest.getMainAttributes().putValue(Constants.Manifest.SPLIT_ENV_NAME, env);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        manifest.write(out);
+        Files.createDirectories(outputFs.get().getPath("META-INF"));
+        Files.write(outputFs.get().getPath(Constants.Manifest.PATH), out.toByteArray());
+    }
 
-	private final class EntryData {
-		private final Set<String> clientEntries;
-		private final Set<String> serverEntries;
-		private final Set<String> commonEntries;
-		private final Set<String> clientOnlyEntries;
-		private final Set<String> serverOnlyEntries;
+    private final class EntryData {
+        private final Set<String> clientEntries;
+        private final Set<String> clientOnlyEntries;
+        private final Set<String> commonEntries;
+        private final Set<String> serverEntries;
+        private final Set<String> serverOnlyEntries;
 
-		private EntryData(Set<String> clientEntries, Set<String> serverEntries) {
-			this.clientEntries = clientEntries;
-			this.serverEntries = serverEntries;
+        private EntryData(Set<String> clientEntries, Set<String> serverEntries) {
+            this.clientEntries = clientEntries;
+            this.serverEntries = serverEntries;
 
-			this.commonEntries = new HashSet<>(clientEntries);
-			this.commonEntries.retainAll(serverEntries);
-			this.commonEntries.addAll(sharedEntries);
-			this.commonEntries.removeAll(forcedClientEntries);
+            this.commonEntries = new HashSet<>(clientEntries);
+            this.commonEntries.retainAll(serverEntries);
+            this.commonEntries.addAll(sharedEntries);
+            this.commonEntries.removeAll(forcedClientEntries);
 
-			this.clientOnlyEntries = new HashSet<>(clientEntries);
-			this.clientOnlyEntries.removeAll(serverEntries);
-			this.clientOnlyEntries.addAll(sharedEntries);
-			this.clientOnlyEntries.addAll(forcedClientEntries);
+            this.clientOnlyEntries = new HashSet<>(clientEntries);
+            this.clientOnlyEntries.removeAll(serverEntries);
+            this.clientOnlyEntries.addAll(sharedEntries);
+            this.clientOnlyEntries.addAll(forcedClientEntries);
 
-			this.serverOnlyEntries = new HashSet<>(serverEntries);
-			this.serverOnlyEntries.removeAll(clientEntries);
-		}
-	}
+            this.serverOnlyEntries = new HashSet<>(serverEntries);
+            this.serverOnlyEntries.removeAll(clientEntries);
+        }
+    }
 }

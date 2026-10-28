@@ -55,38 +55,42 @@ import net.fabricmc.tinyremapper.TinyRemapper;
 import dev.aoqia.leaf.loom.configuration.mods.dependency.ModDependency;
 import dev.aoqia.leaf.loom.util.Constants;
 
-public record AccessWidenerAnalyzeVisitorProvider(ClassTweaker accessWidener) implements TinyRemapper.AnalyzeVisitorProvider {
-	static AccessWidenerAnalyzeVisitorProvider createFromMods(String namespace, List<ModDependency> mods) throws IOException {
-		ClassTweaker accessWidener = ClassTweaker.newInstance();
-		accessWidener.visitHeader(namespace);
+public record AccessWidenerAnalyzeVisitorProvider(ClassTweaker accessWidener)
+    implements TinyRemapper.AnalyzeVisitorProvider
+{
+    static AccessWidenerAnalyzeVisitorProvider createFromMods(String namespace, List<ModDependency> mods)
+        throws IOException
+    {
+        ClassTweaker accessWidener = ClassTweaker.newInstance();
+        accessWidener.visitHeader(namespace);
 
-		for (ModDependency mod : mods) {
-			final var accessWidenerData = AccessWidenerUtils.readAccessWidenerData(mod.getInputFile());
+        for (ModDependency mod : mods) {
+            final var accessWidenerData = AccessWidenerUtils.readAccessWidenerData(mod.getInputFile());
 
-			if (accessWidenerData == null) {
-				continue;
-			}
+            if (accessWidenerData == null) {
+                continue;
+            }
 
-			final var reader = ClassTweakerReader.create(new ClassTweakerRemapFilter(accessWidener));
-			reader.read(accessWidenerData.content());
-		}
+            final var reader = ClassTweakerReader.create(new ClassTweakerRemapFilter(accessWidener));
+            reader.read(accessWidenerData.content());
+        }
 
-		return new AccessWidenerAnalyzeVisitorProvider(accessWidener);
-	}
+        return new AccessWidenerAnalyzeVisitorProvider(accessWidener);
+    }
 
-	@Override
-	public ClassVisitor insertAnalyzeVisitor(int mrjVersion, String className, ClassVisitor next) {
-		return accessWidener.createClassVisitor(Constants.ASM_VERSION, next, null);
-	}
+    @Override
+    public ClassVisitor insertAnalyzeVisitor(int mrjVersion, String className, ClassVisitor next) {
+        return accessWidener.createClassVisitor(Constants.ASM_VERSION, next, null);
+    }
 
-	private static class ClassTweakerRemapFilter extends ForwardingVisitor {
-		private ClassTweakerRemapFilter(ClassTweakerVisitor... visitors) {
-			super(visitors);
-		}
+    private static class ClassTweakerRemapFilter extends ForwardingVisitor {
+        private ClassTweakerRemapFilter(ClassTweakerVisitor... visitors) {
+            super(visitors);
+        }
 
-		@Override
-		public void visitEnumExtension(String owner, String addedConstant, boolean transitive) {
-			// Ignore enum extensions, as they are not required exist in the remapping context
-		}
-	}
+        @Override
+        public void visitEnumExtension(String owner, String addedConstant, boolean transitive) {
+            // Ignore enum extensions, as they are not required exist in the remapping context
+        }
+    }
 }

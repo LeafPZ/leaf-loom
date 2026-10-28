@@ -74,91 +74,92 @@ import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
 
 @ApiStatus.Internal
 public interface LoomGradleExtension extends LoomGradleExtensionAPI {
-	static LoomGradleExtension get(Project project) {
-		return (LoomGradleExtension) project.getExtensions().getByName("loom");
-	}
+    static LoomGradleExtension get(Project project) {
+        return (LoomGradleExtension) project.getExtensions().getByName("loom");
+    }
 
-	LoomFiles getFiles();
+    void addTransitiveAccessWideners(List<AccessWidenerFile> accessWidenerFiles);
 
-	ConfigurableFileCollection getUnmappedModCollection();
+    CopyGameFileBuilder copyGameFile(String path);
 
-	void setInstallerData(InstallerData data);
+    /**
+     * When enabled disable all forms of remapping.
+     */
+    boolean disableObfuscation();
 
-	InstallerData getInstallerData();
+    /**
+     * When enabled do not remap the output jars.
+     */
+    boolean dontRemapOutputs();
 
-	ZomboidMetadataProvider getMetadataProvider();
+    DownloadBuilder download(String url);
 
-	void setMetadataProvider(ZomboidMetadataProvider metadataProvider);
+    Provider<ArtifactMetadata.MixinRemapType> getDefaultMixinRemapTypeEnum();
 
-	ZomboidProvider getZomboidProvider();
+    LoomFiles getFiles();
 
-	void setZomboidProvider(ZomboidProvider zomboidProvider);
+    InstallerData getInstallerData();
 
-	RemapMappingConfiguration getMappingConfiguration();
+    IntermediaryZomboidProvider<?> getIntermediaryZomboidProvider();
 
-	@Nullable MappingConfiguration getMappingConfigurationOrNull();
+    Collection<LayeredMappingsFactory> getLayeredMappingFactories();
 
-	void setMappingConfiguration(MappingConfiguration mappingConfiguration);
+    ListProperty<LibraryProcessorManager.LibraryProcessorFactory> getLibraryProcessors();
 
-	NamedZomboidProvider<?> getNamedZomboidProvider();
+    RemapMappingConfiguration getMappingConfiguration();
 
-	IntermediaryZomboidProvider<?> getIntermediaryZomboidProvider();
+    @Nullable
+    MappingConfiguration getMappingConfigurationOrNull();
 
-	void setNamedZomboidProvider(NamedZomboidProvider<?> provider);
+    ZomboidMetadataProvider getMetadataProvider();
 
-	void setIntermediaryZomboidProvider(IntermediaryZomboidProvider<?> provider);
+    @Override
+    MixinExtension getMixin();
 
-	Provider<MappingsNamespace> getProductionNamespaceEnum();
+    NamedZomboidProvider<?> getNamedZomboidProvider();
 
-	Provider<ArtifactMetadata.MixinRemapType> getDefaultMixinRemapTypeEnum();
+    Provider<MappingsNamespace> getProductionNamespaceEnum();
 
-	default List<Path> getZomboidJars(MappingsNamespace mappingsNamespace) {
-		return switch (mappingsNamespace) {
-		case NAMED -> getNamedZomboidProvider().getZomboidJarPaths();
-		case INTERMEDIARY -> getIntermediaryZomboidProvider().getZomboidJarPaths();
-		case OFFICIAL, CLIENT_OFFICIAL, SERVER_OFFICIAL -> getZomboidProvider().getGameJars();
-		};
-	}
+    ListProperty<RemapperExtensionHolder> getRemapperExtensions();
 
-	FileCollection getZomboidJarsCollection(MappingsNamespace mappingsNamespace);
+    List<AccessWidenerFile> getTransitiveAccessWideners();
 
-	@Override
-	MixinExtension getMixin();
+    ConfigurableFileCollection getUnmappedModCollection();
 
-	List<AccessWidenerFile> getTransitiveAccessWideners();
+    default List<Path> getZomboidJars(MappingsNamespace mappingsNamespace) {
+        return switch (mappingsNamespace) {
+            case NAMED -> getNamedZomboidProvider().getZomboidJarPaths();
+            case INTERMEDIARY -> getIntermediaryZomboidProvider().getZomboidJarPaths();
+            case OFFICIAL, CLIENT_OFFICIAL, SERVER_OFFICIAL -> getZomboidProvider().getGameJars();
+        };
+    }
 
-	void addTransitiveAccessWideners(List<AccessWidenerFile> accessWidenerFiles);
+    FileCollection getZomboidJarsCollection(MappingsNamespace mappingsNamespace);
 
-	DownloadBuilder download(String url);
+    ZomboidProvider getZomboidProvider();
 
-	CopyGameFileBuilder copyGameFile(String path);
+    /**
+     * @return true when '--write-verification-metadata` is set
+     */
+    boolean isCollectingDependencyVerificationMetadata();
 
-	boolean refreshDeps();
+    boolean isConfigurationCacheActive();
 
-	void setRefreshDeps(boolean refreshDeps);
+    boolean isProjectIsolationActive();
 
-	ListProperty<LibraryProcessorManager.LibraryProcessorFactory> getLibraryProcessors();
+    boolean refreshDeps();
 
-	ListProperty<RemapperExtensionHolder> getRemapperExtensions();
+    void setInstallerData(InstallerData data);
 
-	Collection<LayeredMappingsFactory> getLayeredMappingFactories();
+    void setIntermediaryZomboidProvider(IntermediaryZomboidProvider<?> provider);
 
-	boolean isConfigurationCacheActive();
+    void setMappingConfiguration(MappingConfiguration mappingConfiguration);
 
-	boolean isProjectIsolationActive();
+    void setMetadataProvider(ZomboidMetadataProvider metadataProvider);
 
-	/**
-	 * @return true when '--write-verification-metadata` is set
-	 */
-	boolean isCollectingDependencyVerificationMetadata();
+    void setNamedZomboidProvider(NamedZomboidProvider<?> provider);
 
-	/**
-	 * When enabled do not remap the output jars.
-	 */
-	boolean dontRemapOutputs();
+    void setRefreshDeps(boolean refreshDeps);
 
-	/**
-	 * When enabled disable all forms of remapping.
-	 */
-	boolean disableObfuscation();
+    void setZomboidProvider(ZomboidProvider zomboidProvider);
 }

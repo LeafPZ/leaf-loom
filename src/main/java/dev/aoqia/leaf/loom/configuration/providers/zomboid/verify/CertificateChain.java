@@ -58,154 +58,158 @@ import org.jspecify.annotations.Nullable;
  * A node in the certificate chain.
  */
 public interface CertificateChain {
-	/**
-	 * The certificate itself.
-	 */
-	X509Certificate certificate();
+    /**
+     * Takes an unordered collection of certificates and builds a tree structure.
+     */
+    static CertificateChain getRoot(Collection<X509Certificate> certificates) {
+        Map<String, Impl> certificateNodes = new HashMap<>();
 
-	/**
-	 * The issuer of this certificate, or null if this is a root certificate.
-	 */
-	@Nullable CertificateChain issuer();
+        for (X509Certificate certificate : certificates) {
+            Impl node = new Impl();
+            node.certificate = certificate;
+            certificateNodes.put(certificate.getSubjectX500Principal().getName(), node);
+        }
 
-	/**
-	 * The children of this certificate, or an empty list if this is a leaf certificate.
-	 */
-	List<CertificateChain> children();
+        for (X509Certificate certificate : certificates) {
+            String subject = certificate.getSubjectX500Principal().getName();
+            String issuer = certificate.getIssuerX500Principal().getName();
 
-	/**
-	 * Verify that this certificate chain matches exactly with another one.
-	 * @param other the other certificate chain
-	 */
-	void verifyChainMatches(CertificateChain other) throws SignatureVerificationFailure;
+            if (subject.equals(issuer)) {
+                // self-signed
+                continue;
+            }
 
-	/**
-	 * Recursively visit all certificates in the chain, including this one.
-	 */
-	static void visitAll(CertificateChain chain, CertificateConsumer consumer) throws SignatureVerificationFailure {
-		consumer.accept(chain.certificate());
+            Impl parent = certificateNodes.get(issuer);
+            Impl self = certificateNodes.get(subject);
 
-		for (CertificateChain child : chain.children()) {
-			visitAll(child, consumer);
-		}
-	}
+            if (parent == self) {
+                throw new IllegalStateException("Certificate " + subject + " is its own issuer");
+            }
 
-	/**
-	 * Load certificate chain from the classpath, returning the root certificate.
-	 */
-	static CertificateChain getRoot(String name) throws IOException {
-		try (InputStream is = JarVerifier.class.getClassLoader().getResourceAsStream("certs/" + name + ".cer")) {
-			CertificateFactory cf = CertificateFactory.getInstance("X.509");
-			Collection<X509Certificate> certificates = cf.generateCertificates(is).stream()
-					.map(c -> (X509Certificate) c)
-					.toList();
-			return getRoot(certificates);
-		} catch (CertificateException e) {
-			throw new RuntimeException("Failed to load certificate: " + name, e);
-		}
-	}
+            if (parent == null) {
+                throw new IllegalStateException(
+                    "Certificate " + subject + " defines issuer " + issuer + " which is not in the chain");
+            }
 
-	/**
-	 * Takes an unordered collection of certificates and builds a tree structure.
-	 */
-	static CertificateChain getRoot(Collection<X509Certificate> certificates) {
-		Map<String, Impl> certificateNodes = new HashMap<>();
+            parent.children.add(self);
+            self.issuer = parent;
+        }
 
-		for (X509Certificate certificate : certificates) {
-			Impl node = new Impl();
-			node.certificate = certificate;
-			certificateNodes.put(certificate.getSubjectX500Principal().getName(), node);
-		}
+        List<Impl> roots = certificateNodes.values().stream().filter(node -> node.issuer == null).toList();
 
-		for (X509Certificate certificate : certificates) {
-			String subject = certificate.getSubjectX500Principal().getName();
-			String issuer = certificate.getIssuerX500Principal().getName();
+        if (roots.size() != 1) {
+            throw new IllegalStateException("Expected exactly one root certificate, but found " + roots.size());
+        }
 
-			if (subject.equals(issuer)) {
-				continue; // self-signed
-			}
+        return roots.get(0);
+    }
 
-			Impl parent = certificateNodes.get(issuer);
-			Impl self = certificateNodes.get(subject);
+    /**
+     * Load certificate chain from the classpath, returning the root certificate.
+     */
+    static CertificateChain getRoot(String name) throws IOException {
+        try (InputStream is = JarVerifier.class.getClassLoader().getResourceAsStream("certs/" + name + ".cer")) {
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            Collection<X509Certificate> certificates = cf.generateCertificates(is)
+                .stream()
+                .map(c -> (X509Certificate) c)
+                .toList();
+            return getRoot(certificates);
+        } catch (CertificateException e) {
+            throw new RuntimeException("Failed to load certificate: " + name, e);
+        }
+    }
 
-			if (parent == self) {
-				throw new IllegalStateException("Certificate " + subject + " is its own issuer");
-			}
+    /**
+     * Recursively visit all certificates in the chain, including this one.
+     */
+    static void visitAll(CertificateChain chain, CertificateConsumer consumer) throws SignatureVerificationFailure {
+        consumer.accept(chain.certificate());
 
-			if (parent == null) {
-				throw new IllegalStateException("Certificate " + subject + " defines issuer " + issuer + " which is not in the chain");
-			}
+        for (CertificateChain child : chain.children()) {
+            visitAll(child, consumer);
+        }
+    }
 
-			parent.children.add(self);
-			self.issuer = parent;
-		}
+    /**
+     * The certificate itself.
+     */
+    X509Certificate certificate();
 
-		List<Impl> roots = certificateNodes.values()
-				.stream()
-				.filter(node -> node.issuer == null)
-				.toList();
+    /**
+     * The children of this certificate, or an empty list if this is a leaf certificate.
+     */
+    List<CertificateChain> children();
 
-		if (roots.size() != 1) {
-			throw new IllegalStateException("Expected exactly one root certificate, but found " + roots.size());
-		}
+    /**
+     * The issuer of this certificate, or null if this is a root certificate.
+     */
+    @Nullable
+    CertificateChain issuer();
 
-		return roots.get(0);
-	}
+    /**
+     * Verify that this certificate chain matches exactly with another one.
+     *
+     * @param other the other certificate chain
+     */
+    void verifyChainMatches(CertificateChain other) throws SignatureVerificationFailure;
 
-	@FunctionalInterface
-	interface CertificateConsumer {
-		void accept(X509Certificate certificate) throws SignatureVerificationFailure;
-	}
+    @FunctionalInterface
+    interface CertificateConsumer {
+        void accept(X509Certificate certificate) throws SignatureVerificationFailure;
+    }
 
-	class Impl implements CertificateChain {
-		X509Certificate certificate;
-		CertificateChain.@Nullable Impl issuer;
-		List<CertificateChain> children = new ArrayList<>();
+    class Impl implements CertificateChain {
+        X509Certificate certificate;
+        List<CertificateChain> children = new ArrayList<>();
+        CertificateChain.@Nullable Impl issuer;
 
-		private Impl() {
-		}
+        private Impl() {
+        }
 
-		@Override
-		public X509Certificate certificate() {
-			return certificate;
-		}
+        @Override
+        public X509Certificate certificate() {
+            return certificate;
+        }
 
-		@Override
-		public @Nullable CertificateChain issuer() {
-			return issuer;
-		}
+        @Override
+        public List<CertificateChain> children() {
+            return children;
+        }
 
-		@Override
-		public List<CertificateChain> children() {
-			return children;
-		}
+        @Override
+        public @Nullable CertificateChain issuer() {
+            return issuer;
+        }
 
-		@Override
-		public void verifyChainMatches(CertificateChain other) throws SignatureVerificationFailure {
-			if (!this.certificate().equals(other.certificate())) {
-				throw new SignatureVerificationFailure("Certificate mismatch: " + this + " != " + other);
-			}
+        @Override
+        public String toString() {
+            return certificate.getSubjectX500Principal().getName();
+        }
 
-			if (this.children().size() != other.children().size()) {
-				throw new SignatureVerificationFailure("Certificate mismatch: " + this + " has " + this.children().size() + " children, but " + other + " has " + other.children().size());
-			}
+        @Override
+        public void verifyChainMatches(CertificateChain other) throws SignatureVerificationFailure {
+            if (!this.certificate().equals(other.certificate())) {
+                throw new SignatureVerificationFailure("Certificate mismatch: " + this + " != " + other);
+            }
 
-			if (this.children.isEmpty()) {
-				// Fine, leaf certificate
-				return;
-			}
+            if (this.children().size() != other.children().size()) {
+                throw new SignatureVerificationFailure("Certificate mismatch: " + this + " has "
+                    + this.children().size() + " children, but " + other + " has " + other.children().size());
+            }
 
-			if (this.children.size() != 1) {
-				// TODO support this, not needed currently
-				throw new UnsupportedOperationException("Validating Certificate chain with multiple children is not supported");
-			}
+            if (this.children.isEmpty()) {
+                // Fine, leaf certificate
+                return;
+            }
 
-			this.children.get(0).verifyChainMatches(other.children().get(0));
-		}
+            if (this.children.size() != 1) {
+                // TODO support this, not needed currently
+                throw new UnsupportedOperationException(
+                    "Validating Certificate chain with multiple children is not supported");
+            }
 
-		@Override
-		public String toString() {
-			return certificate.getSubjectX500Principal().getName();
-		}
-	}
+            this.children.get(0).verifyChainMatches(other.children().get(0));
+        }
+    }
 }

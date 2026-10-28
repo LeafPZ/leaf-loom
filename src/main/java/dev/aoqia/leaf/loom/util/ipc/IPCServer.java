@@ -57,60 +57,61 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class IPCServer implements AutoCloseable {
-	private final ExecutorService loggerReceiverService = Executors.newSingleThreadExecutor();
-	private final Path path;
-	private final Consumer<String> consumer;
+    private final Consumer<String> consumer;
+    private final ExecutorService loggerReceiverService = Executors.newSingleThreadExecutor();
+    private final Path path;
 
-	private final CountDownLatch startupLock = new CountDownLatch(1);
+    private boolean receivedMessage = false;
 
-	private boolean receivedMessage = false;
+    private final CountDownLatch startupLock = new CountDownLatch(1);
 
-	public IPCServer(Path path, Consumer<String> consumer) {
-		this.path = path;
-		this.consumer = consumer;
+    public IPCServer(Path path, Consumer<String> consumer) {
+        this.path = path;
+        this.consumer = consumer;
 
-		loggerReceiverService.submit(this::run);
+        loggerReceiverService.submit(this::run);
 
-		try {
-			startupLock.await(10, TimeUnit.SECONDS);
-		} catch (InterruptedException e) {
-			throw new RuntimeException("Timed out waiting for IPC server thread to start", e);
-		}
-	}
+        try {
+            startupLock.await(10, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Timed out waiting for IPC server thread to start", e);
+        }
+    }
 
-	public void run() {
-		UnixDomainSocketAddress address = UnixDomainSocketAddress.of(path);
+    @Override
+    public void close() throws InterruptedException {
+        loggerReceiverService.shutdownNow();
+        loggerReceiverService.awaitTermination(10, TimeUnit.SECONDS);
+    }
 
-		try (ServerSocketChannel serverChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
-			serverChannel.bind(address);
+    public Path getPath() {
+        return path;
+    }
 
-			startupLock.countDown();
+    public boolean hasReceivedMessage() {
+        return receivedMessage;
+    }
 
-			try (SocketChannel clientChannel = serverChannel.accept();
-					Scanner scanner = new Scanner(clientChannel, StandardCharsets.UTF_8)) {
-				while (!Thread.currentThread().isInterrupted()) {
-					if (scanner.hasNextLine()) {
-						receivedMessage = true;
-						this.consumer.accept(scanner.nextLine());
-					}
-				}
-			}
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to listen for IPC messages", e);
-		}
-	}
+    public void run() {
+        UnixDomainSocketAddress address = UnixDomainSocketAddress.of(path);
 
-	@Override
-	public void close() throws InterruptedException {
-		loggerReceiverService.shutdownNow();
-		loggerReceiverService.awaitTermination(10, TimeUnit.SECONDS);
-	}
+        try (ServerSocketChannel serverChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
+            serverChannel.bind(address);
 
-	public boolean hasReceivedMessage() {
-		return receivedMessage;
-	}
+            startupLock.countDown();
 
-	public Path getPath() {
-		return path;
-	}
+            try (SocketChannel clientChannel = serverChannel.accept();
+                 Scanner scanner = new Scanner(clientChannel, StandardCharsets.UTF_8))
+            {
+                while (!Thread.currentThread().isInterrupted()) {
+                    if (scanner.hasNextLine()) {
+                        receivedMessage = true;
+                        this.consumer.accept(scanner.nextLine());
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to listen for IPC messages", e);
+        }
+    }
 }

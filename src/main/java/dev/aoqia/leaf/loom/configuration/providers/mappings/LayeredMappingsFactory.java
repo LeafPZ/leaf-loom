@@ -76,115 +76,130 @@ import dev.aoqia.leaf.loom.configuration.providers.mappings.utils.AddConstructor
 import dev.aoqia.leaf.loom.util.ZipUtils;
 
 public record LayeredMappingsFactory(LayeredMappingSpec spec) {
-	private static final String GROUP = "loom";
-	private static final String MODULE = "mappings";
-	private static final Logger LOGGER = LoggerFactory.getLogger(LayeredMappingsFactory.class);
+    private static final String GROUP = "loom";
+    private static final String MODULE = "mappings";
+    private static final Logger LOGGER = LoggerFactory.getLogger(LayeredMappingsFactory.class);
 
-	/*
-	As we no longer have SelfResolvingDependency we now always create the mappings file after evaluation.
-	This works in a similar way to how remapped mods are handled.
-	 */
-	public static void afterEvaluate(ConfigContext configContext) {
-		for (LayeredMappingsFactory layeredMappingFactory : configContext.extension().getLayeredMappingFactories()) {
-			try {
-				layeredMappingFactory.evaluate(configContext);
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to setup layered mappings: %s".formatted(layeredMappingFactory.mavenNotation()), e);
-			}
-		}
-	}
+    /*
+     * As we no longer have SelfResolvingDependency we now always create the mappings file after evaluation.
+     * This works in a similar way to how remapped mods are handled.
+     */
+    public static void afterEvaluate(ConfigContext configContext) {
+        for (LayeredMappingsFactory layeredMappingFactory : configContext.extension().getLayeredMappingFactories()) {
+            try {
+                layeredMappingFactory.evaluate(configContext);
+            } catch (IOException e) {
+                throw new UncheckedIOException(
+                    "Failed to setup layered mappings: %s".formatted(layeredMappingFactory.mavenNotation()), e);
+            }
+        }
+    }
 
-	private void evaluate(ConfigContext configContext) throws IOException {
-		LOGGER.info("Evaluating layer mapping: {}", mavenNotation());
+    private void evaluate(ConfigContext configContext) throws IOException {
+        LOGGER.info("Evaluating layer mapping: {}", mavenNotation());
 
-		final Path mavenRepoDir = configContext.extension().getFiles().getGlobalZomboidRepo().toPath();
-		final LocalMavenHelper maven = new LocalMavenHelper(GROUP, MODULE, spec().getVersion(), null, mavenRepoDir);
-		final Path jar = resolve(configContext.project());
-		maven.copyToMaven(jar, null);
-	}
+        final Path mavenRepoDir = configContext.extension().getFiles().getGlobalZomboidRepo().toPath();
+        final LocalMavenHelper maven = new LocalMavenHelper(GROUP, MODULE, spec().getVersion(), null, mavenRepoDir);
+        final Path jar = resolve(configContext.project());
+        maven.copyToMaven(jar, null);
+    }
 
-	public Path resolve(Project project) throws IOException {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final MappingContext mappingContext = new GradleMappingContext(project, spec.getVersion().replace("+", "_").replace(".", "_"));
-		final Path mappingsDir = mappingContext.zomboidProvider().dir("layered").toPath();
-		final Path mappingsZip = mappingsDir.resolve(String.format("%s.%s-%s.jar", GROUP, MODULE, spec.getVersion()));
+    public Path resolve(Project project) throws IOException {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final MappingContext mappingContext = new GradleMappingContext(project,
+            spec.getVersion().replace("+", "_").replace(".", "_"));
+        final Path mappingsDir = mappingContext.zomboidProvider().dir("layered").toPath();
+        final Path mappingsZip = mappingsDir.resolve(String.format("%s.%s-%s.jar", GROUP, MODULE, spec.getVersion()));
 
-		if (Files.exists(mappingsZip) && !mappingContext.refreshDeps()) {
-			return mappingsZip;
-		}
+        if (Files.exists(mappingsZip) && !mappingContext.refreshDeps()) {
+            return mappingsZip;
+        }
 
-		boolean useIntermediateMappings = extension.getUseIntermediateMappings().get();
-		var processor = new LayeredMappingsProcessor(spec, !useIntermediateMappings);
-		List<MappingLayer> layers = processor.resolveLayers(mappingContext);
+        boolean useIntermediateMappings = extension.getUseIntermediateMappings().get();
+        var processor = new LayeredMappingsProcessor(spec, !useIntermediateMappings);
+        List<MappingLayer> layers = processor.resolveLayers(mappingContext);
 
-		Files.deleteIfExists(mappingsZip);
+        Files.deleteIfExists(mappingsZip);
 
-		writeMapping(processor, layers, mappingsZip, useIntermediateMappings);
-		writeAnnotationData(processor, layers, mappingsZip);
-		writeSignatureFixes(processor, layers, mappingsZip);
-		writeUnpickData(processor, layers, mappingsZip);
+        writeMapping(processor, layers, mappingsZip, useIntermediateMappings);
+        writeAnnotationData(processor, layers, mappingsZip);
+        writeSignatureFixes(processor, layers, mappingsZip);
+        writeUnpickData(processor, layers, mappingsZip);
 
-		return mappingsZip;
-	}
+        return mappingsZip;
+    }
 
-	public Dependency createDependency(Project project) {
-		return project.getDependencies().create(mavenNotation());
-	}
+    public Dependency createDependency(Project project) {
+        return project.getDependencies().create(mavenNotation());
+    }
 
-	public String mavenNotation() {
-		return String.format("%s:%s:%s", GROUP, MODULE, spec.getVersion());
-	}
+    public String mavenNotation() {
+        return String.format("%s:%s:%s", GROUP, MODULE, spec.getVersion());
+    }
 
-	private void writeMapping(LayeredMappingsProcessor processor, List<MappingLayer> layers, Path mappingsFile, boolean useIntermediateMappings) throws IOException {
-		MemoryMappingTree mappings = processor.getMappings(layers);
+    private void writeMapping(LayeredMappingsProcessor processor, List<MappingLayer> layers, Path mappingsFile,
+        boolean useIntermediateMappings) throws IOException
+    {
+        MemoryMappingTree mappings = processor.getMappings(layers);
 
-		try (Writer writer = new StringWriter()) {
-			var tiny2Writer = new Tiny2FileWriter(writer, false);
+        try (Writer writer = new StringWriter()) {
+            var tiny2Writer = new Tiny2FileWriter(writer, false);
 
-			MappingDstNsReorder nsReorder = new MappingDstNsReorder(tiny2Writer, useIntermediateMappings ? List.of(MappingsNamespace.NAMED.toString(), MappingsNamespace.OFFICIAL.toString()) : List.of(MappingsNamespace.NAMED.toString()));
-			MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(nsReorder, useIntermediateMappings ? MappingsNamespace.INTERMEDIARY.toString() : MappingsNamespace.OFFICIAL.toString(), true);
-			AddConstructorMappingVisitor addConstructor = new AddConstructorMappingVisitor(nsSwitch);
-			mappings.accept(addConstructor);
+            MappingDstNsReorder nsReorder = new MappingDstNsReorder(tiny2Writer,
+                useIntermediateMappings
+                    ? List.of(MappingsNamespace.NAMED.toString(), MappingsNamespace.OFFICIAL.toString())
+                    : List.of(MappingsNamespace.NAMED.toString()));
+            MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(nsReorder, useIntermediateMappings
+                ? MappingsNamespace.INTERMEDIARY.toString() : MappingsNamespace.OFFICIAL.toString(), true);
+            AddConstructorMappingVisitor addConstructor = new AddConstructorMappingVisitor(nsSwitch);
+            mappings.accept(addConstructor);
 
-			Files.deleteIfExists(mappingsFile);
-			ZipUtils.add(mappingsFile, "mappings/mappings.tiny", writer.toString().getBytes(StandardCharsets.UTF_8));
-		}
-	}
+            Files.deleteIfExists(mappingsFile);
+            ZipUtils.add(mappingsFile, "mappings/mappings.tiny", writer.toString().getBytes(StandardCharsets.UTF_8));
+        }
+    }
 
-	private void writeAnnotationData(LayeredMappingsProcessor processor, List<MappingLayer> layers, Path mappingsFile) throws IOException {
-		List<AnnotationsData> annotationsData = processor.getAnnotationsData(layers);
+    private void writeAnnotationData(LayeredMappingsProcessor processor, List<MappingLayer> layers, Path mappingsFile)
+        throws IOException
+    {
+        List<AnnotationsData> annotationsData = processor.getAnnotationsData(layers);
 
-		if (annotationsData.isEmpty()) {
-			return;
-		}
+        if (annotationsData.isEmpty()) {
+            return;
+        }
 
-		byte[] data = AnnotationsData.GSON.toJson(AnnotationsData.listToJson(annotationsData)).getBytes(StandardCharsets.UTF_8);
+        byte[] data = AnnotationsData.GSON.toJson(AnnotationsData.listToJson(annotationsData))
+            .getBytes(StandardCharsets.UTF_8);
 
-		ZipUtils.add(mappingsFile, AnnotationsLayer.ANNOTATIONS_PATH, data);
-	}
+        ZipUtils.add(mappingsFile, AnnotationsLayer.ANNOTATIONS_PATH, data);
+    }
 
-	private void writeSignatureFixes(LayeredMappingsProcessor processor, List<MappingLayer> layers, Path mappingsFile) throws IOException {
-		Map<String, String> signatureFixes = processor.getSignatureFixes(layers);
+    private void writeSignatureFixes(LayeredMappingsProcessor processor, List<MappingLayer> layers, Path mappingsFile)
+        throws IOException
+    {
+        Map<String, String> signatureFixes = processor.getSignatureFixes(layers);
 
-		if (signatureFixes == null) {
-			return;
-		}
+        if (signatureFixes == null) {
+            return;
+        }
 
-		byte[] data = LoomGradlePlugin.GSON.toJson(signatureFixes).getBytes(StandardCharsets.UTF_8);
+        byte[] data = LoomGradlePlugin.GSON.toJson(signatureFixes).getBytes(StandardCharsets.UTF_8);
 
-		ZipUtils.add(mappingsFile, "extras/record_signatures.json", data);
-	}
+        ZipUtils.add(mappingsFile, "extras/record_signatures.json", data);
+    }
 
-	private void writeUnpickData(LayeredMappingsProcessor processor, List<MappingLayer> layers, Path mappingsFile) throws IOException {
-		UnpickLayer.UnpickData unpickData = processor.getUnpickData(layers);
+    private void writeUnpickData(LayeredMappingsProcessor processor, List<MappingLayer> layers, Path mappingsFile)
+        throws IOException
+    {
+        UnpickLayer.UnpickData unpickData = processor.getUnpickData(layers);
 
-		if (unpickData == null) {
-			return;
-		}
+        if (unpickData == null) {
+            return;
+        }
 
-		byte[] data = UnpickMetadata.toJson(unpickData.metadata()).getBytes(StandardCharsets.UTF_8);
+        byte[] data = UnpickMetadata.toJson(unpickData.metadata()).getBytes(StandardCharsets.UTF_8);
 
-		ZipUtils.add(mappingsFile, UnpickMetadata.UNPICK_DEFINITIONS_PATH, unpickData.definitions());
-		ZipUtils.add(mappingsFile, UnpickMetadata.UNPICK_METADATA_PATH, data);
-	}
+        ZipUtils.add(mappingsFile, UnpickMetadata.UNPICK_DEFINITIONS_PATH, unpickData.definitions());
+        ZipUtils.add(mappingsFile, UnpickMetadata.UNPICK_METADATA_PATH, data);
+    }
 }

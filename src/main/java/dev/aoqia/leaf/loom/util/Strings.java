@@ -42,33 +42,33 @@
 package dev.aoqia.leaf.loom.util;
 
 public final class Strings {
-	public static String capitalize(String word) {
-		// Don't capitalize empty strings
-		if (word.isBlank()) {
-			return word;
-		}
+    public static String capitalize(String word) {
+        // Don't capitalize empty strings
+        if (word.isBlank()) {
+            return word;
+        }
 
-		final StringBuilder builder = new StringBuilder();
-		final int codePointCount = word.codePointCount(0, word.length());
-		final int first = Character.toUpperCase(word.codePointAt(0));
-		builder.append(Character.toString(first));
+        final StringBuilder builder = new StringBuilder();
+        final int codePointCount = word.codePointCount(0, word.length());
+        final int first = Character.toUpperCase(word.codePointAt(0));
+        builder.append(Character.toString(first));
 
-		if (codePointCount > 1) {
-			for (int codePoint = 1; codePoint < codePointCount; codePoint++) {
-				builder.append(Character.toString(word.codePointAt(codePoint)));
-			}
-		}
+        if (codePointCount > 1) {
+            for (int codePoint = 1; codePoint < codePointCount; codePoint++) {
+                builder.append(Character.toString(word.codePointAt(codePoint)));
+            }
+        }
 
-		return builder.toString();
-	}
+        return builder.toString();
+    }
 
-	// Turns camelCase/PascalCase into Capital Case
-	// caseConversionExample -> Case Conversion Example
-	public static String capitalizeCamelCaseName(String name) {
-		if (name.isEmpty()) {
-			return "";
-		}
+    // Turns camelCase/PascalCase into Capital Case
+    // caseConversionExample -> Case Conversion Example
+    public static String capitalizeCamelCaseName(String name) {
+        if (name.isEmpty()) {
+            return "";
+        }
 
-		return name.substring(0, 1).toUpperCase() + name.substring(1).replaceAll("([^A-Z])([A-Z])", "$1 $2");
-	}
+        return name.substring(0, 1).toUpperCase() + name.substring(1).replaceAll("([^A-Z])([A-Z])", "$1 $2");
+    }
 }

@@ -57,31 +57,23 @@ import org.slf4j.LoggerFactory;
  * It's quite common for other plugins to shade these libraries, thus the wrong version is used.
  * This file logs out the version + location of each library as a debugging aid.
  *
- * <p>gradlew buildEnvironment is a useful command to run alongside this.
+ * <p>
+ * gradlew buildEnvironment is a useful command to run alongside this.
  */
 public final class LibraryLocationLogger {
-	private static final List<Class<?>> libraryClasses = List.of(
-			KotlinClassMetadata.class,
-			ClassVisitor.class,
-			Analyzer.class,
-			ClassRemapper.class,
-			ClassNode.class,
-			ASMifier.class,
-			Gson.class
-	);
+    private static final List<Class<?>> libraryClasses = List.of(KotlinClassMetadata.class, ClassVisitor.class,
+        Analyzer.class, ClassRemapper.class, ClassNode.class, ASMifier.class, Gson.class);
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(LibraryLocationLogger.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(LibraryLocationLogger.class);
 
-	public static void logLibraryVersions() {
-		for (Class<?> clazz : libraryClasses) {
-			LOGGER.info("({}) with version ({}) was loaded from ({})",
-					clazz.getName(),
-					clazz.getPackage().getImplementationVersion(),
-					clazz.getProtectionDomain().getCodeSource().getLocation().getPath()
-			);
-		}
-	}
+    private LibraryLocationLogger() {
+    }
 
-	private LibraryLocationLogger() {
-	}
+    public static void logLibraryVersions() {
+        for (Class<?> clazz : libraryClasses) {
+            LOGGER.info("({}) with version ({}) was loaded from ({})", clazz.getName(),
+                clazz.getPackage().getImplementationVersion(),
+                clazz.getProtectionDomain().getCodeSource().getLocation().getPath());
+        }
+    }
 }

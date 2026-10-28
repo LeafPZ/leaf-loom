@@ -42,7 +42,7 @@
 package dev.aoqia.leaf.loom.test.unit.processor.classes;
 
 public interface SimpleInterface {
-	default int injectedMethod() {
-		return 123;
-	}
+    default int injectedMethod() {
+        return 123;
+    }
 }

@@ -51,104 +51,97 @@ import com.google.gson.JsonObject;
 import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.util.fmj.LeafModJsonSource;
 
-public record MixinRefmap(
-		String refmapPath,
-		MixinMappingData mappings,
-		Map<NamespacePair, MixinMappingData> data) {
-	private static final String MAPPINGS_KEY = "mappings";
-	private static final String DATA_KEY = "data";
+public record MixinRefmap(String refmapPath, MixinMappingData mappings, Map<NamespacePair, MixinMappingData> data) {
+    private static final String MAPPINGS_KEY = "mappings";
+    private static final String DATA_KEY = "data";
 
-	public static MixinRefmap fromMod(String refmapPath, LeafModJsonSource modSource) throws IOException {
-		String refmapJson = new String(modSource.read(refmapPath));
-		JsonObject jsonObject = LoomGradlePlugin.GSON.fromJson(refmapJson, JsonObject.class);
+    public static MixinRefmap fromMod(String refmapPath, LeafModJsonSource modSource) throws IOException {
+        String refmapJson = new String(modSource.read(refmapPath));
+        JsonObject jsonObject = LoomGradlePlugin.GSON.fromJson(refmapJson, JsonObject.class);
 
-		MixinMappingData mappings = MixinMappingData.EMPTY;
-		var data = new HashMap<NamespacePair, MixinMappingData>();
+        MixinMappingData mappings = MixinMappingData.EMPTY;
+        var data = new HashMap<NamespacePair, MixinMappingData>();
 
-		if (jsonObject.has(MAPPINGS_KEY)) {
-			mappings = MixinMappingData.parse(jsonObject.getAsJsonObject(MAPPINGS_KEY));
-		}
+        if (jsonObject.has(MAPPINGS_KEY)) {
+            mappings = MixinMappingData.parse(jsonObject.getAsJsonObject(MAPPINGS_KEY));
+        }
 
-		if (jsonObject.has(DATA_KEY)) {
-			JsonObject dataJson = jsonObject.getAsJsonObject(DATA_KEY);
+        if (jsonObject.has(DATA_KEY)) {
+            JsonObject dataJson = jsonObject.getAsJsonObject(DATA_KEY);
 
-			for (Map.Entry<String, JsonElement> entry : dataJson.entrySet()) {
-				String namespaces = entry.getKey();
-				JsonObject namespacedData = entry.getValue().getAsJsonObject();
-				data.put(NamespacePair.parseString(namespaces), MixinMappingData.parse(namespacedData));
-			}
-		}
+            for (Map.Entry<String, JsonElement> entry : dataJson.entrySet()) {
+                String namespaces = entry.getKey();
+                JsonObject namespacedData = entry.getValue().getAsJsonObject();
+                data.put(NamespacePair.parseString(namespaces), MixinMappingData.parse(namespacedData));
+            }
+        }
 
-		return new MixinRefmap(refmapPath, mappings, data);
-	}
+        return new MixinRefmap(refmapPath, mappings, data);
+    }
 
-	public MixinMappingData getData(NamespacePair namespaces) {
-		MixinMappingData data = this.data.get(namespaces);
+    public MixinMappingData getData(NamespacePair namespaces) {
+        MixinMappingData data = this.data.get(namespaces);
 
-		if (data != null) {
-			return data;
-		}
+        if (data != null) {
+            return data;
+        }
 
-		// TODO: log warning?
-		return mappings;
-	}
+        // TODO: log warning?
+        return mappings;
+    }
 
-	public record NamespacePair(
-			String from,
-			String to) {
-		private static NamespacePair parseString(String string) {
-			final String[] parts = string.split(":");
+    public record NamespacePair(String from, String to) {
+        private static NamespacePair parseString(String string) {
+            final String[] parts = string.split(":");
 
-			if (parts.length != 2) {
-				throw new IllegalArgumentException("Invalid namespace pair: " + string);
-			}
+            if (parts.length != 2) {
+                throw new IllegalArgumentException("Invalid namespace pair: " + string);
+            }
 
-			return new NamespacePair(parts[0], parts[1]);
-		}
-	}
+            return new NamespacePair(parts[0], parts[1]);
+        }
+    }
 
-	// Mixin class name -> ReferenceMappingData
-	public record MixinMappingData(
-			Map<String, ReferenceMappingData> data) {
-		private static final MixinMappingData EMPTY = new MixinMappingData(Map.of());
+    // Mixin class name -> ReferenceMappingData
+    public record MixinMappingData(Map<String, ReferenceMappingData> data) {
+        private static final MixinMappingData EMPTY = new MixinMappingData(Map.of());
 
-		private static MixinMappingData parse(JsonObject jsonObject) {
-			var data = new HashMap<String, ReferenceMappingData>();
+        private static MixinMappingData parse(JsonObject jsonObject) {
+            var data = new HashMap<String, ReferenceMappingData>();
 
-			for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-				String mixinName = entry.getKey();
-				JsonObject mappings = entry.getValue().getAsJsonObject();
-				data.put(mixinName, ReferenceMappingData.parse(mappings));
-			}
+            for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                String mixinName = entry.getKey();
+                JsonObject mappings = entry.getValue().getAsJsonObject();
+                data.put(mixinName, ReferenceMappingData.parse(mappings));
+            }
 
-			return new MixinMappingData(data);
-		}
+            return new MixinMappingData(data);
+        }
 
-		public String remap(String mixinName, String reference) {
-			ReferenceMappingData referenceMappingData = data.get(mixinName);
+        public String remap(String mixinName, String reference) {
+            ReferenceMappingData referenceMappingData = data.get(mixinName);
 
-			if (referenceMappingData == null) {
-				return reference;
-			}
+            if (referenceMappingData == null) {
+                return reference;
+            }
 
-			return referenceMappingData.remap(reference);
-		}
-	}
+            return referenceMappingData.remap(reference);
+        }
+    }
 
-	public record ReferenceMappingData(
-			Map<String, String> mappings) {
-		private static ReferenceMappingData parse(JsonObject jsonObject) {
-			var mappings = new HashMap<String, String>();
+    public record ReferenceMappingData(Map<String, String> mappings) {
+        private static ReferenceMappingData parse(JsonObject jsonObject) {
+            var mappings = new HashMap<String, String>();
 
-			for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-				mappings.put(entry.getKey(), entry.getValue().getAsString());
-			}
+            for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+                mappings.put(entry.getKey(), entry.getValue().getAsString());
+            }
 
-			return new ReferenceMappingData(mappings);
-		}
+            return new ReferenceMappingData(mappings);
+        }
 
-		public String remap(String reference) {
-			return mappings.getOrDefault(reference, reference);
-		}
-	}
+        public String remap(String reference) {
+            return mappings.getOrDefault(reference, reference);
+        }
+    }
 }

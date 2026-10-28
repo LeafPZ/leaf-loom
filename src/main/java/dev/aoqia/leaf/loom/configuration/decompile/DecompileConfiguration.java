@@ -48,19 +48,19 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.MappedZomboidProvider;
 
 public abstract class DecompileConfiguration<T extends MappedZomboidProvider> {
-	static final String DEFAULT_DECOMPILER = "Vineflower";
+    static final String DEFAULT_DECOMPILER = "Vineflower";
 
-	protected final Project project;
-	protected final T zomboidProvider;
-	protected final LoomGradleExtension extension;
+    protected final LoomGradleExtension extension;
+    protected final Project project;
+    protected final T zomboidProvider;
 
-	public DecompileConfiguration(Project project, T zomboidProvider) {
-		this.project = project;
-		this.zomboidProvider = zomboidProvider;
-		this.extension = LoomGradleExtension.get(project);
-	}
+    public DecompileConfiguration(Project project, T zomboidProvider) {
+        this.project = project;
+        this.zomboidProvider = zomboidProvider;
+        this.extension = LoomGradleExtension.get(project);
+    }
 
-	public abstract String getTaskName(ZomboidJar.Type type);
+    public abstract void afterEvaluation();
 
-	public abstract void afterEvaluation();
+    public abstract String getTaskName(ZomboidJar.Type type);
 }

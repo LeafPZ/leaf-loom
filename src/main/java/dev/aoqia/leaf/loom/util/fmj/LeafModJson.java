@@ -53,49 +53,52 @@ import org.jspecify.annotations.Nullable;
 import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readString;
 
 public abstract sealed class LeafModJson permits LeafModJsonV1, LeafModJsonV2, LeafModJson.Mockable {
-	protected final JsonObject jsonObject;
-	private final LeafModJsonSource source;
+    protected final JsonObject jsonObject;
 
-	protected LeafModJson(JsonObject jsonObject, LeafModJsonSource source) {
-		this.jsonObject = Objects.requireNonNull(jsonObject);
-		this.source = Objects.requireNonNull(source);
-	}
+    private final LeafModJsonSource source;
 
-	public abstract int getVersion();
+    protected LeafModJson(JsonObject jsonObject, LeafModJsonSource source) {
+        this.jsonObject = Objects.requireNonNull(jsonObject);
+        this.source = Objects.requireNonNull(source);
+    }
 
-	public String getId() {
-		return readString(jsonObject, "id");
-	}
+    public abstract Map<String, ModEnvironment> getClassTweakers();
 
-	public String getModVersion() {
-		return readString(jsonObject, "version");
-	}
+    @Nullable
+    public abstract JsonElement getCustom(String key);
 
-	@Nullable public abstract JsonElement getCustom(String key);
+    public String getId() {
+        return readString(jsonObject, "id");
+    }
 
-	public abstract List<String> getMixinConfigurations();
+    public abstract List<String> getMixinConfigurations();
 
-	public abstract Map<String, ModEnvironment> getClassTweakers();
+    public String getModVersion() {
+        return readString(jsonObject, "version");
+    }
 
-	public LeafModJsonSource getSource() {
-		return source;
-	}
+    public LeafModJsonSource getSource() {
+        return source;
+    }
 
-	@Override
-	public final String toString() {
-		return getClass().getName() + "[id=%s, version=%s, classTweakers=%s]".formatted(getId(), getVersion(), getClassTweakers());
-	}
+    public abstract int getVersion();
 
-	@Override
-	public final int hashCode() {
-		return Objects.hash(getId(), getVersion());
-	}
+    @Override
+    public final int hashCode() {
+        return Objects.hash(getId(), getVersion());
+    }
 
-	@VisibleForTesting
-	public abstract non-sealed class Mockable extends LeafModJson {
-		private Mockable() {
-			super(null, null);
-			throw new AssertionError();
-		}
-	}
+    @Override
+    public final String toString() {
+        return getClass().getName()
+            + "[id=%s, version=%s, classTweakers=%s]".formatted(getId(), getVersion(), getClassTweakers());
+    }
+
+    @VisibleForTesting
+    public abstract non-sealed class Mockable extends LeafModJson {
+        private Mockable() {
+            super(null, null);
+            throw new AssertionError();
+        }
+    }
 }

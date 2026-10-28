@@ -58,147 +58,151 @@ import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.tree.AnnotationNode;
 
 class AnnotationNodeSerializer implements JsonSerializer<AnnotationNode>, JsonDeserializer<AnnotationNode> {
-	@Override
-	public AnnotationNode deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
-		JsonObject jsonObject = json.getAsJsonObject();
-		String desc = jsonObject.getAsJsonPrimitive("desc").getAsString();
-		AnnotationNode annotation = new AnnotationNode(desc);
-		JsonObject values = jsonObject.getAsJsonObject("values");
+    private static void deserializeAnnotationValue(AnnotationVisitor visitor, @Nullable String name, JsonElement value,
+        JsonDeserializationContext context) throws JsonParseException
+    {
+        JsonObject obj = value.getAsJsonObject();
+        switch (obj.getAsJsonPrimitive("type").getAsString()) {
+            case "byte" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsByte());
+            case "boolean" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsBoolean());
+            case "char" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsString().charAt(0));
+            case "short" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsShort());
+            case "int" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsInt());
+            case "long" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsLong());
+            case "float" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsFloat());
+            case "double" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsDouble());
+            case "string" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsString());
+            case "class" ->
+                visitor.visit(name, org.objectweb.asm.Type.getType(obj.getAsJsonPrimitive("value").getAsString()));
+            case "enum_constant" -> visitor.visitEnum(name, obj.getAsJsonPrimitive("owner").getAsString(),
+                obj.getAsJsonPrimitive("name").getAsString());
+            case "annotation" -> {
+                AnnotationNode annotation = context.deserialize(obj, AnnotationNode.class);
+                AnnotationVisitor av = visitor.visitAnnotation(name, annotation.desc);
 
-		if (values != null) {
-			for (Map.Entry<String, JsonElement> entry : values.entrySet()) {
-				deserializeAnnotationValue(annotation, entry.getKey(), entry.getValue(), context);
-			}
-		}
+                if (av != null) {
+                    annotation.accept(av);
+                }
+            }
+            case "array" -> {
+                AnnotationVisitor av = visitor.visitArray(name);
 
-		return annotation;
-	}
+                if (av != null) {
+                    for (JsonElement element : obj.getAsJsonArray("value")) {
+                        deserializeAnnotationValue(av, null, element, context);
+                    }
 
-	private static void deserializeAnnotationValue(AnnotationVisitor visitor, @Nullable String name, JsonElement value, JsonDeserializationContext context) throws JsonParseException {
-		JsonObject obj = value.getAsJsonObject();
-		switch (obj.getAsJsonPrimitive("type").getAsString()) {
-		case "byte" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsByte());
-		case "boolean" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsBoolean());
-		case "char" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsString().charAt(0));
-		case "short" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsShort());
-		case "int" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsInt());
-		case "long" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsLong());
-		case "float" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsFloat());
-		case "double" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsDouble());
-		case "string" -> visitor.visit(name, obj.getAsJsonPrimitive("value").getAsString());
-		case "class" ->
-				visitor.visit(name, org.objectweb.asm.Type.getType(obj.getAsJsonPrimitive("value").getAsString()));
-		case "enum_constant" ->
-				visitor.visitEnum(name, obj.getAsJsonPrimitive("owner").getAsString(), obj.getAsJsonPrimitive("name").getAsString());
-		case "annotation" -> {
-			AnnotationNode annotation = context.deserialize(obj, AnnotationNode.class);
-			AnnotationVisitor av = visitor.visitAnnotation(name, annotation.desc);
+                    av.visitEnd();
+                }
+            }
+        }
+    }
 
-			if (av != null) {
-				annotation.accept(av);
-			}
-		}
-		case "array" -> {
-			AnnotationVisitor av = visitor.visitArray(name);
+    private static JsonObject serializeAnnotationValue(Object value, JsonSerializationContext context) {
+        JsonObject json = new JsonObject();
 
-			if (av != null) {
-				for (JsonElement element : obj.getAsJsonArray("value")) {
-					deserializeAnnotationValue(av, null, element, context);
-				}
+        switch (value) {
+            case Byte b -> {
+                json.addProperty("type", "byte");
+                json.addProperty("value", b);
+            }
+            case Boolean b -> {
+                json.addProperty("type", "boolean");
+                json.addProperty("value", b);
+            }
+            case Character c -> {
+                json.addProperty("type", "char");
+                json.addProperty("value", c);
+            }
+            case Short s -> {
+                json.addProperty("type", "short");
+                json.addProperty("value", s);
+            }
+            case Integer i -> {
+                json.addProperty("type", "int");
+                json.addProperty("value", i);
+            }
+            case Long l -> {
+                json.addProperty("type", "long");
+                json.addProperty("value", l);
+            }
+            case Float f -> {
+                json.addProperty("type", "float");
+                json.addProperty("value", f);
+            }
+            case Double d -> {
+                json.addProperty("type", "double");
+                json.addProperty("value", d);
+            }
+            case String str -> {
+                json.addProperty("type", "string");
+                json.addProperty("value", str);
+            }
+            case org.objectweb.asm.Type type -> {
+                json.addProperty("type", "class");
+                json.addProperty("value", type.getDescriptor());
+            }
+            case String[] enumConstant -> {
+                json.addProperty("type", "enum_constant");
+                json.addProperty("owner", enumConstant[0]);
+                json.addProperty("name", enumConstant[1]);
+            }
+            case AnnotationNode annotation -> {
+                json.addProperty("type", "annotation");
+                JsonObject annJson = context.serialize(annotation).getAsJsonObject();
+                json.asMap().putAll(annJson.asMap());
+            }
+            case List<?> list -> {
+                json.addProperty("type", "array");
+                JsonArray array = new JsonArray(list.size());
 
-				av.visitEnd();
-			}
-		}
-		}
-	}
+                for (Object o : list) {
+                    array.add(serializeAnnotationValue(o, context));
+                }
 
-	@Override
-	public JsonElement serialize(AnnotationNode src, Type typeOfSrc, JsonSerializationContext context) {
-		JsonObject json = new JsonObject();
-		json.addProperty("desc", src.desc);
+                json.add("value", array);
+            }
+            default -> throw new IllegalArgumentException("Unknown annotation value type: " + value);
+        }
 
-		if (src.values != null && !src.values.isEmpty()) {
-			JsonObject values = new JsonObject();
+        return json;
+    }
 
-			for (int i = 0; i < src.values.size() - 1; i += 2) {
-				String name = String.valueOf(src.values.get(i));
-				Object value = src.values.get(i + 1);
-				values.add(name, serializeAnnotationValue(value, context));
-			}
+    @Override
+    public AnnotationNode deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+        throws JsonParseException
+    {
+        JsonObject jsonObject = json.getAsJsonObject();
+        String desc = jsonObject.getAsJsonPrimitive("desc").getAsString();
+        AnnotationNode annotation = new AnnotationNode(desc);
+        JsonObject values = jsonObject.getAsJsonObject("values");
 
-			json.add("values", values);
-		}
+        if (values != null) {
+            for (Map.Entry<String, JsonElement> entry : values.entrySet()) {
+                deserializeAnnotationValue(annotation, entry.getKey(), entry.getValue(), context);
+            }
+        }
 
-		return json;
-	}
+        return annotation;
+    }
 
-	private static JsonObject serializeAnnotationValue(Object value, JsonSerializationContext context) {
-		JsonObject json = new JsonObject();
+    @Override
+    public JsonElement serialize(AnnotationNode src, Type typeOfSrc, JsonSerializationContext context) {
+        JsonObject json = new JsonObject();
+        json.addProperty("desc", src.desc);
 
-		switch (value) {
-		case Byte b -> {
-			json.addProperty("type", "byte");
-			json.addProperty("value", b);
-		}
-		case Boolean b -> {
-			json.addProperty("type", "boolean");
-			json.addProperty("value", b);
-		}
-		case Character c -> {
-			json.addProperty("type", "char");
-			json.addProperty("value", c);
-		}
-		case Short s -> {
-			json.addProperty("type", "short");
-			json.addProperty("value", s);
-		}
-		case Integer i -> {
-			json.addProperty("type", "int");
-			json.addProperty("value", i);
-		}
-		case Long l -> {
-			json.addProperty("type", "long");
-			json.addProperty("value", l);
-		}
-		case Float f -> {
-			json.addProperty("type", "float");
-			json.addProperty("value", f);
-		}
-		case Double d -> {
-			json.addProperty("type", "double");
-			json.addProperty("value", d);
-		}
-		case String str -> {
-			json.addProperty("type", "string");
-			json.addProperty("value", str);
-		}
-		case org.objectweb.asm.Type type -> {
-			json.addProperty("type", "class");
-			json.addProperty("value", type.getDescriptor());
-		}
-		case String[] enumConstant -> {
-			json.addProperty("type", "enum_constant");
-			json.addProperty("owner", enumConstant[0]);
-			json.addProperty("name", enumConstant[1]);
-		}
-		case AnnotationNode annotation -> {
-			json.addProperty("type", "annotation");
-			JsonObject annJson = context.serialize(annotation).getAsJsonObject();
-			json.asMap().putAll(annJson.asMap());
-		}
-		case List<?> list -> {
-			json.addProperty("type", "array");
-			JsonArray array = new JsonArray(list.size());
+        if (src.values != null && !src.values.isEmpty()) {
+            JsonObject values = new JsonObject();
 
-			for (Object o : list) {
-				array.add(serializeAnnotationValue(o, context));
-			}
+            for (int i = 0; i < src.values.size() - 1; i += 2) {
+                String name = String.valueOf(src.values.get(i));
+                Object value = src.values.get(i + 1);
+                values.add(name, serializeAnnotationValue(value, context));
+            }
 
-			json.add("value", array);
-		}
-		default -> throw new IllegalArgumentException("Unknown annotation value type: " + value);
-		}
+            json.add("values", values);
+        }
 
-		return json;
-	}
+        return json;
+    }
 }

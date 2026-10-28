@@ -56,151 +56,157 @@ import org.jspecify.annotations.Nullable;
 
 @SuppressWarnings("UnusedReturnValue")
 public class DownloadBuilder {
-	private static final Duration ONE_DAY = Duration.ofDays(1);
+    private static final Duration ONE_DAY = Duration.ofDays(1);
 
-	private final URI url;
-	private @Nullable String expectedHash = null;
-	private boolean useEtag = true;
-	private boolean forceDownload = false;
-	private boolean offline = false;
-	private Duration maxAge = Duration.ZERO;
-	private DownloadProgressListener progressListener = DownloadProgressListener.NONE;
-	private int maxRetries = 3;
-	private boolean allowInsecureProtocol = false;
-	private HttpClient.Version httpVersion = HttpClient.Version.HTTP_2;
+    private boolean allowInsecureProtocol = false;
 
-	private DownloadBuilder(URI url) {
-		this.url = url;
-	}
+    private @Nullable String expectedHash = null;
 
-	static DownloadBuilder create(String url) throws URISyntaxException {
-		return new DownloadBuilder(new URI(url));
-	}
+    private boolean forceDownload = false;
 
-	public DownloadBuilder sha1(String sha1) {
-		this.expectedHash = "sha1:" + sha1;
-		return this;
-	}
+    private HttpClient.Version httpVersion = HttpClient.Version.HTTP_2;
+    private Duration maxAge = Duration.ZERO;
+    private int maxRetries = 3;
+    private boolean offline = false;
+    private DownloadProgressListener progressListener = DownloadProgressListener.NONE;
+    private final URI url;
+    private boolean useEtag = true;
 
-	public DownloadBuilder etag(boolean useEtag) {
-		this.useEtag = useEtag;
-		return this;
-	}
+    private DownloadBuilder(URI url) {
+        this.url = url;
+    }
 
-	public DownloadBuilder forceDownload() {
-		forceDownload = true;
-		return this;
-	}
+    static DownloadBuilder create(String url) throws URISyntaxException {
+        return new DownloadBuilder(new URI(url));
+    }
 
-	public DownloadBuilder offline() {
-		offline = true;
-		return this;
-	}
+    // See comment on org.gradle.util.internal.GUtil.isSecureUrl
+    private static boolean isSecureUrl(URI url) {
+        if ("127.0.0.1".equals(url.getHost())) {
+            return true;
+        }
 
-	public DownloadBuilder maxAge(Duration duration) {
-		this.maxAge = duration;
-		return this;
-	}
+        final String scheme = url.getScheme();
+        return !"http".equalsIgnoreCase(scheme);
+    }
 
-	public DownloadBuilder progress(DownloadProgressListener progressListener) {
-		this.progressListener = progressListener;
-		return this;
-	}
+    public DownloadBuilder allowInsecureProtocol() {
+        this.allowInsecureProtocol = true;
+        return this;
+    }
 
-	public DownloadBuilder maxRetries(int maxRetries) {
-		this.maxRetries = maxRetries;
-		return this;
-	}
+    public DownloadBuilder defaultCache() {
+        etag(true);
+        return maxAge(ONE_DAY);
+    }
 
-	public DownloadBuilder defaultCache() {
-		etag(true);
-		return maxAge(ONE_DAY);
-	}
+    public DownloadResult downloadPath(Path path) throws DownloadException {
+        return withRetries((download) -> download.downloadPath(path));
+    }
 
-	public DownloadBuilder allowInsecureProtocol() {
-		this.allowInsecureProtocol = true;
-		return this;
-	}
+    public CompletableFuture<DownloadResult> downloadPathAsync(Path path, DownloadExecutor executor) {
+        return executor.runAsync(() -> downloadPath(path));
+    }
 
-	public DownloadBuilder httpVersion(HttpClient.Version httpVersion) {
-		this.httpVersion = httpVersion;
-		return this;
-	}
+    public String downloadString() throws DownloadException {
+        return withRetries(Download::downloadString);
+    }
 
-	private Download build(int downloadAttempt) {
-		if (!allowInsecureProtocol && !isSecureUrl(url)) {
-			throw new IllegalArgumentException("Cannot create download for url (%s) with insecure protocol".formatted(url.toString()));
-		}
+    public String downloadString(Path cache) throws DownloadException {
+        return withRetries((download) -> {
+            download.downloadPath(cache);
 
-		return new Download(this.url, this.expectedHash, this.useEtag, this.forceDownload, this.offline, maxAge, progressListener, httpVersion, downloadAttempt);
-	}
+            try {
+                return Files.readString(cache, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                try {
+                    Files.deleteIfExists(cache);
+                } catch (IOException ex) {
+                    // Ignored
+                }
 
-	public CompletableFuture<DownloadResult> downloadPathAsync(Path path, DownloadExecutor executor) {
-		return executor.runAsync(() -> downloadPath(path));
-	}
+                throw new DownloadException("Failed to download and read string", e);
+            }
+        });
+    }
 
-	public DownloadResult downloadPath(Path path) throws DownloadException {
-		return withRetries((download) -> download.downloadPath(path));
-	}
+    public DownloadBuilder etag(boolean useEtag) {
+        this.useEtag = useEtag;
+        return this;
+    }
 
-	public String downloadString() throws DownloadException {
-		return withRetries(Download::downloadString);
-	}
+    public DownloadBuilder forceDownload() {
+        forceDownload = true;
+        return this;
+    }
 
-	public String downloadString(Path cache) throws DownloadException {
-		return withRetries((download) -> {
-			download.downloadPath(cache);
+    public DownloadBuilder httpVersion(HttpClient.Version httpVersion) {
+        this.httpVersion = httpVersion;
+        return this;
+    }
 
-			try {
-				return Files.readString(cache, StandardCharsets.UTF_8);
-			} catch (IOException e) {
-				try {
-					Files.deleteIfExists(cache);
-				} catch (IOException ex) {
-					// Ignored
-				}
+    public DownloadBuilder maxAge(Duration duration) {
+        this.maxAge = duration;
+        return this;
+    }
 
-				throw new DownloadException("Failed to download and read string", e);
-			}
-		});
-	}
+    public DownloadBuilder maxRetries(int maxRetries) {
+        this.maxRetries = maxRetries;
+        return this;
+    }
 
-	private <T> T withRetries(DownloadFunction<T> supplier) throws DownloadException {
-		for (int i = 1; i <= maxRetries; i++) {
-			try {
-				if (i == maxRetries) {
-					// Last ditch attempt, try over HTTP 1.1
-					httpVersion(HttpClient.Version.HTTP_1_1);
-				}
+    public DownloadBuilder offline() {
+        offline = true;
+        return this;
+    }
 
-				return supplier.get(build(i));
-			} catch (DownloadException e) {
-				if (e.getStatusCode() == 404) {
-					// Don't retry on 404's
-					throw e;
-				}
+    public DownloadBuilder progress(DownloadProgressListener progressListener) {
+        this.progressListener = progressListener;
+        return this;
+    }
 
-				if (i == maxRetries) {
-					throw new DownloadException(String.format(Locale.ENGLISH, "Failed download after %d attempts", maxRetries), e);
-				}
-			}
-		}
+    public DownloadBuilder sha1(String sha1) {
+        this.expectedHash = "sha1:" + sha1;
+        return this;
+    }
 
-		throw new IllegalStateException();
-	}
+    private Download build(int downloadAttempt) {
+        if (!allowInsecureProtocol && !isSecureUrl(url)) {
+            throw new IllegalArgumentException(
+                "Cannot create download for url (%s) with insecure protocol".formatted(url.toString()));
+        }
 
-	// See comment on org.gradle.util.internal.GUtil.isSecureUrl
-	private static boolean isSecureUrl(URI url) {
-		if ("127.0.0.1".equals(url.getHost())) {
-			return true;
-		}
+        return new Download(this.url, this.expectedHash, this.useEtag, this.forceDownload, this.offline, maxAge,
+            progressListener, httpVersion, downloadAttempt);
+    }
 
-		final String scheme = url.getScheme();
-		return !"http".equalsIgnoreCase(scheme);
-	}
+    private <T> T withRetries(DownloadFunction<T> supplier) throws DownloadException {
+        for (int i = 1; i <= maxRetries; i++) {
+            try {
+                if (i == maxRetries) {
+                    // Last ditch attempt, try over HTTP 1.1
+                    httpVersion(HttpClient.Version.HTTP_1_1);
+                }
 
-	@FunctionalInterface
-	private interface DownloadFunction<T> {
-		T get(Download download) throws DownloadException;
-	}
+                return supplier.get(build(i));
+            } catch (DownloadException e) {
+                if (e.getStatusCode() == 404) {
+                    // Don't retry on 404's
+                    throw e;
+                }
+
+                if (i == maxRetries) {
+                    throw new DownloadException(
+                        String.format(Locale.ENGLISH, "Failed download after %d attempts", maxRetries), e);
+                }
+            }
+        }
+
+        throw new IllegalStateException();
+    }
+
+    @FunctionalInterface
+    private interface DownloadFunction<T> {
+        T get(Download download) throws DownloadException;
+    }
 }

@@ -46,5 +46,6 @@ import org.gradle.api.Project;
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
-public record ConfigContextImpl(Project project, ServiceFactory serviceFactory, LoomGradleExtension extension) implements ConfigContext {
-}
+public record ConfigContextImpl(Project project, ServiceFactory serviceFactory, LoomGradleExtension extension)
+    implements ConfigContext
+{}

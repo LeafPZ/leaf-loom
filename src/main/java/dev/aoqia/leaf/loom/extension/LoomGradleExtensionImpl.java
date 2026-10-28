@@ -84,210 +84,82 @@ import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public abstract class LoomGradleExtensionImpl extends LoomGradleExtensionApiImpl implements LoomGradleExtension {
-	private final Project project;
-	private final MixinExtension mixinApExtension;
-	private final LoomFiles loomFiles;
-	private final ConfigurableFileCollection unmappedMods;
+    private final boolean configurationCacheActive;
+    private LoomDependencyManager dependencyManager;
+    private final Property<Boolean> disableObfuscation;
+    private final Property<Boolean> dontRemap;
 
-	private final List<AccessWidenerFile> transitiveAccessWideners = new ArrayList<>();
+    private InstallerData installerData;
 
-	private LoomDependencyManager dependencyManager;
-	private ZomboidMetadataProvider metadataProvider;
-	private ZomboidProvider zomboidProvider;
-	private MappingConfiguration mappingConfiguration;
-	private NamedZomboidProvider<?> namedZomboidProvider;
-	private IntermediaryZomboidProvider<?> intermediaryZomboidProvider;
-	private InstallerData installerData;
-	private boolean refreshDeps;
-	private final ListProperty<LibraryProcessorManager.LibraryProcessorFactory> libraryProcessorFactories;
-	private final boolean configurationCacheActive;
-	private final boolean isolatedProjectsActive;
-	private final boolean isCollectingDependencyVerificationMetadata;
-	private final Property<Boolean> disableObfuscation;
-	private final Property<Boolean> dontRemap;
+    private IntermediaryZomboidProvider<?> intermediaryZomboidProvider;
+    private final boolean isCollectingDependencyVerificationMetadata;
+    private final boolean isolatedProjectsActive;
+    private final ListProperty<LibraryProcessorManager.LibraryProcessorFactory> libraryProcessorFactories;
+    private final LoomFiles loomFiles;
+    private MappingConfiguration mappingConfiguration;
+    private ZomboidMetadataProvider metadataProvider;
+    private final MixinExtension mixinApExtension;
+    private NamedZomboidProvider<?> namedZomboidProvider;
+    private final Project project;
+    private boolean refreshDeps;
+    private final List<AccessWidenerFile> transitiveAccessWideners = new ArrayList<>();
+    private final ConfigurableFileCollection unmappedMods;
+    private ZomboidProvider zomboidProvider;
 
-	@Inject
-	protected abstract BuildFeatures getBuildFeatures();
+    @Inject
+    public LoomGradleExtensionImpl(Project project, LoomFiles files) {
+        super(project, files);
+        this.project = project;
+        // Initiate with newInstance to allow gradle to decorate our extension
+        this.mixinApExtension = project.getObjects().newInstance(MixinExtensionImpl.class, project);
+        this.loomFiles = files;
+        this.unmappedMods = project.files();
 
-	@Inject
-	public LoomGradleExtensionImpl(Project project, LoomFiles files) {
-		super(project, files);
-		this.project = project;
-		// Initiate with newInstance to allow gradle to decorate our extension
-		this.mixinApExtension = project.getObjects().newInstance(MixinExtensionImpl.class, project);
-		this.loomFiles = files;
-		this.unmappedMods = project.files();
+        // Setup the default intermediate mappings provider.
+        setIntermediateMappingsProvider(IntermediaryMappingsProvider.class, provider -> {
+            provider.getIntermediaryUrl().convention(getIntermediaryUrl()).finalizeValueOnRead();
 
-		// Setup the default intermediate mappings provider.
-		setIntermediateMappingsProvider(IntermediaryMappingsProvider.class, provider -> {
-			provider.getIntermediaryUrl()
-					.convention(getIntermediaryUrl())
-					.finalizeValueOnRead();
+            provider.getRefreshDeps().set(project.provider(() -> LoomGradleExtension.get(project).refreshDeps()));
+        });
 
-			provider.getRefreshDeps().set(project.provider(() -> LoomGradleExtension.get(project).refreshDeps()));
-		});
+        refreshDeps = manualRefreshDeps();
+        libraryProcessorFactories = project.getObjects()
+            .listProperty(LibraryProcessorManager.LibraryProcessorFactory.class);
+        libraryProcessorFactories.addAll(LibraryProcessorManager.DEFAULT_LIBRARY_PROCESSORS);
+        libraryProcessorFactories.finalizeValueOnRead();
 
-		refreshDeps = manualRefreshDeps();
-		libraryProcessorFactories = project.getObjects().listProperty(LibraryProcessorManager.LibraryProcessorFactory.class);
-		libraryProcessorFactories.addAll(LibraryProcessorManager.DEFAULT_LIBRARY_PROCESSORS);
-		libraryProcessorFactories.finalizeValueOnRead();
-
-		configurationCacheActive = getBuildFeatures().getConfigurationCache().getActive().get();
-		isolatedProjectsActive = getBuildFeatures().getIsolatedProjects().getActive().get();
-		isCollectingDependencyVerificationMetadata = !project.getGradle().getStartParameter().getWriteDependencyVerifications().isEmpty();
-		disableObfuscation = project.getObjects().property(Boolean.class);
-		dontRemap = project.getObjects().property(Boolean.class);
+        configurationCacheActive = getBuildFeatures().getConfigurationCache().getActive().get();
+        isolatedProjectsActive = getBuildFeatures().getIsolatedProjects().getActive().get();
+        isCollectingDependencyVerificationMetadata = !project.getGradle()
+            .getStartParameter()
+            .getWriteDependencyVerifications()
+            .isEmpty();
+        disableObfuscation = project.getObjects().property(Boolean.class);
+        dontRemap = project.getObjects().property(Boolean.class);
 
         // TODO:
-		if (!project.getPluginManager().hasPlugin(LoomRemapGradlePlugin.NAME)) {
-			disableObfuscation.set(true);
-			disableObfuscation.finalizeValue();
-		} else {
-			disableObfuscation.set(project.provider(() -> GradleUtils.getBooleanProperty(getProject(), Constants.Properties.DISABLE_OBFUSCATION)));
-			disableObfuscation.finalizeValueOnRead();
-		}
+        if (!project.getPluginManager().hasPlugin(LoomRemapGradlePlugin.NAME)) {
+            disableObfuscation.set(true);
+            disableObfuscation.finalizeValue();
+        } else {
+            disableObfuscation.set(project.provider(
+                () -> GradleUtils.getBooleanProperty(getProject(), Constants.Properties.DISABLE_OBFUSCATION)));
+            disableObfuscation.finalizeValueOnRead();
+        }
 
-		dontRemap.set(disableObfuscation.map(notObfuscated -> notObfuscated || GradleUtils.getBooleanProperty(getProject(), Constants.Properties.DONT_REMAP)));
-		dontRemap.finalizeValueOnRead();
+        dontRemap.set(disableObfuscation.map(notObfuscated -> notObfuscated
+            || GradleUtils.getBooleanProperty(getProject(), Constants.Properties.DONT_REMAP)));
+        dontRemap.finalizeValueOnRead();
 
-		if (refreshDeps) {
-			project.getLogger().lifecycle("Refresh dependencies is in use, loom will be significantly slower.");
-		}
-	}
+        if (refreshDeps) {
+            project.getLogger().lifecycle("Refresh dependencies is in use, loom will be significantly slower.");
+        }
+    }
 
-	@Override
-	protected Project getProject() {
-		return project;
-	}
-
-	@Override
-	public LoomFiles getFiles() {
-		return loomFiles;
-	}
-
-	@Override
-	public ZomboidMetadataProvider getMetadataProvider() {
-		return Objects.requireNonNull(metadataProvider, "Cannot get ZomboidMetadataProvider before it has been setup");
-	}
-
-	@Override
-	public void setMetadataProvider(ZomboidMetadataProvider metadataProvider) {
-		this.metadataProvider = metadataProvider;
-	}
-
-	@Override
-	public ZomboidProvider getZomboidProvider() {
-		return Objects.requireNonNull(zomboidProvider, "Cannot get ZomboidProvider before it has been setup");
-	}
-
-	@Override
-	public void setZomboidProvider(ZomboidProvider provider) {
-		this.zomboidProvider = provider;
-	}
-
-	@Override
-	public RemapMappingConfiguration getMappingConfiguration() {
-		if (disableObfuscation()) {
-			project.getLogger().lifecycle("help", new RuntimeException());
-			throw new UnsupportedOperationException("Cannot get mappings configuration in a non-obfuscated environment");
-		}
-
-		return (RemapMappingConfiguration) Objects.requireNonNull(mappingConfiguration, "Cannot get MappingsProvider before it has been setup");
-	}
-
-	@Override
-	public @Nullable MappingConfiguration getMappingConfigurationOrNull() {
-		return mappingConfiguration;
-	}
-
-	@Override
-	public void setMappingConfiguration(MappingConfiguration mappingConfiguration) {
-		this.mappingConfiguration = mappingConfiguration;
-	}
-
-	@Override
-	public NamedZomboidProvider<?> getNamedZomboidProvider() {
-		return Objects.requireNonNull(namedZomboidProvider, "Cannot get NamedZomboidProvider before it has been setup");
-	}
-
-	@Override
-	public IntermediaryZomboidProvider<?> getIntermediaryZomboidProvider() {
-		return Objects.requireNonNull(intermediaryZomboidProvider, "Cannot get IntermediaryZomboidProvider before it has been setup");
-	}
-
-	@Override
-	public void setNamedZomboidProvider(NamedZomboidProvider<?> provider) {
-		this.namedZomboidProvider = provider;
-	}
-
-	@Override
-	public void setIntermediaryZomboidProvider(IntermediaryZomboidProvider<?> provider) {
-		this.intermediaryZomboidProvider = provider;
-	}
-
-	@Override
-	public void noIntermediateMappings() {
-		getUseIntermediateMappings().set(false);
-	}
-
-	@Override
-	public FileCollection getZomboidJarsCollection(MappingsNamespace mappingsNamespace) {
-		return getProject().files(
-			getProject().provider(() ->
-				getProject().files(getZomboidJars(mappingsNamespace).stream().map(Path::toFile).toList())
-			)
-		);
-	}
-
-	@Override
-	public ConfigurableFileCollection getUnmappedModCollection() {
-		return unmappedMods;
-	}
-
-	public void setInstallerData(InstallerData object) {
-		this.installerData = object;
-	}
-
-	@Override
-	public InstallerData getInstallerData() {
-		return installerData;
-	}
-
-	@Override
-	public MixinExtension getMixin() {
-		return this.mixinApExtension;
-	}
-
-	@Override
-	public List<AccessWidenerFile> getTransitiveAccessWideners() {
-		return transitiveAccessWideners;
-	}
-
-	@Override
-	public void addTransitiveAccessWideners(List<AccessWidenerFile> accessWidenerFiles) {
-		transitiveAccessWideners.addAll(accessWidenerFiles);
-	}
-
-	@Override
-	public DownloadBuilder download(String url) {
-		DownloadBuilder builder;
-
-		try {
-			builder = Download.create(url);
-		} catch (URISyntaxException e) {
-			throw new RuntimeException("Failed to create downloader for: " + e);
-		}
-
-		if (project.getGradle().getStartParameter().isOffline()) {
-			builder.offline();
-		}
-
-		if (manualRefreshDeps()) {
-			builder.forceDownload();
-		}
-
-		return builder;
-	}
+    @Override
+    public void addTransitiveAccessWideners(List<AccessWidenerFile> accessWidenerFiles) {
+        transitiveAccessWideners.addAll(accessWidenerFiles);
+    }
 
     @Override
     public CopyGameFileBuilder copyGameFile(String url) {
@@ -300,84 +172,218 @@ public abstract class LoomGradleExtensionImpl extends LoomGradleExtensionApiImpl
         return builder;
     }
 
-	private boolean manualRefreshDeps() {
-		return project.getGradle().getStartParameter().isRefreshDependencies() || Boolean.getBoolean("loom.refresh");
-	}
+    @Override
+    public boolean disableObfuscation() {
+        return disableObfuscation.get();
+    }
 
-	@Override
-	public boolean refreshDeps() {
-		return refreshDeps;
-	}
+    @Override
+    public boolean dontRemapOutputs() {
+        return dontRemap.get();
+    }
 
-	@Override
-	public void setRefreshDeps(boolean refreshDeps) {
-		this.refreshDeps = refreshDeps;
-	}
+    @Override
+    public DownloadBuilder download(String url) {
+        DownloadBuilder builder;
 
-	@Override
-	public ListProperty<LibraryProcessorManager.LibraryProcessorFactory> getLibraryProcessors() {
-		return libraryProcessorFactories;
-	}
+        try {
+            builder = Download.create(url);
+        } catch (URISyntaxException e) {
+            throw new RuntimeException("Failed to create downloader for: " + e);
+        }
 
-	@Override
-	public ListProperty<RemapperExtensionHolder> getRemapperExtensions() {
-		return remapperExtensions;
-	}
+        if (project.getGradle().getStartParameter().isOffline()) {
+            builder.offline();
+        }
 
-	@Override
-	public Collection<LayeredMappingsFactory> getLayeredMappingFactories() {
-		if (disableObfuscation()) {
-			throw new UnsupportedOperationException("Cannot get layered mapping factories in a non-obfuscated environment");
-		}
+        if (manualRefreshDeps()) {
+            builder.forceDownload();
+        }
 
-		hasEvaluatedLayeredMappings = true;
-		return Collections.unmodifiableCollection(layeredMappingsDependencyMap.values());
-	}
+        return builder;
+    }
 
-	@Override
-	protected <T extends IntermediateMappingsProvider> void configureIntermediateMappingsProviderInternal(T provider) {
-		provider.getGameVersion().set(getProject().provider(() -> getZomboidProvider().gameVersion()));
-		provider.getGameVersion().disallowChanges();
+    @Override
+    public Provider<ArtifactMetadata.MixinRemapType> getDefaultMixinRemapTypeEnum() {
+        return getDefaultMixinRemapType().map(ArtifactMetadata.MixinRemapType::valueOf);
+    }
 
-		provider.getDownloader().set(this::download);
-		provider.getDownloader().disallowChanges();
+    @Override
+    public LoomFiles getFiles() {
+        return loomFiles;
+    }
 
-		provider.getUseSplitOfficialNamespaces().set(false);
-		provider.getUseSplitOfficialNamespaces().disallowChanges();
-	}
+    @Override
+    public InstallerData getInstallerData() {
+        return installerData;
+    }
 
-	@Override
-	public boolean isConfigurationCacheActive() {
-		return configurationCacheActive;
-	}
+    @Override
+    public IntermediaryZomboidProvider<?> getIntermediaryZomboidProvider() {
+        return Objects.requireNonNull(intermediaryZomboidProvider,
+            "Cannot get IntermediaryZomboidProvider before it has been setup");
+    }
 
-	@Override
-	public boolean isProjectIsolationActive() {
-		return isolatedProjectsActive;
-	}
+    @Override
+    public Collection<LayeredMappingsFactory> getLayeredMappingFactories() {
+        if (disableObfuscation()) {
+            throw new UnsupportedOperationException(
+                "Cannot get layered mapping factories in a non-obfuscated environment");
+        }
 
-	@Override
-	public boolean isCollectingDependencyVerificationMetadata() {
-		return isCollectingDependencyVerificationMetadata;
-	}
+        hasEvaluatedLayeredMappings = true;
+        return Collections.unmodifiableCollection(layeredMappingsDependencyMap.values());
+    }
 
-	@Override
-	public boolean dontRemapOutputs() {
-		return dontRemap.get();
-	}
+    @Override
+    public ListProperty<LibraryProcessorManager.LibraryProcessorFactory> getLibraryProcessors() {
+        return libraryProcessorFactories;
+    }
 
-	@Override
-	public boolean disableObfuscation() {
-		return disableObfuscation.get();
-	}
+    @Override
+    public RemapMappingConfiguration getMappingConfiguration() {
+        if (disableObfuscation()) {
+            project.getLogger().lifecycle("help", new RuntimeException());
+            throw new UnsupportedOperationException(
+                "Cannot get mappings configuration in a non-obfuscated environment");
+        }
 
-	@Override
-	public Provider<MappingsNamespace> getProductionNamespaceEnum() {
-		return getProductionNamespace().map(s -> Objects.requireNonNull(MappingsNamespace.of(s), "Invalid production namespace"));
-	}
+        return (RemapMappingConfiguration) Objects.requireNonNull(mappingConfiguration,
+            "Cannot get MappingsProvider before it has been setup");
+    }
 
-	@Override
-	public Provider<ArtifactMetadata.MixinRemapType> getDefaultMixinRemapTypeEnum() {
-		return getDefaultMixinRemapType().map(ArtifactMetadata.MixinRemapType::valueOf);
-	}
+    @Override
+    public @Nullable MappingConfiguration getMappingConfigurationOrNull() {
+        return mappingConfiguration;
+    }
+
+    @Override
+    public ZomboidMetadataProvider getMetadataProvider() {
+        return Objects.requireNonNull(metadataProvider, "Cannot get ZomboidMetadataProvider before it has been setup");
+    }
+
+    @Override
+    public MixinExtension getMixin() {
+        return this.mixinApExtension;
+    }
+
+    @Override
+    public NamedZomboidProvider<?> getNamedZomboidProvider() {
+        return Objects.requireNonNull(namedZomboidProvider, "Cannot get NamedZomboidProvider before it has been setup");
+    }
+
+    @Override
+    public Provider<MappingsNamespace> getProductionNamespaceEnum() {
+        return getProductionNamespace()
+            .map(s -> Objects.requireNonNull(MappingsNamespace.of(s), "Invalid production namespace"));
+    }
+
+    @Override
+    public ListProperty<RemapperExtensionHolder> getRemapperExtensions() {
+        return remapperExtensions;
+    }
+
+    @Override
+    public List<AccessWidenerFile> getTransitiveAccessWideners() {
+        return transitiveAccessWideners;
+    }
+
+    @Override
+    public ConfigurableFileCollection getUnmappedModCollection() {
+        return unmappedMods;
+    }
+
+    @Override
+    public FileCollection getZomboidJarsCollection(MappingsNamespace mappingsNamespace) {
+        return getProject().files(getProject()
+            .provider(() -> getProject().files(getZomboidJars(mappingsNamespace).stream().map(Path::toFile).toList())));
+    }
+
+    @Override
+    public ZomboidProvider getZomboidProvider() {
+        return Objects.requireNonNull(zomboidProvider, "Cannot get ZomboidProvider before it has been setup");
+    }
+
+    @Override
+    public boolean isCollectingDependencyVerificationMetadata() {
+        return isCollectingDependencyVerificationMetadata;
+    }
+
+    @Override
+    public boolean isConfigurationCacheActive() {
+        return configurationCacheActive;
+    }
+
+    @Override
+    public boolean isProjectIsolationActive() {
+        return isolatedProjectsActive;
+    }
+
+    @Override
+    public void noIntermediateMappings() {
+        getUseIntermediateMappings().set(false);
+    }
+
+    @Override
+    public boolean refreshDeps() {
+        return refreshDeps;
+    }
+
+    public void setInstallerData(InstallerData object) {
+        this.installerData = object;
+    }
+
+    @Override
+    public void setIntermediaryZomboidProvider(IntermediaryZomboidProvider<?> provider) {
+        this.intermediaryZomboidProvider = provider;
+    }
+
+    @Override
+    public void setMappingConfiguration(MappingConfiguration mappingConfiguration) {
+        this.mappingConfiguration = mappingConfiguration;
+    }
+
+    @Override
+    public void setMetadataProvider(ZomboidMetadataProvider metadataProvider) {
+        this.metadataProvider = metadataProvider;
+    }
+
+    @Override
+    public void setNamedZomboidProvider(NamedZomboidProvider<?> provider) {
+        this.namedZomboidProvider = provider;
+    }
+
+    @Override
+    public void setRefreshDeps(boolean refreshDeps) {
+        this.refreshDeps = refreshDeps;
+    }
+
+    @Override
+    public void setZomboidProvider(ZomboidProvider provider) {
+        this.zomboidProvider = provider;
+    }
+
+    @Override
+    protected <T extends IntermediateMappingsProvider> void configureIntermediateMappingsProviderInternal(T provider) {
+        provider.getGameVersion().set(getProject().provider(() -> getZomboidProvider().gameVersion()));
+        provider.getGameVersion().disallowChanges();
+
+        provider.getDownloader().set(this::download);
+        provider.getDownloader().disallowChanges();
+
+        provider.getUseSplitOfficialNamespaces().set(false);
+        provider.getUseSplitOfficialNamespaces().disallowChanges();
+    }
+
+    @Inject
+    protected abstract BuildFeatures getBuildFeatures();
+
+    @Override
+    protected Project getProject() {
+        return project;
+    }
+
+    private boolean manualRefreshDeps() {
+        return project.getGradle().getStartParameter().isRefreshDependencies() || Boolean.getBoolean("loom.refresh");
+    }
 }

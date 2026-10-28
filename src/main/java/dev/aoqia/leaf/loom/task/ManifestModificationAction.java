@@ -66,59 +66,57 @@ import dev.aoqia.leaf.loom.util.ZipReprocessorUtil;
  * Configuration-cache-compatible implementation using providers.
  */
 public class ManifestModificationAction implements Action<Task>, Serializable {
-	private final Provider<JarManifestService> manifestService;
-	private final String targetNamespace;
-	private final Provider<Boolean> areEnvironmentSourceSetsSplit;
-	private final Provider<List<String>> clientOnlyEntries;
+    private final Provider<Boolean> areEnvironmentSourceSetsSplit;
+    private final Provider<List<String>> clientOnlyEntries;
+    private final Provider<JarManifestService> manifestService;
+    private final String targetNamespace;
 
-	public ManifestModificationAction(
-			Provider<JarManifestService> manifestService,
-			String targetNamespace,
-			Provider<Boolean> areEnvironmentSourceSetsSplit,
-			Provider<List<String>> clientOnlyEntries) {
-		this.manifestService = manifestService;
-		this.targetNamespace = targetNamespace;
-		this.areEnvironmentSourceSetsSplit = areEnvironmentSourceSetsSplit;
-		this.clientOnlyEntries = clientOnlyEntries;
-	}
+    public ManifestModificationAction(Provider<JarManifestService> manifestService, String targetNamespace,
+        Provider<Boolean> areEnvironmentSourceSetsSplit, Provider<List<String>> clientOnlyEntries)
+    {
+        this.manifestService = manifestService;
+        this.targetNamespace = targetNamespace;
+        this.areEnvironmentSourceSetsSplit = areEnvironmentSourceSetsSplit;
+        this.clientOnlyEntries = clientOnlyEntries;
+    }
 
-	@Override
-	public void execute(Task t) {
-		final Jar jarTask = (Jar) t;
-		final File jarFile = jarTask.getArchiveFile().get().getAsFile();
+    @Override
+    public void execute(Task t) {
+        final Jar jarTask = (Jar) t;
+        final File jarFile = jarTask.getArchiveFile().get().getAsFile();
 
-		try {
-			modifyManifest(jarFile);
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to modify jar manifest for " + jarFile.getName(), e);
-		}
-	}
+        try {
+            modifyManifest(jarFile);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to modify jar manifest for " + jarFile.getName(), e);
+        }
+    }
 
-	private void modifyManifest(File jarFile) throws IOException {
-		Map<String, String> manifestAttributes = new HashMap<>();
+    private void modifyManifest(File jarFile) throws IOException {
+        Map<String, String> manifestAttributes = new HashMap<>();
 
-		// Set the mapping namespace to "official" for non-remapped jars
-		manifestAttributes.put(Constants.Manifest.MAPPING_NAMESPACE, targetNamespace);
+        // Set the mapping namespace to "official" for non-remapped jars
+        manifestAttributes.put(Constants.Manifest.MAPPING_NAMESPACE, targetNamespace);
 
-		// Set split environment flag if source sets are split (even for common-only jars)
-		if (areEnvironmentSourceSetsSplit.get()) {
-			manifestAttributes.put(Constants.Manifest.SPLIT_ENV, "true");
-		}
+        // Set split environment flag if source sets are split (even for common-only jars)
+        if (areEnvironmentSourceSetsSplit.get()) {
+            manifestAttributes.put(Constants.Manifest.SPLIT_ENV, "true");
+        }
 
-		// Add client-only entries list if present
-		if (clientOnlyEntries != null && !clientOnlyEntries.get().isEmpty()) {
-			manifestAttributes.put(Constants.Manifest.CLIENT_ENTRIES, String.join(";", clientOnlyEntries.get()));
-		}
+        // Add client-only entries list if present
+        if (clientOnlyEntries != null && !clientOnlyEntries.get().isEmpty()) {
+            manifestAttributes.put(Constants.Manifest.CLIENT_ENTRIES, String.join(";", clientOnlyEntries.get()));
+        }
 
-		ZipReprocessorUtil.transformZipEntry(jarFile.toPath(), Constants.Manifest.PATH, bytes -> {
-			var manifest = new Manifest(new ByteArrayInputStream(bytes));
+        ZipReprocessorUtil.transformZipEntry(jarFile.toPath(), Constants.Manifest.PATH, bytes -> {
+            var manifest = new Manifest(new ByteArrayInputStream(bytes));
 
-			// Apply standard Loom manifest attributes (Gradle version, Loom version, etc.)
-			manifestService.get().apply(manifest, manifestAttributes);
+            // Apply standard Loom manifest attributes (Gradle version, Loom version, etc.)
+            manifestService.get().apply(manifest, manifestAttributes);
 
-			ByteArrayOutputStream out = new ByteArrayOutputStream();
-			manifest.write(out);
-			return out.toByteArray();
-		});
-	}
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            manifest.write(out);
+            return out.toByteArray();
+        });
+    }
 }

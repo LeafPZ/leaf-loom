@@ -44,11 +44,11 @@ package dev.aoqia.leaf.loom.test.unit.processor.classes;
 import java.util.List;
 
 public class ClassWithReturnType {
-	public List<String> genericReturn() {
-		return null;
-	}
+    public List<@AnnPresent String> annotatedGenericReturn() {
+        return null;
+    }
 
-	public List<@AnnPresent String> annotatedGenericReturn() {
-		return null;
-	}
+    public List<String> genericReturn() {
+        return null;
+    }
 }

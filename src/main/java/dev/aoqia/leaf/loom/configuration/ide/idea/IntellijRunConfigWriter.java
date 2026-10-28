@@ -52,30 +52,30 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 public interface IntellijRunConfigWriter {
-	String APPLICATION_TYPE = "Application";
-	String GRADLE_TASK_TYPE = "GradleRunConfiguration";
+    String APPLICATION_TYPE = "Application";
+    String GRADLE_TASK_TYPE = "GradleRunConfiguration";
 
-	String render() throws IOException;
+    static String getType(String existingXml) {
+        try {
+            final DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+            final DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
+            final Document document = documentBuilder.parse(new InputSource(new StringReader(existingXml)));
+            final NodeList nodeList = document.getDocumentElement().getElementsByTagName("configuration");
 
-	String getType();
+            if (nodeList.getLength() != 1) {
+                return "";
+            }
 
-	boolean shouldOverwrite(String existingXml);
+            final Element configuration = (Element) nodeList.item(0);
+            return configuration.getAttribute("type");
+        } catch (Exception e) {
+            return "";
+        }
+    }
 
-	static String getType(String existingXml) {
-		try {
-			final DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-			final DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
-			final Document document = documentBuilder.parse(new InputSource(new StringReader(existingXml)));
-			final NodeList nodeList = document.getDocumentElement().getElementsByTagName("configuration");
+    String getType();
 
-			if (nodeList.getLength() != 1) {
-				return "";
-			}
+    String render() throws IOException;
 
-			final Element configuration = (Element) nodeList.item(0);
-			return configuration.getAttribute("type");
-		} catch (Exception e) {
-			return "";
-		}
-	}
+    boolean shouldOverwrite(String existingXml);
 }

@@ -58,140 +58,146 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
 
-public abstract class ProcessedNamedZomboidProvider<M extends ZomboidProvider, P extends NamedZomboidProvider<M>> extends NamedZomboidProvider<M> {
-	private final P parentProvider;
-	private final ZomboidJarProcessorManager jarProcessorManager;
+public abstract class ProcessedNamedZomboidProvider<M extends ZomboidProvider, P extends NamedZomboidProvider<M>>
+    extends NamedZomboidProvider<M>
+{
+    private final ZomboidJarProcessorManager jarProcessorManager;
 
-	public ProcessedNamedZomboidProvider(P parentProvide, ZomboidJarProcessorManager jarProcessorManager) {
-		super(parentProvide.getProject(), parentProvide.getGameProvider());
-		this.parentProvider = parentProvide;
-		this.jarProcessorManager = Objects.requireNonNull(jarProcessorManager);
-	}
+    private final P parentProvider;
 
-	@Override
-	public List<ZomboidJar> provide(ProvideContext context) throws Exception {
-		final List<ZomboidJar> parentJars = parentProvider.getZomboidJars();
-		final Map<ZomboidJar, ZomboidJar> jarOutputMap = parentJars.stream()
-				.collect(Collectors.toMap(Function.identity(), this::getProcessedJar));
-		final List<ZomboidJar> zomboidJars = List.copyOf(jarOutputMap.values());
+    public ProcessedNamedZomboidProvider(P parentProvide, ZomboidJarProcessorManager jarProcessorManager) {
+        super(parentProvide.getProject(), parentProvide.getGameProvider());
+        this.parentProvider = parentProvide;
+        this.jarProcessorManager = Objects.requireNonNull(jarProcessorManager);
+    }
 
-		parentProvider.provide(context.withApplyDependencies(false));
+    @Override
+    public List<ZomboidJar.Type> getDependencyTypes() {
+        return parentProvider.getDependencyTypes();
+    }
 
-		boolean requiresProcessing = shouldRefreshOutputs(context) || parentJars.stream()
-				.map(this::getProcessedPath)
-				.anyMatch(jarProcessorManager::requiresProcessingJar);
+    @Override
+    public Path getJar(ZomboidJar.Type type) {
+        // Something has gone wrong if this gets called.
+        throw new UnsupportedOperationException();
+    }
 
-		if (requiresProcessing) {
-			processJars(jarOutputMap, context.configContext());
-			createBackupJars(zomboidJars);
-		}
+    @Override
+    public MavenScope getMavenScope() {
+        return MavenScope.LOCAL;
+    }
 
-		if (context.applyDependencies()) {
-			applyDependencies();
-		}
+    @Override
+    public List<? extends OutputJar> getOutputJars() {
+        return parentProvider.getZomboidJars().stream().map(this::getProcessedJar).map(SimpleOutputJar::new).toList();
+    }
 
-		return List.copyOf(jarOutputMap.values());
-	}
+    public P getParentProvider() {
+        return parentProvider;
+    }
 
-	@Override
-	public List<? extends OutputJar> getOutputJars() {
-		return parentProvider.getZomboidJars().stream()
-				.map(this::getProcessedJar)
-				.map(SimpleOutputJar::new)
-				.toList();
-	}
+    public ZomboidJar getProcessedJar(ZomboidJar jar) {
+        return jar.forPath(getProcessedPath(jar));
+    }
 
-	@Override
-	public MavenScope getMavenScope() {
-		return MavenScope.LOCAL;
-	}
+    @Override
+    public List<RemappedJars> getRemappedJars() {
+        throw new UnsupportedOperationException();
+    }
 
-	private void processJars(Map<ZomboidJar, ZomboidJar> zomboidJarMap, ConfigContext configContext) throws IOException {
-		for (Map.Entry<ZomboidJar, ZomboidJar> entry : zomboidJarMap.entrySet()) {
-			final ZomboidJar zomboidJar = entry.getKey();
-			final ZomboidJar outputJar = entry.getValue();
-			deleteSimilarJars(outputJar.getPath());
+    @Override
+    public List<ZomboidJar> getZomboidJars() {
+        return getParentProvider().getZomboidJars().stream().map(this::getProcessedJar).toList();
+    }
 
-			final LocalMavenHelper mavenHelper = getMavenHelper(zomboidJar.getType());
-			final Path outputPath = mavenHelper.copyToMaven(zomboidJar.getPath(), null);
+    @Override
+    public List<ZomboidJar> provide(ProvideContext context) throws Exception {
+        final List<ZomboidJar> parentJars = parentProvider.getZomboidJars();
+        final Map<ZomboidJar, ZomboidJar> jarOutputMap = parentJars.stream()
+            .collect(Collectors.toMap(Function.identity(), this::getProcessedJar));
+        final List<ZomboidJar> zomboidJars = List.copyOf(jarOutputMap.values());
 
-			assert outputJar.getPath().equals(outputPath);
+        parentProvider.provide(context.withApplyDependencies(false));
 
-			jarProcessorManager.processJar(outputPath, new ProcessorContextImpl(configContext, zomboidJar));
-		}
-	}
+        boolean requiresProcessing = shouldRefreshOutputs(context)
+            || parentJars.stream().map(this::getProcessedPath).anyMatch(jarProcessorManager::requiresProcessingJar);
 
-	@Override
-	public List<ZomboidJar.Type> getDependencyTypes() {
-		return parentProvider.getDependencyTypes();
-	}
+        if (requiresProcessing) {
+            processJars(jarOutputMap, context.configContext());
+            createBackupJars(zomboidJars);
+        }
 
-	private void applyDependencies() {
-		final List<ZomboidJar.Type> dependencyTargets = getDependencyTypes();
+        if (context.applyDependencies()) {
+            applyDependencies();
+        }
 
-		if (dependencyTargets.isEmpty()) {
-			return;
-		}
+        return List.copyOf(jarOutputMap.values());
+    }
 
-		ZomboidSourceSets.get(getProject()).applyDependencies(
-				(configuration, name) -> getProject().getDependencies().add(configuration, getDependencyNotation(name)),
-				dependencyTargets
-		);
-	}
+    @Override
+    protected String getName(ZomboidJar.Type type) {
+        // Hash the cache value so that we don't have to process the same JAR multiple times for many projects
+        return "zomboid-%s-%s".formatted(type.toString(), jarProcessorManager.getJarHash());
+    }
 
-	private void deleteSimilarJars(Path jar) throws IOException {
-		Files.deleteIfExists(jar);
-		final Path parent = jar.getParent();
+    private void applyDependencies() {
+        final List<ZomboidJar.Type> dependencyTargets = getDependencyTypes();
 
-		if (Files.notExists(parent)) {
-			return;
-		}
+        if (dependencyTargets.isEmpty()) {
+            return;
+        }
 
-		for (Path path : Files.list(parent).filter(Files::isRegularFile)
-				.filter(path -> path.getFileName().startsWith(jar.getFileName().toString().replace(".jar", ""))).toList()) {
-			Files.deleteIfExists(path);
-		}
-	}
+        ZomboidSourceSets.get(getProject())
+            .applyDependencies(
+                (configuration, name) -> getProject().getDependencies().add(configuration, getDependencyNotation(name)),
+                dependencyTargets);
+    }
 
-	@Override
-	protected String getName(ZomboidJar.Type type) {
-		// Hash the cache value so that we don't have to process the same JAR multiple times for many projects
-		return "zomboid-%s-%s".formatted(type.toString(), jarProcessorManager.getJarHash());
-	}
+    private void deleteSimilarJars(Path jar) throws IOException {
+        Files.deleteIfExists(jar);
+        final Path parent = jar.getParent();
 
-	@Override
-	public Path getJar(ZomboidJar.Type type) {
-		// Something has gone wrong if this gets called.
-		throw new UnsupportedOperationException();
-	}
+        if (Files.notExists(parent)) {
+            return;
+        }
 
-	@Override
-	public List<RemappedJars> getRemappedJars() {
-		throw new UnsupportedOperationException();
-	}
+        for (Path path : Files.list(parent)
+            .filter(Files::isRegularFile)
+            .filter(path -> path.getFileName().startsWith(jar.getFileName().toString().replace(".jar", "")))
+            .toList())
+        {
+            Files.deleteIfExists(path);
+        }
+    }
 
-	@Override
-	public List<ZomboidJar> getZomboidJars() {
-		return getParentProvider().getZomboidJars().stream()
-				.map(this::getProcessedJar)
-				.toList();
-	}
+    private Path getProcessedPath(ZomboidJar jar) {
+        final LocalMavenHelper mavenHelper = getMavenHelper(jar.getType());
+        return mavenHelper.getOutputFile(null);
+    }
 
-	public P getParentProvider() {
-		return parentProvider;
-	}
+    private void processJars(Map<ZomboidJar, ZomboidJar> zomboidJarMap, ConfigContext configContext)
+        throws IOException
+    {
+        for (Map.Entry<ZomboidJar, ZomboidJar> entry : zomboidJarMap.entrySet()) {
+            final ZomboidJar zomboidJar = entry.getKey();
+            final ZomboidJar outputJar = entry.getValue();
+            deleteSimilarJars(outputJar.getPath());
 
-	private Path getProcessedPath(ZomboidJar jar) {
-		final LocalMavenHelper mavenHelper = getMavenHelper(jar.getType());
-		return mavenHelper.getOutputFile(null);
-	}
+            final LocalMavenHelper mavenHelper = getMavenHelper(zomboidJar.getType());
+            final Path outputPath = mavenHelper.copyToMaven(zomboidJar.getPath(), null);
 
-	public ZomboidJar getProcessedJar(ZomboidJar jar) {
-		return jar.forPath(getProcessedPath(jar));
-	}
+            assert outputJar.getPath().equals(outputPath);
 
-    public static final class CompleteJarImpl extends ProcessedNamedZomboidProvider<ZomboidProvider, NamedZomboidProvider.CompleteJarImpl> implements CompleteJar {
-        public CompleteJarImpl(NamedZomboidProvider.CompleteJarImpl parentProvide, ZomboidJarProcessorManager jarProcessorManager) {
+            jarProcessorManager.processJar(outputPath, new ProcessorContextImpl(configContext, zomboidJar));
+        }
+    }
+
+    public static final class CompleteJarImpl extends
+        ProcessedNamedZomboidProvider<ZomboidProvider, NamedZomboidProvider.CompleteJarImpl> implements CompleteJar
+    {
+        public CompleteJarImpl(NamedZomboidProvider.CompleteJarImpl parentProvide,
+            ZomboidJarProcessorManager jarProcessorManager)
+        {
             super(parentProvide, jarProcessorManager);
         }
 

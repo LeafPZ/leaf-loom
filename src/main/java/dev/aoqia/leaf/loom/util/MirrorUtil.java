@@ -46,18 +46,13 @@ import java.nio.file.Path;
 import org.gradle.api.plugins.ExtensionAware;
 
 public class MirrorUtil {
-    public static Path getGamePath(ExtensionAware aware) {
+    public static String getFabricRepository(ExtensionAware aware) {
         final var ext = aware.getExtensions().getExtraProperties();
-        if (ext.has("loom_game_path")) {
-            return Path.of(String.valueOf(ext.get("loom_game_path")));
+        if (ext.has("loom_fabric_repository")) {
+            return String.valueOf(ext.get("loom_fabric_repository"));
         }
 
-        final var envVar = System.getenv("LEAF_CLIENT_GAME_PATH");
-        if (envVar != null) {
-            return Path.of(envVar);
-        }
-
-        return Constants.getDefaultGamePath();
+        return Constants.FABRIC_REPOSITORY;
     }
 
     public static Path getGameJavaPath(ExtensionAware aware) {
@@ -74,14 +69,37 @@ public class MirrorUtil {
         }
     }
 
-	public static String getVersionManifests(ExtensionAware aware) {
+    public static Path getGamePath(ExtensionAware aware) {
         final var ext = aware.getExtensions().getExtraProperties();
-		if (ext.has("loom_version_manifests")) {
-			return String.valueOf(ext.get("loom_version_manifests"));
-		}
+        if (ext.has("loom_game_path")) {
+            return Path.of(String.valueOf(ext.get("loom_game_path")));
+        }
 
-		return String.format("%s/index.json", Constants.VERSION_MANIFESTS);
-	}
+        final var envVar = System.getenv("LEAF_CLIENT_GAME_PATH");
+        if (envVar != null) {
+            return Path.of(envVar);
+        }
+
+        return Constants.getDefaultGamePath();
+    }
+
+    public static String getLeafReleaseRepository(ExtensionAware aware) {
+        final var ext = aware.getExtensions().getExtraProperties();
+        if (ext.has("loom_leaf_repository")) {
+            return String.valueOf(ext.get("loom_leaf_repository"));
+        }
+
+        return Constants.LEAF_REPOSITORY;
+    }
+
+    public static String getLeafSnapshotRepository(ExtensionAware aware) {
+        final var ext = aware.getExtensions().getExtraProperties();
+        if (ext.has("loom_leaf_snapshot_repository")) {
+            return String.valueOf(ext.get("loom_leaf_snapshot_repository"));
+        }
+
+        return Constants.LEAF_SNAPSHOT_REPOSITORY;
+    }
 
     public static String getOsStringForUrl() throws RuntimeException {
         final Platform.OperatingSystem os = Platform.CURRENT.getOperatingSystem();
@@ -96,30 +114,12 @@ public class MirrorUtil {
         throw new RuntimeException("Unsupported operating system: " + os);
     }
 
-	public static String getFabricRepository(ExtensionAware aware) {
+    public static String getVersionManifests(ExtensionAware aware) {
         final var ext = aware.getExtensions().getExtraProperties();
-		if (ext.has("loom_fabric_repository")) {
-			return String.valueOf(ext.get("loom_fabric_repository"));
-		}
+        if (ext.has("loom_version_manifests")) {
+            return String.valueOf(ext.get("loom_version_manifests"));
+        }
 
-		return Constants.FABRIC_REPOSITORY;
-	}
-
-    public static String getLeafReleaseRepository(ExtensionAware aware) {
-        final var ext = aware.getExtensions().getExtraProperties();
-		if (ext.has("loom_leaf_repository")) {
-			return String.valueOf(ext.get("loom_leaf_repository"));
-		}
-
-		return Constants.LEAF_REPOSITORY;
-	}
-
-    public static String getLeafSnapshotRepository(ExtensionAware aware) {
-        final var ext = aware.getExtensions().getExtraProperties();
-		if (ext.has("loom_leaf_snapshot_repository")) {
-			return String.valueOf(ext.get("loom_leaf_snapshot_repository"));
-		}
-
-		return Constants.LEAF_SNAPSHOT_REPOSITORY;
-	}
+        return String.format("%s/index.json", Constants.VERSION_MANIFESTS);
+    }
 }

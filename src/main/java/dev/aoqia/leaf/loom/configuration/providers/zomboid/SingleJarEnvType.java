@@ -45,22 +45,21 @@ import java.nio.file.Path;
 import java.util.function.Function;
 
 public enum SingleJarEnvType {
-	CLIENT(ZomboidJar.Client::new, ZomboidJar.Type.CLIENT),
-	SERVER(ZomboidJar.Server::new, ZomboidJar.Type.SERVER);
+    CLIENT(ZomboidJar.Client::new, ZomboidJar.Type.CLIENT), SERVER(ZomboidJar.Server::new, ZomboidJar.Type.SERVER);
 
-	private final Function<Path, ZomboidJar> jarFunction;
-	private final ZomboidJar.Type type;
+    private final Function<Path, ZomboidJar> jarFunction;
+    private final ZomboidJar.Type type;
 
-	SingleJarEnvType(Function<Path, ZomboidJar> jarFunction, ZomboidJar.Type type) {
-		this.jarFunction = jarFunction;
-		this.type = type;
-	}
+    SingleJarEnvType(Function<Path, ZomboidJar> jarFunction, ZomboidJar.Type type) {
+        this.jarFunction = jarFunction;
+        this.type = type;
+    }
 
-	public Function<Path, ZomboidJar> getJar() {
-		return jarFunction;
-	}
+    public Function<Path, ZomboidJar> getJar() {
+        return jarFunction;
+    }
 
-	public ZomboidJar.Type getType() {
-		return type;
-	}
+    public ZomboidJar.Type getType() {
+        return type;
+    }
 }

@@ -57,33 +57,37 @@ import dev.aoqia.leaf.loom.util.fmj.LeafModJsonFactory;
 import dev.aoqia.leaf.loom.util.fmj.mixin.MixinConfiguration;
 
 public class MixinRefmapInliner {
-	private static final Logger LOGGER = LoggerFactory.getLogger(MixinRefmapInliner.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MixinRefmapInliner.class);
 
-	public static MixinReferenceRemapper createRemapper(String from, String to, List<ModDependency> mods) throws IOException {
-		List<MixinConfiguration> mixinConfigurations = new ArrayList<>();
+    public static MixinReferenceRemapper createRemapper(String from, String to, List<ModDependency> mods)
+        throws IOException
+    {
+        List<MixinConfiguration> mixinConfigurations = new ArrayList<>();
 
-		for (ModDependency mod : mods) {
-			if (mod.getMetadata().mixinRemapType() != ArtifactMetadata.MixinRemapType.MIXIN) {
-				continue;
-			}
+        for (ModDependency mod : mods) {
+            if (mod.getMetadata().mixinRemapType() != ArtifactMetadata.MixinRemapType.MIXIN) {
+                continue;
+            }
 
-			LeafModJson fabricModJson = LeafModJsonFactory.createFromZipNullable(mod.getInputFile());
+            LeafModJson fabricModJson = LeafModJsonFactory.createFromZipNullable(mod.getInputFile());
 
-			if (fabricModJson == null) {
-				LOGGER.warn("Failed to read leaf.mod.json from {}", mod.getInputFile());
-				continue;
-			}
+            if (fabricModJson == null) {
+                LOGGER.warn("Failed to read leaf.mod.json from {}", mod.getInputFile());
+                continue;
+            }
 
-			try {
-				mixinConfigurations.addAll(MixinConfiguration.fromMod(fabricModJson));
-			} catch (IOException e) {
-				throw ExceptionUtil.createDescriptiveWrapper(IOException::new, "Failed to read mixin configuration from " + mod.getInputFile(), e);
-			}
-		}
+            try {
+                mixinConfigurations.addAll(MixinConfiguration.fromMod(fabricModJson));
+            } catch (IOException e) {
+                throw ExceptionUtil.createDescriptiveWrapper(IOException::new,
+                    "Failed to read mixin configuration from " + mod.getInputFile(), e);
+            }
+        }
 
-		return MixinReferenceRemapperImpl.createFromRefmaps(from, to, mixinConfigurations.stream().map(MixinConfiguration::refmap));
-	}
+        return MixinReferenceRemapperImpl.createFromRefmaps(from, to,
+            mixinConfigurations.stream().map(MixinConfiguration::refmap));
+    }
 
-	public static void removeRefmap(ModDependency modDependency, Path ouputPath) {
-	}
+    public static void removeRefmap(ModDependency modDependency, Path ouputPath) {
+    }
 }

@@ -62,43 +62,47 @@ import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 import dev.aoqia.leaf.loom.util.gradle.SourceSetReference;
 
 /**
- * This object is exported by projects as a json file to be consumed by others to correctly populate the classpath groups.
+ * This object is exported by projects as a json file to be consumed by others to correctly populate the classpath
+ * groups.
  */
-public record ExternalClasspathGroupDTO(String projectPath, Map<String, List<String>> classpaths) implements Serializable {
-	public static ExternalClasspathGroupDTO createFromProject(Project project) {
-		SourceSetContainer sourceSets = SourceSetHelper.getSourceSets(project);
+public record ExternalClasspathGroupDTO(String projectPath, Map<String, List<String>> classpaths)
+    implements Serializable
+{
+    public static ExternalClasspathGroupDTO createFromProject(Project project) {
+        SourceSetContainer sourceSets = SourceSetHelper.getSourceSets(project);
 
-		Map<String, List<String>> classpaths = new HashMap<>();
+        Map<String, List<String>> classpaths = new HashMap<>();
 
-		for (SourceSet sourceSet : sourceSets) {
-			SourceSetReference ref = new SourceSetReference(sourceSet, project);
-			List<File> classpath = SourceSetHelper.getClasspath(ref, true);
-			classpaths.put(sourceSet.getName(), classpath.stream().map(File::getAbsolutePath).toList());
-		}
+        for (SourceSet sourceSet : sourceSets) {
+            SourceSetReference ref = new SourceSetReference(sourceSet, project);
+            List<File> classpath = SourceSetHelper.getClasspath(ref, true);
+            classpaths.put(sourceSet.getName(), classpath.stream().map(File::getAbsolutePath).toList());
+        }
 
-		return new ExternalClasspathGroupDTO(project.getPath(), Collections.unmodifiableMap(classpaths));
-	}
+        return new ExternalClasspathGroupDTO(project.getPath(), Collections.unmodifiableMap(classpaths));
+    }
 
-	public static Map<String, ExternalClasspathGroupDTO> resolveExternal(Set<File> files) {
-		Map<String, ExternalClasspathGroupDTO> map = new HashMap<>();
+    public static Map<String, ExternalClasspathGroupDTO> resolveExternal(Set<File> files) {
+        Map<String, ExternalClasspathGroupDTO> map = new HashMap<>();
 
-		for (File file : files) {
-			String json;
+        for (File file : files) {
+            String json;
 
-			try {
-				json = Files.readString(file.toPath());
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to read external classpath group file: " + file, e);
-			}
+            try {
+                json = Files.readString(file.toPath());
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to read external classpath group file: " + file, e);
+            }
 
-			ExternalClasspathGroupDTO dto = LoomGradlePlugin.GSON.fromJson(json, ExternalClasspathGroupDTO.class);
-			map.put(dto.projectPath(), dto);
-		}
+            ExternalClasspathGroupDTO dto = LoomGradlePlugin.GSON.fromJson(json, ExternalClasspathGroupDTO.class);
+            map.put(dto.projectPath(), dto);
+        }
 
-		return Collections.unmodifiableMap(map);
-	}
+        return Collections.unmodifiableMap(map);
+    }
 
-	public List<String> getForSourceSet(String sourceSetName) {
-		return Objects.requireNonNull(classpaths.get(sourceSetName), "No classpath found for source set: " + sourceSetName);
-	}
+    public List<String> getForSourceSet(String sourceSetName) {
+        return Objects.requireNonNull(classpaths.get(sourceSetName),
+            "No classpath found for source set: " + sourceSetName);
+    }
 }

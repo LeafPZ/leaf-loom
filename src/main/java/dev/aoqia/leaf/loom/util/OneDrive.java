@@ -54,55 +54,58 @@ import org.slf4j.LoggerFactory;
 
 // OneDrive causes all kinds of issues, log a warning if the users project is stored there.
 public final class OneDrive {
-	private static final List<String> ENV_VARS = List.of("OneDrive", "OneDriveConsumer", "OneDriveCommercial");
-	private static final Supplier<List<Path>> ONE_DRIVE_PATHS = Lazy.of(OneDrive::getOneDrivePaths);
-	private static final Logger LOGGER = LoggerFactory.getLogger(OneDrive.class);
+    private static final List<String> ENV_VARS = List.of("OneDrive", "OneDriveConsumer", "OneDriveCommercial");
+    private static final Logger LOGGER = LoggerFactory.getLogger(OneDrive.class);
+    private static final Supplier<List<Path>> ONE_DRIVE_PATHS = Lazy.of(OneDrive::getOneDrivePaths);
 
-	private OneDrive() {
-	}
+    private OneDrive() {
+    }
 
-	public static void verify(Project project) {
-		if (!Platform.CURRENT.getOperatingSystem().isWindows()) {
-			return;
-		}
+    public static void verify(Project project) {
+        if (!Platform.CURRENT.getOperatingSystem().isWindows()) {
+            return;
+        }
 
-		Path projectDir = project.getProjectDir().toPath();
+        Path projectDir = project.getProjectDir().toPath();
 
-		if (isInOneDrive(projectDir)) {
-			LOGGER.warn("Project directory '{}' is located in OneDrive. This is known to cause issues and slower performance. Consider moving the project to a different location.", projectDir);
-		}
-	}
+        if (isInOneDrive(projectDir)) {
+            LOGGER.warn(
+                "Project directory '{}' is located in OneDrive. This is known to cause issues and slower performance."
+                    + " Consider moving the project to a different location.",
+                projectDir);
+        }
+    }
 
-	private static boolean isInOneDrive(Path path) {
-		Path normalized = path.toAbsolutePath().normalize();
+    private static List<Path> getOneDrivePaths() {
+        var paths = new ArrayList<Path>();
 
-		for (Path oneDrivePath : ONE_DRIVE_PATHS.get()) {
-			if (normalized.startsWith(oneDrivePath)) {
-				return true;
-			}
-		}
+        for (String envVar : ENV_VARS) {
+            String value = System.getenv(envVar);
 
-		return false;
-	}
+            if (value == null || value.isEmpty()) {
+                continue;
+            }
 
-	private static List<Path> getOneDrivePaths() {
-		var paths = new ArrayList<Path>();
+            try {
+                Path path = Path.of(value);
+                paths.add(path.toAbsolutePath().normalize());
+            } catch (InvalidPathException ignored) {
+                // Don't care
+            }
+        }
 
-		for (String envVar : ENV_VARS) {
-			String value = System.getenv(envVar);
+        return Collections.unmodifiableList(paths);
+    }
 
-			if (value == null || value.isEmpty()) {
-				continue;
-			}
+    private static boolean isInOneDrive(Path path) {
+        Path normalized = path.toAbsolutePath().normalize();
 
-			try {
-				Path path = Path.of(value);
-				paths.add(path.toAbsolutePath().normalize());
-			} catch (InvalidPathException ignored) {
-				// Don't care
-			}
-		}
+        for (Path oneDrivePath : ONE_DRIVE_PATHS.get()) {
+            if (normalized.startsWith(oneDrivePath)) {
+                return true;
+            }
+        }
 
-		return Collections.unmodifiableList(paths);
-	}
+        return false;
+    }
 }

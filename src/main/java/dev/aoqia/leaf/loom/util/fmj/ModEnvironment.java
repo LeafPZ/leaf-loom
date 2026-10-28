@@ -44,38 +44,44 @@ package dev.aoqia.leaf.loom.util.fmj;
 import java.util.Objects;
 
 public final class ModEnvironment {
-	public static final ModEnvironment UNIVERSAL = new ModEnvironment(true, true, "universal");
-	public static final ModEnvironment CLIENT = new ModEnvironment(true, false, "client");
-	public static final ModEnvironment SERVER = new ModEnvironment(false, true, "server");
+    public static final ModEnvironment CLIENT = new ModEnvironment(true, false, "client");
+    public static final ModEnvironment SERVER = new ModEnvironment(false, true, "server");
+    public static final ModEnvironment UNIVERSAL = new ModEnvironment(true, true, "universal");
 
-	private final boolean client;
-	private final boolean server;
-	private final String name;
+    private final boolean client;
+    private final String name;
+    private final boolean server;
 
-	private ModEnvironment(boolean client, boolean server, String name) {
-		this.client = client;
-		this.server = server;
-		this.name = name;
-	}
+    private ModEnvironment(boolean client, boolean server, String name) {
+        this.client = client;
+        this.server = server;
+        this.name = name;
+    }
 
-	public boolean isClient() {
-		return client;
-	}
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
 
-	public boolean isServer() {
-		return server;
-	}
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
 
-	@Override
-	public boolean equals(Object o) {
-		if (this == o) return true;
-		if (o == null || getClass() != o.getClass()) return false;
-		ModEnvironment that = (ModEnvironment) o;
-		return name.equals(that.name);
-	}
+        ModEnvironment that = (ModEnvironment) o;
+        return name.equals(that.name);
+    }
 
-	@Override
-	public int hashCode() {
-		return Objects.hash(name);
-	}
+    @Override
+    public int hashCode() {
+        return Objects.hash(name);
+    }
+
+    public boolean isClient() {
+        return client;
+    }
+
+    public boolean isServer() {
+        return server;
+    }
 }

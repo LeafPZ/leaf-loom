@@ -80,291 +80,312 @@ import dev.aoqia.leaf.loom.util.DeprecationHelper;
  * This is the public api available exposed to build scripts.
  */
 public interface LoomGradleExtensionAPI {
-	@ApiStatus.Internal
-	DeprecationHelper getDeprecationHelper();
+    RemapConfigurationSettings addRemapConfiguration(String name, Action<RemapConfigurationSettings> action);
 
-	RegularFileProperty getAccessWidenerPath();
+    <T extends RemapperParameters> void addRemapperExtension(
+        Class<? extends RemapperExtension<T>> remapperExtensionClass, Class<T> parametersClass,
+        Action<T> parameterAction);
 
-	/**
-	 * Specifies the {@code fabric.mod.json} file location used in injected interface processing.
-	 *
-	 * <p>
-	 *     By default, either {@code src/main/resources/fabric.mod.json}
-	 *     or {@code src/client/resources/fabric.mod.json} in the project directory is used.
-	 * </p>
-	 *
-	 * <p>
-	 *     Providing a path to a different location allows using a shared or preprocessed
-	 *     file. However, at the end it must be put into the root of the processed
-	 *     resources directory (usually {@code build/resources/main}).
-	 * </p>
-	 */
-	RegularFileProperty getLeafModJsonPath();
+    void addZomboidJarProcessor(Class<? extends ZomboidJarProcessor<?>> clazz, Object... parameters);
 
-	NamedDomainObjectContainer<DecompilerOptions> getDecompilerOptions();
-
-	void decompilers(Action<NamedDomainObjectContainer<DecompilerOptions>> action);
-
-	ListProperty<ZomboidJarProcessor<?>> getZomboidJarProcessors();
-
-	void addZomboidJarProcessor(Class<? extends ZomboidJarProcessor<?>> clazz, Object... parameters);
-
-	ConfigurableFileCollection getLog4jConfigs();
-
-	Dependency layered(Action<LayeredMappingSpecBuilder> action);
-
-	void runs(Action<NamedDomainObjectContainer<RunConfigSettings>> action);
-
-	NamedDomainObjectContainer<RunConfigSettings> getRunConfigs();
-
-	/**
-	 * {@return the value of {@link #getRunConfigs}}
-	 * This is an alias for it that matches {@link #runs}.
-	 */
-	default NamedDomainObjectContainer<RunConfigSettings> getRuns() {
-		return getRunConfigs();
-	}
-
-	void mixin(Action<MixinExtensionAPI> action);
-
-	/**
-	 * Optionally register and configure a {@link ModSettings} object. The name should match the modid.
-	 * This is generally only required when the mod spans across multiple classpath directories, such as when using split sourcesets.
-	 */
-	void mods(Action<NamedDomainObjectContainer<ModSettings>> action);
-
-	NamedDomainObjectContainer<ModSettings> getMods();
-
-	NamedDomainObjectList<RemapConfigurationSettings> getRemapConfigurations();
-
-	RemapConfigurationSettings addRemapConfiguration(String name, Action<RemapConfigurationSettings> action);
-
-	void createRemapConfigurations(SourceSet sourceSet);
-
-	default List<RemapConfigurationSettings> getCompileRemapConfigurations() {
-		return getRemapConfigurations().stream().filter(element -> element.getOnCompileClasspath().get()).toList();
-	}
-
-	default List<RemapConfigurationSettings> getRuntimeRemapConfigurations() {
-		return getRemapConfigurations().stream().filter(element -> element.getOnRuntimeClasspath().get()).toList();
-	}
-
-	@ApiStatus.Experimental
-	// TODO: move this from LoomGradleExtensionAPI to LoomGradleExtension once getRefmapName & setRefmapName is removed.
-	MixinExtensionAPI getMixin();
-
-	default void interfaceInjection(Action<InterfaceInjectionExtensionAPI> action) {
-		action.execute(getInterfaceInjection());
-	}
-
-	InterfaceInjectionExtensionAPI getInterfaceInjection();
-
-	@ApiStatus.Experimental
-	default void versionsManifests(Action<VersionsManifestsAPI> action) {
-		action.execute(getVersionsManifests());
-	}
-
-	@ApiStatus.Experimental
-	ManifestLocations getVersionsManifests();
-
-	Property<String> getCustomZomboidMetadata();
-
-	SetProperty<String> getKnownIndyBsms();
-
-	/**
-	 * Disables the deprecated POM generation for a publication.
-	 * This is useful if you want to suppress deprecation warnings when you're not using software components.
-	 *
-	 * <p>Experimental API: Will be removed in Loom 0.12 together with the deprecated POM generation functionality.
-	 *
-	 * @param publication the maven publication
-	 */
-	@ApiStatus.Experimental
-	void disableDeprecatedPomGeneration(MavenPublication publication);
-
-	/**
-	 * Reads the mod version from the fabric.mod.json file located in the main sourcesets resources.
-	 * This is useful if you want to set the gradle version based of the version in the fabric.mod.json file.
-	 *
-	 * @return the version defined in the fabric.mod.json
-	 */
-	String getModVersion();
-
-	/**
-	 * When true loom will apply transitive access wideners from compile dependencies.
-	 *
-	 * @return the property controlling the transitive access wideners
-	 */
-	Property<Boolean> getEnableTransitiveAccessWideners();
-
-	/**
-	 * When true loom will apply mod provided javadoc from dependencies.
-	 *
-	 * @return the property controlling the mod provided javadoc
-	 */
-	Property<Boolean> getEnableModProvidedJavadoc();
-
-	@ApiStatus.Experimental
-	IntermediateMappingsProvider getIntermediateMappingsProvider();
-
-	@ApiStatus.Experimental
-	void setIntermediateMappingsProvider(IntermediateMappingsProvider intermediateMappingsProvider);
-
-	@ApiStatus.Experimental
-	<T extends IntermediateMappingsProvider> void setIntermediateMappingsProvider(Class<T> clazz, Action<T> action);
-
-	/**
-	 * An Experimental option to provide empty intermediate mappings, to be used for game versions without any intermediate mappings.
-	 */
-	@ApiStatus.Experimental
-	default void noIntermediateMappings() {
-		getUseIntermediateMappings().set(false);
-		getUseIntermediateMappings().finalizeValue();
-	}
-
-	/**
-	 * Returns the tiny mappings file used to remap the game and mods.
-	 *
-	 * @return the mappings file, or null if in a non-obfuscated environment
-	 */
-	File getMappingsFile();
-
-	/**
-	 * Returns the {@link GenerateSourcesTask} for the given {@link DecompilerOptions}.
-	 * When env source sets are split and the client param is true the decompile task for the client jar will be returned.
-	 */
-	GenerateSourcesTask getDecompileTask(DecompilerOptions options, boolean client);
-
-	/**
-	 * Use "%1$s" as a placeholder for the game version.
-	 *
-	 * @return the intermediary url template
-	 */
-	Property<String> getIntermediaryUrl();
-
-	/**
-	 * @return the production namespace
-	 */
-	Property<String> getProductionNamespace();
-
-	/**
-	 * @return whether to use intermediate mappings
-	 */
-	Property<Boolean> getUseIntermediateMappings();
-
-	/**
-	 * @return the default mixin remap type
-	 */
-	Property<String> getDefaultMixinRemapType();
-
-	@ApiStatus.Experimental
-	Property<ZomboidJarConfiguration<?, ?, ?>> getZomboidJarConfiguration();
+    boolean areEnvironmentSourceSetsSplit();
 
     default void completeZomboidJar() {
         getZomboidJarConfiguration().set(ZomboidJarConfiguration.COMPLETE);
     }
 
-	void splitEnvironmentSourceSets();
+    void createRemapConfigurations(SourceSet sourceSet);
 
-	boolean areEnvironmentSourceSetsSplit();
+    void decompilers(Action<NamedDomainObjectContainer<DecompilerOptions>> action);
 
-	/**
-	 * When enabled, Loom remaps JSR {@code Nullable}, {@code Nonnull}, and {@code Immutable} annotations to their JetBrains counterparts in the Minecraft JAR.
-	 *
-	 * <p>When disabled, Loom keeps JSR annotations as-is, and remaps any JetBrains {@code Nullable}, {@code NotNull}, and {@code Unmodifiable} annotations to their JSR counterparts in the Minecraft JAR.
-	 *
-	 * <p>This has no effect on Minecraft versions that solely use JSpecify annotations.
-	 *
-	 * <p>Default: true
-	 *
-	 * @return the property controlling the remapping of JSR annotations
-	 */
-	Property<Boolean> getRemapJsrAnnotationsToJetBrains();
+    /**
+     * Disables the deprecated POM generation for a publication.
+     * This is useful if you want to suppress deprecation warnings when you're not using software components.
+     *
+     * <p>
+     * Experimental API: Will be removed in Loom 0.12 together with the deprecated POM generation functionality.
+     *
+     * @param publication the maven publication
+     */
+    @ApiStatus.Experimental
+    void disableDeprecatedPomGeneration(MavenPublication publication);
 
-	Property<Boolean> getRuntimeOnlyLog4j();
+    RegularFileProperty getAccessWidenerPath();
 
-	/**
-	 * When enabled, lwjgl-opengl or lwjgl-vulkan will be added as a runtime dependency preventing the mod from compiling against a specific graphics API.
-	 */
-	Property<Boolean> getRuntimeOnlyLwjglGraphics();
+    default List<RemapConfigurationSettings> getCompileRemapConfigurations() {
+        return getRemapConfigurations().stream().filter(element -> element.getOnCompileClasspath().get()).toList();
+    }
 
-	Property<Boolean> getSplitModDependencies();
+    Property<String> getCustomZomboidMetadata();
 
-	/**
-	 * Whether to transform zip entries within nested jars to be using STORED compression.
-	 *
-	 * <p>This will usually reduce the resulting jar size by avoiding double-compression.
-	 *
-	 * <p>However, this will very likely increase the decompressed size during runtime as a side effect.
-	 *
-	 * <p>Default: false
-	 *
-	 * @return the property controlling this toggle
-	 */
-	Property<Boolean> getUncompressNestedJars();
+    NamedDomainObjectContainer<DecompilerOptions> getDecompilerOptions();
 
-	<T extends RemapperParameters> void addRemapperExtension(Class<? extends RemapperExtension<T>> remapperExtensionClass, Class<T> parametersClass, Action<T> parameterAction);
+    /**
+     * Returns the {@link GenerateSourcesTask} for the given {@link DecompilerOptions}.
+     * When env source sets are split and the client param is true the decompile task for the client jar will be
+     * returned.
+     */
+    GenerateSourcesTask getDecompileTask(DecompilerOptions options, boolean client);
 
-	/**
-	 * @return The zomboid version, as a {@link Provider}.
-	 */
-	Provider<String> getZomboidVersion();
+    /**
+     * @return the default mixin remap type
+     */
+    Property<String> getDefaultMixinRemapType();
 
-	/**
-	 * @return A lazily evaluated {@link FileCollection} containing the named zomboid jars.
-	 */
-	FileCollection getNamedZomboidJars();
+    @ApiStatus.Internal
+    DeprecationHelper getDeprecationHelper();
 
-	/**
-	 * Nest mod jars from a {@link FileCollection} into the specified jar task.
-	 * This is useful for including locally built mod jars or jars that don't come from Maven.
-	 *
-	 * <p>Important: The jars must already be valid mod jars (containing a fabric.mod.json file).
-	 * Non-mod jars will be rejected.
-	 *
-	 * <p>Example usage:
-	 * {@snippet lang=groovy :
-	 * loom {
-	 *     nestJars(tasks.jar, files('local-mod.jar'))
-	 *     nestJars(tasks.remapJar, tasks.named('buildOtherMod'))
-	 * }
-	 * }
-	 *
-	 * @param jarTask the jar task to nest jars into (can be jar or remapJar)
-	 * @param jars the file collection containing mod jars to nest
-	 * @since 1.14
-	 */
-	@ApiStatus.Experimental
-	void nestJars(TaskProvider<? extends Jar> jarTask, FileCollection jars);
+    /**
+     * When true loom will apply mod provided javadoc from dependencies.
+     *
+     * @return the property controlling the mod provided javadoc
+     */
+    Property<Boolean> getEnableModProvidedJavadoc();
 
-	/**
-	 * Includes dependencies from a configuration in the specified jar task.
-	 *
-	 * <p>This is the task-bound equivalent of the default {@code include} configuration.
-	 * Dependencies are converted to nestable jars before they are nested into the jar task.
-	 *
-	 * <p>Example usage:
-	 * {@snippet lang=groovy :
-	 * loom {
-	 * 	   nestJars(tasks.jar, configurations.myInclude)
-	 * 	   nestJars(tasks.named('remapJar'), configurations.named('myRemapInclude'))
-	 * }
-	 * }
-	 *
-	 * @param jarTask the jar task to include dependencies in
-	 * @param configuration the configuration containing dependencies to include
-	 * @since 1.17
-	 */
-	@ApiStatus.Experimental
-	void nestJars(TaskProvider<? extends Jar> jarTask, Configuration configuration);
+    /**
+     * When true loom will apply transitive access wideners from compile dependencies.
+     *
+     * @return the property controlling the transitive access wideners
+     */
+    Property<Boolean> getEnableTransitiveAccessWideners();
 
-	/**
-	 * Includes dependencies from a lazily provided configuration in the specified jar task.
-	 *
-	 * @param jarTask the jar task to include dependencies in
-	 * @param configuration the lazy configuration containing dependencies to include
-	 * @since 1.17
-	 */
-	@ApiStatus.Experimental
-	void nestJars(TaskProvider<? extends Jar> jarTask, NamedDomainObjectProvider<? extends Configuration> configuration);
+    InterfaceInjectionExtensionAPI getInterfaceInjection();
+
+    /**
+     * Use "%1$s" as a placeholder for the game version.
+     *
+     * @return the intermediary url template
+     */
+    Property<String> getIntermediaryUrl();
+
+    @ApiStatus.Experimental
+    IntermediateMappingsProvider getIntermediateMappingsProvider();
+
+    SetProperty<String> getKnownIndyBsms();
+
+    /**
+     * Specifies the {@code fabric.mod.json} file location used in injected interface processing.
+     *
+     * <p>
+     * By default, either {@code src/main/resources/fabric.mod.json}
+     * or {@code src/client/resources/fabric.mod.json} in the project directory is used.
+     * </p>
+     *
+     * <p>
+     * Providing a path to a different location allows using a shared or preprocessed
+     * file. However, at the end it must be put into the root of the processed
+     * resources directory (usually {@code build/resources/main}).
+     * </p>
+     */
+    RegularFileProperty getLeafModJsonPath();
+
+    ConfigurableFileCollection getLog4jConfigs();
+
+    /**
+     * Returns the tiny mappings file used to remap the game and mods.
+     *
+     * @return the mappings file, or null if in a non-obfuscated environment
+     */
+    File getMappingsFile();
+
+    @ApiStatus.Experimental
+    // TODO: move this from LoomGradleExtensionAPI to LoomGradleExtension once getRefmapName & setRefmapName is
+    // removed.
+    MixinExtensionAPI getMixin();
+
+    NamedDomainObjectContainer<ModSettings> getMods();
+
+    /**
+     * Reads the mod version from the fabric.mod.json file located in the main sourcesets resources.
+     * This is useful if you want to set the gradle version based of the version in the fabric.mod.json file.
+     *
+     * @return the version defined in the fabric.mod.json
+     */
+    String getModVersion();
+
+    /**
+     * @return A lazily evaluated {@link FileCollection} containing the named zomboid jars.
+     */
+    FileCollection getNamedZomboidJars();
+
+    /**
+     * @return the production namespace
+     */
+    Property<String> getProductionNamespace();
+
+    NamedDomainObjectList<RemapConfigurationSettings> getRemapConfigurations();
+
+    /**
+     * When enabled, Loom remaps JSR {@code Nullable}, {@code Nonnull}, and {@code Immutable} annotations to their
+     * JetBrains counterparts in the Minecraft JAR.
+     *
+     * <p>
+     * When disabled, Loom keeps JSR annotations as-is, and remaps any JetBrains {@code Nullable}, {@code NotNull}
+     * , and {@code Unmodifiable} annotations to their JSR counterparts in the Minecraft JAR.
+     *
+     * <p>
+     * This has no effect on Minecraft versions that solely use JSpecify annotations.
+     *
+     * <p>
+     * Default: true
+     *
+     * @return the property controlling the remapping of JSR annotations
+     */
+    Property<Boolean> getRemapJsrAnnotationsToJetBrains();
+
+    NamedDomainObjectContainer<RunConfigSettings> getRunConfigs();
+
+    /**
+     * {@return the value of {@link #getRunConfigs}}
+     * This is an alias for it that matches {@link #runs}.
+     */
+    default NamedDomainObjectContainer<RunConfigSettings> getRuns() {
+        return getRunConfigs();
+    }
+
+    Property<Boolean> getRuntimeOnlyLog4j();
+
+    /**
+     * When enabled, lwjgl-opengl or lwjgl-vulkan will be added as a runtime dependency preventing the mod from
+     * compiling against a specific graphics API.
+     */
+    Property<Boolean> getRuntimeOnlyLwjglGraphics();
+
+    default List<RemapConfigurationSettings> getRuntimeRemapConfigurations() {
+        return getRemapConfigurations().stream().filter(element -> element.getOnRuntimeClasspath().get()).toList();
+    }
+
+    Property<Boolean> getSplitModDependencies();
+
+    /**
+     * Whether to transform zip entries within nested jars to be using STORED compression.
+     *
+     * <p>
+     * This will usually reduce the resulting jar size by avoiding double-compression.
+     *
+     * <p>
+     * However, this will very likely increase the decompressed size during runtime as a side effect.
+     *
+     * <p>
+     * Default: false
+     *
+     * @return the property controlling this toggle
+     */
+    Property<Boolean> getUncompressNestedJars();
+
+    /**
+     * @return whether to use intermediate mappings
+     */
+    Property<Boolean> getUseIntermediateMappings();
+
+    @ApiStatus.Experimental
+    ManifestLocations getVersionsManifests();
+
+    @ApiStatus.Experimental
+    Property<ZomboidJarConfiguration<?, ?, ?>> getZomboidJarConfiguration();
+
+    ListProperty<ZomboidJarProcessor<?>> getZomboidJarProcessors();
+
+    /**
+     * @return The zomboid version, as a {@link Provider}.
+     */
+    Provider<String> getZomboidVersion();
+
+    default void interfaceInjection(Action<InterfaceInjectionExtensionAPI> action) {
+        action.execute(getInterfaceInjection());
+    }
+
+    Dependency layered(Action<LayeredMappingSpecBuilder> action);
+
+    void mixin(Action<MixinExtensionAPI> action);
+
+    /**
+     * Optionally register and configure a {@link ModSettings} object. The name should match the modid.
+     * This is generally only required when the mod spans across multiple classpath directories, such as when using
+     * split sourcesets.
+     */
+    void mods(Action<NamedDomainObjectContainer<ModSettings>> action);
+
+    /**
+     * Includes dependencies from a configuration in the specified jar task.
+     *
+     * <p>
+     * This is the task-bound equivalent of the default {@code include} configuration.
+     * Dependencies are converted to nestable jars before they are nested into the jar task.
+     *
+     * <p>
+     * Example usage:
+     * {@snippet lang = groovy:
+     * loom {
+     * 	   nestJars(tasks.jar, configurations.myInclude)
+     * 	   nestJars(tasks.named('remapJar'), configurations.named('myRemapInclude'))
+     * }
+     * }
+     *
+     * @param jarTask the jar task to include dependencies in
+     * @param configuration the configuration containing dependencies to include
+     * @since 1.17
+     */
+    @ApiStatus.Experimental
+    void nestJars(TaskProvider<? extends Jar> jarTask, Configuration configuration);
+
+    /**
+     * Nest mod jars from a {@link FileCollection} into the specified jar task.
+     * This is useful for including locally built mod jars or jars that don't come from Maven.
+     *
+     * <p>
+     * Important: The jars must already be valid mod jars (containing a fabric.mod.json file).
+     * Non-mod jars will be rejected.
+     *
+     * <p>
+     * Example usage:
+     * {@snippet lang = groovy:
+     * loom {
+     *     nestJars(tasks.jar, files('local-mod.jar'))
+     *     nestJars(tasks.remapJar, tasks.named('buildOtherMod'))
+     * }
+     * }
+     *
+     * @param jarTask the jar task to nest jars into (can be jar or remapJar)
+     * @param jars the file collection containing mod jars to nest
+     * @since 1.14
+     */
+    @ApiStatus.Experimental
+    void nestJars(TaskProvider<? extends Jar> jarTask, FileCollection jars);
+
+    /**
+     * Includes dependencies from a lazily provided configuration in the specified jar task.
+     *
+     * @param jarTask the jar task to include dependencies in
+     * @param configuration the lazy configuration containing dependencies to include
+     * @since 1.17
+     */
+    @ApiStatus.Experimental
+    void nestJars(TaskProvider<? extends Jar> jarTask,
+        NamedDomainObjectProvider<? extends Configuration> configuration);
+
+    /**
+     * An Experimental option to provide empty intermediate mappings, to be used for game versions without any
+     * intermediate mappings.
+     */
+    @ApiStatus.Experimental
+    default void noIntermediateMappings() {
+        getUseIntermediateMappings().set(false);
+        getUseIntermediateMappings().finalizeValue();
+    }
+
+    void runs(Action<NamedDomainObjectContainer<RunConfigSettings>> action);
+
+    @ApiStatus.Experimental
+    <T extends IntermediateMappingsProvider> void setIntermediateMappingsProvider(Class<T> clazz, Action<T> action);
+
+    @ApiStatus.Experimental
+    void setIntermediateMappingsProvider(IntermediateMappingsProvider intermediateMappingsProvider);
+
+    void splitEnvironmentSourceSets();
+
+    @ApiStatus.Experimental
+    default void versionsManifests(Action<VersionsManifestsAPI> action) {
+        action.execute(getVersionsManifests());
+    }
 }

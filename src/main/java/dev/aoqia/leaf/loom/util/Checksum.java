@@ -58,122 +58,122 @@ import org.gradle.api.Project;
 import org.gradle.api.file.FileCollection;
 
 public final class Checksum {
-	public static Checksum of(byte[] data) {
-		return new Checksum(digest -> digest.write(data));
-	}
+    private final DataConsumer consumer;
 
-	public static Checksum of(String str) {
-		return new Checksum(digest -> digest.write(str));
-	}
+    private Checksum(DataConsumer consumer) {
+        this.consumer = consumer;
+    }
 
-	public static Checksum of(File file) {
-		return of(file.toPath());
-	}
+    public static Checksum of(byte[] data) {
+        return new Checksum(digest -> digest.write(data));
+    }
 
-	public static Checksum of(Path file) {
-		return new Checksum(digest -> {
-			try (InputStream is = Files.newInputStream(file)) {
-				is.transferTo(digest);
-			}
-		});
-	}
+    public static Checksum of(File file) {
+        return of(file.toPath());
+    }
 
-	public static Checksum of(Project project) {
-		return of(project.getProjectDir().getAbsolutePath() + ":" + project.getPath());
-	}
+    public static Checksum of(FileCollection files) {
+        return new Checksum(os -> {
+            for (File file : files) {
+                try (InputStream is = Files.newInputStream(file.toPath())) {
+                    is.transferTo(os);
+                }
+            }
+        });
+    }
 
-	public static Checksum of(FileCollection files) {
-		return new Checksum(os -> {
-			for (File file : files) {
-				try (InputStream is = Files.newInputStream(file.toPath())) {
-					is.transferTo(os);
-				}
-			}
-		});
-	}
+    public static Checksum of(List<Checksum> others) {
+        return new Checksum(os -> {
+            for (Checksum other : others) {
+                other.consumer.accept(os);
+            }
+        });
+    }
 
-	public static Checksum of(List<Checksum> others) {
-		return new Checksum(os -> {
-			for (Checksum other : others) {
-				other.consumer.accept(os);
-			}
-		});
-	}
+    public static Checksum of(Path file) {
+        return new Checksum(digest -> {
+            try (InputStream is = Files.newInputStream(file)) {
+                is.transferTo(digest);
+            }
+        });
+    }
 
-	private final DataConsumer consumer;
+    public static Checksum of(Project project) {
+        return of(project.getProjectDir().getAbsolutePath() + ":" + project.getPath());
+    }
 
-	private Checksum(DataConsumer consumer) {
-		this.consumer = consumer;
-	}
+    public static Checksum of(String str) {
+        return new Checksum(digest -> digest.write(str));
+    }
 
-	public Result sha1() {
-		return computeResult("SHA-1");
-	}
+    public Result md5() {
+        return computeResult("MD5");
+    }
 
-	public Result sha256() {
-		return computeResult("SHA-256");
-	}
+    public Result sha1() {
+        return computeResult("SHA-1");
+    }
 
-	public Result md5() {
-		return computeResult("MD5");
-	}
+    public Result sha256() {
+        return computeResult("SHA-256");
+    }
 
-	private Result computeResult(String algorithm) {
-		MessageDigest digest;
+    private Result computeResult(String algorithm) {
+        MessageDigest digest;
 
-		try {
-			digest = MessageDigest.getInstance(algorithm);
-		} catch (NoSuchAlgorithmException e) {
-			throw new RuntimeException(e);
-		}
+        try {
+            digest = MessageDigest.getInstance(algorithm);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
 
-		try (MessageDigestOutputStream os = new MessageDigestOutputStream(digest)) {
-			consumer.accept(os);
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to compute checksum", e);
-		}
+        try (MessageDigestOutputStream os = new MessageDigestOutputStream(digest)) {
+            consumer.accept(os);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to compute checksum", e);
+        }
 
-		return new Result(digest.digest());
-	}
+        return new Result(digest.digest());
+    }
 
-	public record Result(byte[] digest) {
-		public String hex() {
-			return HexFormat.of().formatHex(digest());
-		}
+    public record Result(byte[] digest) {
+        public String hex() {
+            return HexFormat.of().formatHex(digest());
+        }
 
-		public String hex(int length) {
-			return hex().substring(0, length);
-		}
+        public String hex(int length) {
+            return hex().substring(0, length);
+        }
 
-		public boolean matchesStr(String other) {
-			return hex().equalsIgnoreCase(other);
-		}
-	}
+        public boolean matchesStr(String other) {
+            return hex().equalsIgnoreCase(other);
+        }
+    }
 
-	@FunctionalInterface
-	private interface DataConsumer {
-		void accept(MessageDigestOutputStream os) throws IOException;
-	}
+    @FunctionalInterface
+    private interface DataConsumer {
+        void accept(MessageDigestOutputStream os) throws IOException;
+    }
 
-	private static class MessageDigestOutputStream extends OutputStream {
-		private final MessageDigest digest;
+    private static class MessageDigestOutputStream extends OutputStream {
+        private final MessageDigest digest;
 
-		private MessageDigestOutputStream(MessageDigest digest) {
-			this.digest = digest;
-		}
+        private MessageDigestOutputStream(MessageDigest digest) {
+            this.digest = digest;
+        }
 
-		@Override
-		public void write(int b) {
-			digest.update((byte) b);
-		}
+        @Override
+        public void write(byte[] b, int off, int len) {
+            digest.update(b, off, len);
+        }
 
-		@Override
-		public void write(byte[] b, int off, int len) {
-			digest.update(b, off, len);
-		}
+        @Override
+        public void write(int b) {
+            digest.update((byte) b);
+        }
 
-		public void write(String string) throws IOException {
-			write(string.getBytes(StandardCharsets.UTF_8));
-		}
-	}
+        public void write(String string) throws IOException {
+            write(string.getBytes(StandardCharsets.UTF_8));
+        }
+    }
 }

@@ -55,79 +55,84 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.MappedZomboidP
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.NamedZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.mapped.ProcessedNamedZomboidProvider;
 
+// spotless:off
+// checkstyle:off
 public record ZomboidJarConfiguration<
-		M extends ZomboidProvider,
-		N extends NamedZomboidProvider<M>,
-		Q extends MappedZomboidProvider>(
-				ZomboidProviderFactory<M> zomboidProviderFactory,
-				IntermediaryZomboidProviderFactory<M> intermediaryZomboidProviderFactory,
-				NamedZomboidProviderFactory<M> namedZomboidProviderFactory,
-				ProcessedNamedZomboidProviderFactory<M, N> processedNamedZomboidProviderFactory,
-				DecompileConfigurationFactory<Q> decompileConfigurationFactory,
-				List<String> supportedEnvironments) {
-    public static final ZomboidJarConfiguration<
-            ZomboidProvider,
-            NamedZomboidProvider.CompleteJarImpl,
-            MappedZomboidProvider
-        > COMPLETE = new ZomboidJarConfiguration<>(
-            ZomboidProvider::new,
-            IntermediaryZomboidProvider.CompleteJarImpl::new,
-            NamedZomboidProvider.CompleteJarImpl::new,
-            ProcessedNamedZomboidProvider.CompleteJarImpl::new,
-            SingleJarDecompileConfiguration::new,
-            List.of("client", "server")
-        );
+    M extends ZomboidProvider,
+    N extends NamedZomboidProvider<M>,
+    Q extends MappedZomboidProvider>(
+        ZomboidProviderFactory<M> zomboidProviderFactory,
+        IntermediaryZomboidProviderFactory<M> intermediaryZomboidProviderFactory,
+        NamedZomboidProviderFactory<M> namedZomboidProviderFactory,
+        ProcessedNamedZomboidProviderFactory<M, N> processedNamedZomboidProviderFactory,
+        DecompileConfigurationFactory<Q> decompileConfigurationFactory,
+        List<String> supportedEnvironments
+    )
+// checkstyle:on
+// spotless:on
+{
+    public static final ZomboidJarConfiguration<ZomboidProvider, NamedZomboidProvider.CompleteJarImpl,
+        MappedZomboidProvider> COMPLETE = new ZomboidJarConfiguration<>(ZomboidProvider::new,
+            IntermediaryZomboidProvider.CompleteJarImpl::new, NamedZomboidProvider.CompleteJarImpl::new,
+            ProcessedNamedZomboidProvider.CompleteJarImpl::new, SingleJarDecompileConfiguration::new,
+            List.of("client", "server"));
 
-	public ZomboidProvider createZomboidProvider(ZomboidMetadataProvider metadataProvider, ConfigContext context) {
-		return zomboidProviderFactory.create(metadataProvider, context);
-	}
+    public ZomboidProvider createZomboidProvider(ZomboidMetadataProvider metadataProvider, ConfigContext context) {
+        return zomboidProviderFactory.create(metadataProvider, context);
+    }
 
-	public IntermediaryZomboidProvider<M> createIntermediaryZomboidProvider(Project project) {
-		return intermediaryZomboidProviderFactory.create(project, getZomboidProvider(project));
-	}
+    public IntermediaryZomboidProvider<M> createIntermediaryZomboidProvider(Project project) {
+        return intermediaryZomboidProviderFactory.create(project, getZomboidProvider(project));
+    }
 
-	public NamedZomboidProvider<M> createNamedZomboidProvider(Project project) {
-		return namedZomboidProviderFactory.create(project, getZomboidProvider(project));
-	}
+    public NamedZomboidProvider<M> createNamedZomboidProvider(Project project) {
+        return namedZomboidProviderFactory.create(project, getZomboidProvider(project));
+    }
 
-	public ProcessedNamedZomboidProvider<M, N> createProcessedNamedZomboidProvider(NamedZomboidProvider<?> provider, ZomboidJarProcessorManager jarProcessorManager) {
-		return processedNamedZomboidProviderFactory.create((N) provider, jarProcessorManager);
-	}
+    public ProcessedNamedZomboidProvider<M, N> createProcessedNamedZomboidProvider(NamedZomboidProvider<?> provider,
+        ZomboidJarProcessorManager jarProcessorManager)
+    {
+        // noinspection unchecked
+        return processedNamedZomboidProviderFactory.create((N) provider, jarProcessorManager);
+    }
 
-	public DecompileConfiguration<Q> createDecompileConfiguration(Project project) {
-		return decompileConfigurationFactory.create(project, getMappedZomboidProvider(project));
-	}
+    public DecompileConfiguration<Q> createDecompileConfiguration(Project project) {
+        return decompileConfigurationFactory.create(project, getMappedZomboidProvider(project));
+    }
 
-	private M getZomboidProvider(Project project) {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
-		//noinspection unchecked
-		return (M) extension.getZomboidProvider();
-	}
+    private M getZomboidProvider(Project project) {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
+        // noinspection unchecked
+        return (M) extension.getZomboidProvider();
+    }
 
-	private Q getMappedZomboidProvider(Project project) {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
-		//noinspection unchecked
-		return (Q) extension.getNamedZomboidProvider();
-	}
+    private Q getMappedZomboidProvider(Project project) {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
+        // noinspection unchecked
+        return (Q) extension.getNamedZomboidProvider();
+    }
 
-	// Factory interfaces:
-	private interface ZomboidProviderFactory<M extends ZomboidProvider> {
-		M create(ZomboidMetadataProvider metadataProvider, ConfigContext configContext);
-	}
+    // Factory interfaces:
+    private interface ZomboidProviderFactory<M extends ZomboidProvider> {
+        M create(ZomboidMetadataProvider metadataProvider, ConfigContext configContext);
+    }
 
-	private interface IntermediaryZomboidProviderFactory<M extends ZomboidProvider> {
-		IntermediaryZomboidProvider<M> create(Project project, M provider);
-	}
+    private interface IntermediaryZomboidProviderFactory<M extends ZomboidProvider> {
+        IntermediaryZomboidProvider<M> create(Project project, M provider);
+    }
 
-	private interface NamedZomboidProviderFactory<M extends ZomboidProvider> {
-		NamedZomboidProvider<M> create(Project project, M provider);
-	}
+    private interface NamedZomboidProviderFactory<M extends ZomboidProvider> {
+        NamedZomboidProvider<M> create(Project project, M provider);
+    }
 
-	private interface ProcessedNamedZomboidProviderFactory<M extends ZomboidProvider, N extends NamedZomboidProvider<M>> {
-		ProcessedNamedZomboidProvider<M, N> create(N provider, ZomboidJarProcessorManager jarProcessorManager);
-	}
+    private interface ProcessedNamedZomboidProviderFactory<
+        M extends ZomboidProvider,
+        N extends NamedZomboidProvider<M>>
+    {
+        ProcessedNamedZomboidProvider<M, N> create(N provider, ZomboidJarProcessorManager jarProcessorManager);
+    }
 
-	private interface DecompileConfigurationFactory<M extends MappedZomboidProvider> {
-		DecompileConfiguration<M> create(Project project, M provider);
-	}
+    private interface DecompileConfigurationFactory<M extends MappedZomboidProvider> {
+        DecompileConfiguration<M> create(Project project, M provider);
+    }
 }

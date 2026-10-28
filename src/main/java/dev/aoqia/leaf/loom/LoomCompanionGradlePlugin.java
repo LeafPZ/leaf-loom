@@ -49,12 +49,15 @@ import dev.aoqia.leaf.loom.task.launch.ExportClasspathTask;
 import dev.aoqia.leaf.loom.util.Constants;
 
 public class LoomCompanionGradlePlugin implements Plugin<Project> {
-	public static final String NAME = "dev.aoqia.leaf.loom-companion";
+    public static final String NAME = "dev.aoqia.leaf.loom-companion";
 
-	@Override
-	public void apply(Project project) {
-		var exportClassPathTask = project.getTasks().register(Constants.Task.EXPORT_CLASSPATH, ExportClasspathTask.class);
-		project.getConfigurations().register(Constants.Configurations.EXPORTED_CLASSPATH, LoomConfigurations.Role.CONSUMABLE::apply);
-		project.artifacts(artifactHandler -> artifactHandler.add(Constants.Configurations.EXPORTED_CLASSPATH, exportClassPathTask));
-	}
+    @Override
+    public void apply(Project project) {
+        var exportClassPathTask = project.getTasks()
+            .register(Constants.Task.EXPORT_CLASSPATH, ExportClasspathTask.class);
+        project.getConfigurations()
+            .register(Constants.Configurations.EXPORTED_CLASSPATH, LoomConfigurations.Role.CONSUMABLE::apply);
+        project.artifacts(
+            artifactHandler -> artifactHandler.add(Constants.Configurations.EXPORTED_CLASSPATH, exportClassPathTask));
+    }
 }

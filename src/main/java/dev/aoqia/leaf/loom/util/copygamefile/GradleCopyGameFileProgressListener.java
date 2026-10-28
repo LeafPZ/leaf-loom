@@ -23,38 +23,19 @@ import java.util.Objects;
 import java.util.function.Function;
 
 import org.gradle.internal.logging.progress.ProgressLogger;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public class GradleCopyGameFileProgressListener implements CopyGameFileProgressListener {
     private final String name;
-    private final Function<String, ProgressLogger> progressLoggerFactory;
 
-    @Nullable private ProgressLogger progressLogger;
+    @Nullable
+    private ProgressLogger progressLogger;
+
+    private final Function<String, ProgressLogger> progressLoggerFactory;
 
     public GradleCopyGameFileProgressListener(String name, Function<String, ProgressLogger> progressLoggerFactory) {
         this.name = name;
         this.progressLoggerFactory = progressLoggerFactory;
-    }
-
-    @Override
-    public void onStart() {
-        progressLogger = progressLoggerFactory.apply(this.name);
-    }
-
-    @Override
-    public void onProgress(long bytesTransferred, long contentLength) {
-        Objects.requireNonNull(progressLogger);
-        progressLogger.progress(
-            "Downloading %s - %s / %s".formatted(name, humanBytes(bytesTransferred), humanBytes(contentLength))
-        );
-    }
-
-    @Override
-    public void onEnd() {
-        if (progressLogger != null) {
-            progressLogger.completed();
-            progressLogger = null;
-        }
     }
 
     private static String humanBytes(long bytes) {
@@ -67,5 +48,25 @@ public class GradleCopyGameFileProgressListener implements CopyGameFileProgressL
         } else {
             return String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
         }
+    }
+
+    @Override
+    public void onEnd() {
+        if (progressLogger != null) {
+            progressLogger.completed();
+            progressLogger = null;
+        }
+    }
+
+    @Override
+    public void onProgress(long bytesTransferred, long contentLength) {
+        Objects.requireNonNull(progressLogger);
+        progressLogger.progress(
+            "Downloading %s - %s / %s".formatted(name, humanBytes(bytesTransferred), humanBytes(contentLength)));
+    }
+
+    @Override
+    public void onStart() {
+        progressLogger = progressLoggerFactory.apply(this.name);
     }
 }

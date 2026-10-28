@@ -48,9 +48,9 @@ import net.fabricmc.mappingio.MappingVisitor;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingLayer;
 
 public record NoOpMappingLayer() implements MappingLayer {
-	public static final MappingLayer INSTANCE = new NoOpMappingLayer();
+    public static final MappingLayer INSTANCE = new NoOpMappingLayer();
 
-	@Override
-	public void visit(MappingVisitor mappingVisitor) throws IOException {
-	}
+    @Override
+    public void visit(MappingVisitor mappingVisitor) throws IOException {
+    }
 }

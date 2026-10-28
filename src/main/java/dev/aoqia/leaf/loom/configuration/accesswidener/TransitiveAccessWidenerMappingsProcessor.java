@@ -61,136 +61,161 @@ import dev.aoqia.leaf.loom.api.processor.ZomboidJarProcessor;
 import dev.aoqia.leaf.loom.configuration.processors.MappingProcessing;
 import dev.aoqia.leaf.loom.util.LazyCloseable;
 
-public final class TransitiveAccessWidenerMappingsProcessor implements ZomboidJarProcessor.MappingsProcessor<AccessWidenerJarProcessor.Spec> {
-	public static final TransitiveAccessWidenerMappingsProcessor INSTANCE = new TransitiveAccessWidenerMappingsProcessor();
+public final class TransitiveAccessWidenerMappingsProcessor
+    implements ZomboidJarProcessor.MappingsProcessor<AccessWidenerJarProcessor.Spec>
+{
+    public static final TransitiveAccessWidenerMappingsProcessor INSTANCE =
+        new TransitiveAccessWidenerMappingsProcessor();
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(TransitiveAccessWidenerMappingsProcessor.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TransitiveAccessWidenerMappingsProcessor.class);
 
-	private TransitiveAccessWidenerMappingsProcessor() {
-	}
+    private TransitiveAccessWidenerMappingsProcessor() {
+    }
 
-	@Override
-	public boolean transform(MemoryMappingTree mappings, AccessWidenerJarProcessor.Spec spec, MappingProcessorContext context) {
-		final List<AccessWidenerEntry> accessWideners = spec.accessWideners().stream()
-				.filter(entry -> entry.mappingId() != null)
-				.toList();
+    @Override
+    public boolean transform(MemoryMappingTree mappings, AccessWidenerJarProcessor.Spec spec,
+        MappingProcessorContext context)
+    {
+        final List<AccessWidenerEntry> accessWideners = spec.accessWideners()
+            .stream()
+            .filter(entry -> entry.mappingId() != null)
+            .toList();
 
-		if (accessWideners.isEmpty()) {
-			return false;
-		}
+        if (accessWideners.isEmpty()) {
+            return false;
+        }
 
-		int productionNamespaceId = mappings.getNamespaceId(context.getProductionNamespace().toString());
+        int productionNamespaceId = mappings.getNamespaceId(context.getProductionNamespace().toString());
 
-		if (productionNamespaceId == MappingTreeView.NULL_NAMESPACE_ID) {
-			throw new IllegalStateException("Mapping tree must have namespace %s".formatted(context.getProductionNamespace().toString()));
-		}
+        if (productionNamespaceId == MappingTreeView.NULL_NAMESPACE_ID) {
+            throw new IllegalStateException(
+                "Mapping tree must have namespace %s".formatted(context.getProductionNamespace().toString()));
+        }
 
-		try {
-			if (!context.disableObfuscation()) {
-				try (LazyCloseable<TinyRemapper> remapper = context.createRemapper(context.getProductionNamespace(), MappingsNamespace.NAMED)) {
-					for (AccessWidenerEntry accessWidener : accessWideners) {
-						var visitor = new MappingCommentClassTweakerVisitor(accessWidener.mappingId(), productionNamespaceId, mappings, false);
-						accessWidener.read(visitor, remapper, context.getProductionNamespace());
-					}
-				}
-			} else {
-				for (AccessWidenerEntry accessWidener : accessWideners) {
-					var visitor = new MappingCommentClassTweakerVisitor(accessWidener.mappingId(), productionNamespaceId, mappings, true);
-					accessWidener.readOfficial(visitor);
-				}
-			}
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to transform access widener mappings", e);
-		}
+        try {
+            if (!context.disableObfuscation()) {
+                try (LazyCloseable<TinyRemapper> remapper = context.createRemapper(context.getProductionNamespace(),
+                    MappingsNamespace.NAMED))
+                {
+                    for (AccessWidenerEntry accessWidener : accessWideners) {
+                        var visitor = new MappingCommentClassTweakerVisitor(accessWidener.mappingId(),
+                            productionNamespaceId, mappings, false);
+                        accessWidener.read(visitor, remapper, context.getProductionNamespace());
+                    }
+                }
+            } else {
+                for (AccessWidenerEntry accessWidener : accessWideners) {
+                    var visitor = new MappingCommentClassTweakerVisitor(accessWidener.mappingId(),
+                        productionNamespaceId, mappings, true);
+                    accessWidener.readOfficial(visitor);
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to transform access widener mappings", e);
+        }
 
-		return true;
-	}
+        return true;
+    }
 
-	private record MappingCommentClassTweakerVisitor(String modId, int productionNamespaceId, MemoryMappingTree mappingTree, boolean createMissingEntries) implements ClassTweakerVisitor {
-		@Override
-		public AccessWidenerVisitor visitAccessWidener(String owner) {
-			return new MappingCommentAccessWidenerVisitor(owner);
-		}
+    private record MappingCommentClassTweakerVisitor(
+        String modId,
+        int productionNamespaceId,
+        MemoryMappingTree mappingTree,
+        boolean createMissingEntries
+    ) implements ClassTweakerVisitor
+    {
+        @Override
+        public AccessWidenerVisitor visitAccessWidener(String owner) {
+            return new MappingCommentAccessWidenerVisitor(owner);
+        }
 
-		private class MappingCommentAccessWidenerVisitor implements AccessWidenerVisitor {
-			private final String className;
+        private class MappingCommentAccessWidenerVisitor implements AccessWidenerVisitor {
+            private final String className;
 
-			private MappingCommentAccessWidenerVisitor(String className) {
-				this.className = className;
-			}
+            private MappingCommentAccessWidenerVisitor(String className) {
+                this.className = className;
+            }
 
-			@Override
-			public void visitClass(AccessType access, boolean transitive) {
-				MappingTree.ClassMapping classMapping = MappingProcessing.getOrCreateClassMapping(mappingTree, className, productionNamespaceId(), createMissingEntries);
+            @Override
+            public void visitClass(AccessType access, boolean transitive) {
+                MappingTree.ClassMapping classMapping = MappingProcessing.getOrCreateClassMapping(mappingTree,
+                    className, productionNamespaceId(), createMissingEntries);
 
-				if (classMapping == null) {
-					LOGGER.info("Failed to find class ({}) to mark access widened by mod ({})", className, modId());
-					return;
-				}
+                if (classMapping == null) {
+                    LOGGER.info("Failed to find class ({}) to mark access widened by mod ({})", className, modId());
+                    return;
+                }
 
-				classMapping.setComment(appendComment(classMapping.getComment(), access));
-			}
+                classMapping.setComment(appendComment(classMapping.getComment(), access));
+            }
 
-			@Override
-			public void visitMethod(String name, String descriptor, AccessType access, boolean transitive) {
-				// Access is also applied to the class, so also add the comment to the class
-				visitClass(access, transitive);
+            @Override
+            public void visitField(String name, String descriptor, AccessType access, boolean transitive) {
+                // Access is also applied to the class, so also add the comment to the class
+                visitClass(access, transitive);
 
-				MappingTree.ClassMapping classMapping = MappingProcessing.getOrCreateClassMapping(mappingTree, className, productionNamespaceId(), createMissingEntries);
+                MappingTree.ClassMapping classMapping = MappingProcessing.getOrCreateClassMapping(mappingTree,
+                    className, productionNamespaceId(), createMissingEntries);
 
-				if (classMapping == null) {
-					LOGGER.info("Failed to find class ({}) to mark access widened by mod ({})", className, modId());
-					return;
-				}
+                if (classMapping == null) {
+                    LOGGER.info("Failed to find class ({}) to mark access widened by mod ({})", name, modId());
+                    return;
+                }
 
-				MappingTree.MethodMapping methodMapping = MappingProcessing.getOrCreateMethodMapping(mappingTree, classMapping, name, descriptor, productionNamespaceId(), createMissingEntries);
+                MappingTree.FieldMapping fieldMapping = MappingProcessing.getOrCreateFieldMapping(mappingTree,
+                    classMapping, name, descriptor, productionNamespaceId(), createMissingEntries);
 
-				if (methodMapping == null) {
-					LOGGER.info("Failed to find method ({}) in ({}) to mark access widened by mod ({})", name, className, modId());
-					return;
-				}
+                if (fieldMapping == null) {
+                    LOGGER.info("Failed to find field ({}) in ({}) to mark access widened by mod ({})", name, className,
+                        modId());
+                    return;
+                }
 
-				methodMapping.setComment(appendComment(methodMapping.getComment(), access));
-			}
+                fieldMapping.setComment(appendComment(fieldMapping.getComment(), access));
+            }
 
-			@Override
-			public void visitField(String name, String descriptor, AccessType access, boolean transitive) {
-				// Access is also applied to the class, so also add the comment to the class
-				visitClass(access, transitive);
+            @Override
+            public void visitMethod(String name, String descriptor, AccessType access, boolean transitive) {
+                // Access is also applied to the class, so also add the comment to the class
+                visitClass(access, transitive);
 
-				MappingTree.ClassMapping classMapping = MappingProcessing.getOrCreateClassMapping(mappingTree, className, productionNamespaceId(), createMissingEntries);
+                MappingTree.ClassMapping classMapping = MappingProcessing.getOrCreateClassMapping(mappingTree,
+                    className, productionNamespaceId(), createMissingEntries);
 
-				if (classMapping == null) {
-					LOGGER.info("Failed to find class ({}) to mark access widened by mod ({})", name, modId());
-					return;
-				}
+                if (classMapping == null) {
+                    LOGGER.info("Failed to find class ({}) to mark access widened by mod ({})", className, modId());
+                    return;
+                }
 
-				MappingTree.FieldMapping fieldMapping = MappingProcessing.getOrCreateFieldMapping(mappingTree, classMapping, name, descriptor, productionNamespaceId(), createMissingEntries);
+                MappingTree.MethodMapping methodMapping = MappingProcessing.getOrCreateMethodMapping(mappingTree,
+                    classMapping, name, descriptor, productionNamespaceId(), createMissingEntries);
 
-				if (fieldMapping == null) {
-					LOGGER.info("Failed to find field ({}) in ({}) to mark access widened by mod ({})", name, className, modId());
-					return;
-				}
+                if (methodMapping == null) {
+                    LOGGER.info("Failed to find method ({}) in ({}) to mark access widened by mod ({})", name,
+                        className, modId());
+                    return;
+                }
 
-				fieldMapping.setComment(appendComment(fieldMapping.getComment(), access));
-			}
+                methodMapping.setComment(appendComment(methodMapping.getComment(), access));
+            }
 
-			private String appendComment(String comment, AccessType access) {
-				if (comment == null) {
-					comment = "";
-				} else {
-					comment += "\n";
-				}
+            private String appendComment(String comment, AccessType access) {
+                if (comment == null) {
+                    comment = "";
+                } else {
+                    comment += "\n";
+                }
 
-				String awComment = "Access widened by %s to %s".formatted(modId(), access);
+                String awComment = "Access widened by %s to %s".formatted(modId(), access);
 
-				if (!comment.contains(awComment)) {
-					// Ensure we don't comment the same thing twice. A bit of a cheap way to do this, but should work ok.
-					comment += awComment;
-				}
+                if (!comment.contains(awComment)) {
+                    // Ensure we don't comment the same thing twice. A bit of a cheap way to do this, but should work
+                    // ok.
+                    comment += awComment;
+                }
 
-				return comment;
-			}
-		}
-	}
+                return comment;
+            }
+        }
+    }
 }

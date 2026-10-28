@@ -38,12 +38,6 @@ public abstract class CopyGameFileFactory {
         getIsManualRefreshDependencies().set(LoomGradleExtension.get(getProject()).refreshDeps());
     }
 
-    @Input
-    protected abstract Property<Boolean> getIsManualRefreshDependencies();
-
-    @Inject
-    public abstract Project getProject();
-
     // Matches the logic in LoomGradleExtensionImpl
     public CopyGameFileBuilder copyGameFile(String path) {
         CopyGameFileBuilder builder = CopyGameFile.create(Path.of(path));
@@ -54,4 +48,10 @@ public abstract class CopyGameFileFactory {
 
         return builder;
     }
+
+    @Inject
+    public abstract Project getProject();
+
+    @Input
+    protected abstract Property<Boolean> getIsManualRefreshDependencies();
 }

@@ -55,76 +55,78 @@ import org.objectweb.asm.tree.TypeAnnotationNode;
 import net.fabricmc.tinyremapper.TinyRemapper;
 
 public record GenericAnnotationData(
-		@SerializedName("remove")
-		Set<String> annotationsToRemove,
-		@SerializedName("add")
-		List<AnnotationNode> annotationsToAdd,
-		@SerializedName("type_remove")
-		Set<TypeAnnotationKey> typeAnnotationsToRemove,
-		@SerializedName("type_add")
-		List<TypeAnnotationNode> typeAnnotationsToAdd
-) implements BaseAnnotationData {
-	public GenericAnnotationData {
-		if (annotationsToRemove == null) {
-			annotationsToRemove = new LinkedHashSet<>();
-		}
+    @SerializedName("remove") Set<String> annotationsToRemove,
+    @SerializedName("add") List<AnnotationNode> annotationsToAdd,
+    @SerializedName("type_remove") Set<TypeAnnotationKey> typeAnnotationsToRemove,
+    @SerializedName("type_add") List<TypeAnnotationNode> typeAnnotationsToAdd
+) implements BaseAnnotationData
+{
+    public GenericAnnotationData {
+        if (annotationsToRemove == null) {
+            annotationsToRemove = new LinkedHashSet<>();
+        }
 
-		if (annotationsToAdd == null) {
-			annotationsToAdd = new ArrayList<>();
-		}
+        if (annotationsToAdd == null) {
+            annotationsToAdd = new ArrayList<>();
+        }
 
-		if (typeAnnotationsToRemove == null) {
-			typeAnnotationsToRemove = new LinkedHashSet<>();
-		}
+        if (typeAnnotationsToRemove == null) {
+            typeAnnotationsToRemove = new LinkedHashSet<>();
+        }
 
-		if (typeAnnotationsToAdd == null) {
-			typeAnnotationsToAdd = new ArrayList<>();
-		}
-	}
+        if (typeAnnotationsToAdd == null) {
+            typeAnnotationsToAdd = new ArrayList<>();
+        }
+    }
 
-	public GenericAnnotationData() {
-		this(new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashSet<>(), new ArrayList<>());
-	}
+    public GenericAnnotationData() {
+        this(new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashSet<>(), new ArrayList<>());
+    }
 
-	public GenericAnnotationData(GenericAnnotationData other) {
-		this(
-				new LinkedHashSet<>(other.annotationsToRemove),
-				AnnotationsData.copyAnnotations(other.annotationsToAdd),
-				new LinkedHashSet<>(other.typeAnnotationsToRemove),
-				AnnotationsData.copyTypeAnnotations(other.typeAnnotationsToAdd)
-		);
-	}
+    public GenericAnnotationData(GenericAnnotationData other) {
+        this(new LinkedHashSet<>(other.annotationsToRemove), AnnotationsData.copyAnnotations(other.annotationsToAdd),
+            new LinkedHashSet<>(other.typeAnnotationsToRemove),
+            AnnotationsData.copyTypeAnnotations(other.typeAnnotationsToAdd));
+    }
 
-	GenericAnnotationData merge(GenericAnnotationData other) {
-		Set<String> newAnnotationToRemove = new LinkedHashSet<>(annotationsToRemove);
-		newAnnotationToRemove.addAll(other.annotationsToRemove);
-		List<AnnotationNode> newAnnotationsToAdd = new ArrayList<>(annotationsToAdd);
-		newAnnotationsToAdd.addAll(other.annotationsToAdd);
-		Set<TypeAnnotationKey> newTypeAnnotationsToRemove = new LinkedHashSet<>(typeAnnotationsToRemove);
-		newTypeAnnotationsToRemove.addAll(other.typeAnnotationsToRemove);
-		List<TypeAnnotationNode> newTypeAnnotationsToAdd = new ArrayList<>(typeAnnotationsToAdd);
-		newTypeAnnotationsToAdd.addAll(other.typeAnnotationsToAdd);
-		return new GenericAnnotationData(newAnnotationToRemove, newAnnotationsToAdd, newTypeAnnotationsToRemove, newTypeAnnotationsToAdd);
-	}
+    GenericAnnotationData merge(GenericAnnotationData other) {
+        Set<String> newAnnotationToRemove = new LinkedHashSet<>(annotationsToRemove);
+        newAnnotationToRemove.addAll(other.annotationsToRemove);
+        List<AnnotationNode> newAnnotationsToAdd = new ArrayList<>(annotationsToAdd);
+        newAnnotationsToAdd.addAll(other.annotationsToAdd);
+        Set<TypeAnnotationKey> newTypeAnnotationsToRemove = new LinkedHashSet<>(typeAnnotationsToRemove);
+        newTypeAnnotationsToRemove.addAll(other.typeAnnotationsToRemove);
+        List<TypeAnnotationNode> newTypeAnnotationsToAdd = new ArrayList<>(typeAnnotationsToAdd);
+        newTypeAnnotationsToAdd.addAll(other.typeAnnotationsToAdd);
+        return new GenericAnnotationData(newAnnotationToRemove, newAnnotationsToAdd, newTypeAnnotationsToRemove,
+            newTypeAnnotationsToAdd);
+    }
 
-	GenericAnnotationData remap(TinyRemapper remapper) {
-		return new GenericAnnotationData(
-				annotationsToRemove.stream().map(remapper.getEnvironment().getRemapper()::map).collect(Collectors.toCollection(LinkedHashSet::new)),
-				annotationsToAdd.stream().map(ann -> AnnotationsData.remap(ann, remapper)).collect(Collectors.toCollection(ArrayList::new)),
-				typeAnnotationsToRemove.stream().map(key -> key.remap(remapper)).collect(Collectors.toCollection(LinkedHashSet::new)),
-				typeAnnotationsToAdd.stream().map(ann -> AnnotationsData.remap(ann, remapper)).collect(Collectors.toCollection(ArrayList::new))
-		);
-	}
+    GenericAnnotationData remap(TinyRemapper remapper) {
+        return new GenericAnnotationData(
+            annotationsToRemove.stream()
+                .map(remapper.getEnvironment().getRemapper()::map)
+                .collect(Collectors.toCollection(LinkedHashSet::new)),
+            annotationsToAdd.stream()
+                .map(ann -> AnnotationsData.remap(ann, remapper))
+                .collect(Collectors.toCollection(ArrayList::new)),
+            typeAnnotationsToRemove.stream()
+                .map(key -> key.remap(remapper))
+                .collect(Collectors.toCollection(LinkedHashSet::new)),
+            typeAnnotationsToAdd.stream()
+                .map(ann -> AnnotationsData.remap(ann, remapper))
+                .collect(Collectors.toCollection(ArrayList::new)));
+    }
 
-	public int modifyAccessFlags(int access) {
-		if (annotationsToRemove.contains("java/lang/Deprecated")) {
-			access &= ~Opcodes.ACC_DEPRECATED;
-		}
+    public int modifyAccessFlags(int access) {
+        if (annotationsToRemove.contains("java/lang/Deprecated")) {
+            access &= ~Opcodes.ACC_DEPRECATED;
+        }
 
-		if (annotationsToAdd.stream().anyMatch(ann -> "Ljava/lang/Deprecated;".equals(ann.desc))) {
-			access |= Opcodes.ACC_DEPRECATED;
-		}
+        if (annotationsToAdd.stream().anyMatch(ann -> "Ljava/lang/Deprecated;".equals(ann.desc))) {
+            access |= Opcodes.ACC_DEPRECATED;
+        }
 
-		return access;
-	}
+        return access;
+    }
 }

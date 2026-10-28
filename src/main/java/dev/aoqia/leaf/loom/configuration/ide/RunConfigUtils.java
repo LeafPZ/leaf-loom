@@ -62,103 +62,112 @@ import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public class RunConfigUtils {
-	private static final Logger LOGGER = LoggerFactory.getLogger(RunConfigUtils.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RunConfigUtils.class);
 
-	public static void createRunDirectory(RunConfiguration runConfiguration) throws IOException {
-		Path runDirectory = runConfiguration.getRunDirectory().getAsFile().get().toPath();
+    public static void createRunDirectory(RunConfiguration runConfiguration) throws IOException {
+        Path runDirectory = runConfiguration.getRunDirectory().getAsFile().get().toPath();
 
-		if (!Files.exists(runDirectory)) {
-			Files.createDirectories(runDirectory);
-		} else if (!Files.isDirectory(runDirectory)) {
-			LOGGER.warn("Run directory {} is not a directory", runDirectory);
-		}
-	}
+        if (!Files.exists(runDirectory)) {
+            Files.createDirectories(runDirectory);
+        } else if (!Files.isDirectory(runDirectory)) {
+            LOGGER.warn("Run directory {} is not a directory", runDirectory);
+        }
+    }
 
-	@Nullable public static String getMainClass(String side, LoomGradleExtension extension) {
-		InstallerData installerData = extension.getInstallerData();
+    public static String formatEnvVars(RunConfiguration run, String pattern) {
+        return run.getEnvironmentVars()
+            .get()
+            .entrySet()
+            .stream()
+            .map(entry -> pattern.formatted(entry.getKey(), entry.getValue().toString()))
+            .collect(Collectors.joining());
+    }
 
-		if (installerData == null) {
-			return getDefaultMainClass(side);
-		}
+    /**
+     * Format the run directory for use in an IDE run configuration. If the run directory is within the root project,
+     * it will be formatted as a relative path from the root project. Otherwise, it will be formatted as an absolute
+     * path.
+     *
+     * @param runConfig The run configuration to format the run directory for.
+     * @param project The project to format the run directory for.
+     * @param absoluteFormatter A function that formats an absolute path for use in an IDE run configuration.
+     * @param relativeFormatter A function that formats a relative path for use in an IDE run configuration.
+     */
+    public static String formatRunDir(RunConfiguration runConfig, Project project,
+        Function<File, String> absoluteFormatter, Function<String, String> relativeFormatter)
+    {
+        File runDir = runConfig.getRunDirectory().getAsFile().get();
+        File projectDir = project.getRootProject().getProjectDir();
 
-		JsonObject installerJson = installerData.installerJson();
+        if (runDir.toPath().startsWith(projectDir.toPath())) {
+            String relativePath = projectDir.toPath().relativize(runDir.toPath()).toString();
+            return relativeFormatter.apply(relativePath);
+        } else {
+            return absoluteFormatter.apply(runDir);
+        }
+    }
 
-		if (installerJson != null && installerJson.has("mainClass")) {
-			JsonElement mainClassJson = installerJson.get("mainClass");
+    public static String getDisplayName(RunConfiguration run, Project project) {
+        String displayName = run.getDisplayName().get();
 
-			String mainClassName = "";
+        boolean appendProjectPath = run.getAppendProjectPathToDisplayName().get();
 
-			if (mainClassJson.isJsonObject()) {
-				JsonObject mainClassesJson = mainClassJson.getAsJsonObject();
+        if (appendProjectPath && !GradleUtils.isRootProject(project)) {
+            displayName += " (" + project.getPath() + ")";
+        }
 
-				if (mainClassesJson.has(side)) {
-					mainClassName = mainClassesJson.get(side).getAsString();
-				}
-			} else {
-				mainClassName = mainClassJson.getAsString();
-			}
+        return displayName;
+    }
 
-			return mainClassName;
-		}
+    @Nullable
+    public static String getMainClass(String side, LoomGradleExtension extension) {
+        InstallerData installerData = extension.getInstallerData();
 
-		return getDefaultMainClass(side);
-	}
+        if (installerData == null) {
+            return getDefaultMainClass(side);
+        }
 
-	@Nullable private static String getDefaultMainClass(String side) {
-		return switch (side) {
-		case "client" -> Constants.Knot.KNOT_CLIENT;
-		case "server" -> Constants.Knot.KNOT_SERVER;
-		default -> null;
-		};
-	}
+        JsonObject installerJson = installerData.installerJson();
 
-	/**
-	 * Format the run directory for use in an IDE run configuration. If the run directory is within the root project, it will be formatted as a relative path from the root project. Otherwise, it will be formatted as an absolute path.
-	 *
-	 * @param runConfig The run configuration to format the run directory for.
-	 * @param project The project to format the run directory for.
-	 * @param absoluteFormatter A function that formats an absolute path for use in an IDE run configuration.
-	 * @param relativeFormatter A function that formats a relative path for use in an IDE run configuration.
-	 */
-	public static String formatRunDir(RunConfiguration runConfig, Project project, Function<File, String> absoluteFormatter, Function<String, String> relativeFormatter) {
-		File runDir = runConfig.getRunDirectory().getAsFile().get();
-		File projectDir = project.getRootProject().getProjectDir();
+        if (installerJson != null && installerJson.has("mainClass")) {
+            JsonElement mainClassJson = installerJson.get("mainClass");
 
-		if (runDir.toPath().startsWith(projectDir.toPath())) {
-			String relativePath = projectDir.toPath().relativize(runDir.toPath()).toString();
-			return relativeFormatter.apply(relativePath);
-		} else {
-			return absoluteFormatter.apply(runDir);
-		}
-	}
+            String mainClassName = "";
 
-	// Copy the run configuration to a new instance that is safe to serialize, and finalise all values.
-	// This does not inherit from the legacy RunConfigSettings class.
-	static RunConfiguration toSerialisable(RunConfiguration runConfig, Project project) {
-		RunConfigurationInternal runConfiguration = project.getObjects().newInstance(RunConfigurationInternal.class, runConfig.getName());
-		runConfiguration.inherit(runConfig);
-		runConfiguration.getDisplayName().convention(runConfig.getDisplayName());
-		runConfiguration.getIsFinalised().set(true);
-		DefaultRunConfigurationSettings.finialiseValues(runConfiguration);
-		return runConfiguration;
-	}
+            if (mainClassJson.isJsonObject()) {
+                JsonObject mainClassesJson = mainClassJson.getAsJsonObject();
 
-	public static String getDisplayName(RunConfiguration run, Project project) {
-		String displayName = run.getDisplayName().get();
+                if (mainClassesJson.has(side)) {
+                    mainClassName = mainClassesJson.get(side).getAsString();
+                }
+            } else {
+                mainClassName = mainClassJson.getAsString();
+            }
 
-		boolean appendProjectPath = run.getAppendProjectPathToDisplayName().get();
+            return mainClassName;
+        }
 
-		if (appendProjectPath && !GradleUtils.isRootProject(project)) {
-			displayName += " (" + project.getPath() + ")";
-		}
+        return getDefaultMainClass(side);
+    }
 
-		return displayName;
-	}
+    // Copy the run configuration to a new instance that is safe to serialize, and finalise all values.
+    // This does not inherit from the legacy RunConfigSettings class.
+    static RunConfiguration toSerialisable(RunConfiguration runConfig, Project project) {
+        RunConfigurationInternal runConfiguration = project.getObjects()
+            .newInstance(RunConfigurationInternal.class, runConfig.getName());
+        runConfiguration.inherit(runConfig);
+        runConfiguration.getDisplayName().convention(runConfig.getDisplayName());
+        runConfiguration.getIsFinalised().set(true);
+        DefaultRunConfigurationSettings.finialiseValues(runConfiguration);
+        return runConfiguration;
+    }
 
-	public static String formatEnvVars(RunConfiguration run, String pattern) {
-		return run.getEnvironmentVars().get().entrySet().stream()
-				.map(entry ->
-						pattern.formatted(entry.getKey(), entry.getValue().toString())
-				).collect(Collectors.joining());
-	}
+    @Nullable
+    private static String getDefaultMainClass(String side) {
+        return switch (side) {
+            case "client" -> Constants.Knot.KNOT_CLIENT;
+            case "server" -> Constants.Knot.KNOT_SERVER;
+            default -> null;
+        };
+    }
 }

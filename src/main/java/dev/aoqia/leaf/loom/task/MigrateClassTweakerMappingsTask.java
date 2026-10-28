@@ -66,40 +66,41 @@ import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 
 @UntrackedTask(because = "Always rerun this task.")
 public abstract class MigrateClassTweakerMappingsTask extends AbstractMigrateMappingsTask {
-	@InputFile
-	@SkipWhenEmpty
-	@PathSensitive(PathSensitivity.NONE)
-	@Option(option = "input", description = "Access widener file")
-	public abstract RegularFileProperty getInputFile();
+    public MigrateClassTweakerMappingsTask() {
+        getInputFile().convention(getExtension().getAccessWidenerPath());
+        getOutputFile().convention(getProject().getLayout().getProjectDirectory().file("remapped.accesswidener"));
+        getMigrationServiceOptions().set(MigrateClassTweakerMappingsService.createOptions(getProject(), getMappings()));
+    }
 
-	@OutputFile
-	@Option(option = "output", description = "Remapped access widener file")
-	public abstract RegularFileProperty getOutputFile();
+    @TaskAction
+    public void doTask() throws Throwable {
+        try (var serviceFactory = new ScopedServiceFactory()) {
+            final MigrateClassTweakerMappingsService service = serviceFactory.get(getMigrationServiceOptions().get());
+            final Path inputFile = getInputFile().get().getAsFile().toPath();
+            final byte[] inputBytes = Files.readAllBytes(inputFile);
+            final int ctVersion = ClassTweakerReader.readVersion(inputBytes);
 
-	@Nested
-	protected abstract Property<MigrateClassTweakerMappingsService.Options> getMigrationServiceOptions();
+            final ClassTweakerWriter writer = ClassTweakerWriter.create(ctVersion);
+            final var remapper = new ClassTweakerRemapperVisitor(writer, service.getRemapper(),
+                MappingsNamespace.NAMED.toString(), MappingsNamespace.NAMED.toString());
+            ClassTweakerReader.create(remapper).read(inputBytes);
 
-	public MigrateClassTweakerMappingsTask() {
-		getInputFile().convention(getExtension().getAccessWidenerPath());
-		getOutputFile().convention(getProject().getLayout().getProjectDirectory().file("remapped.accesswidener"));
-		getMigrationServiceOptions().set(MigrateClassTweakerMappingsService.createOptions(getProject(), getMappings()));
-	}
+            final boolean inPlace = getOverrideInputs().get();
+            final Path targetFile = inPlace ? inputFile : getOutputFile().get().getAsFile().toPath();
+            Files.write(targetFile, writer.getOutput());
+        }
+    }
 
-	@TaskAction
-	public void doTask() throws Throwable {
-		try (var serviceFactory = new ScopedServiceFactory()) {
-			final MigrateClassTweakerMappingsService service = serviceFactory.get(getMigrationServiceOptions().get());
-			final Path inputFile = getInputFile().get().getAsFile().toPath();
-			final byte[] inputBytes = Files.readAllBytes(inputFile);
-			final int ctVersion = ClassTweakerReader.readVersion(inputBytes);
+    @InputFile
+    @SkipWhenEmpty
+    @PathSensitive(PathSensitivity.NONE)
+    @Option(option = "input", description = "Access widener file")
+    public abstract RegularFileProperty getInputFile();
 
-			final ClassTweakerWriter writer = ClassTweakerWriter.create(ctVersion);
-			final var remapper = new ClassTweakerRemapperVisitor(writer, service.getRemapper(), MappingsNamespace.NAMED.toString(), MappingsNamespace.NAMED.toString());
-			ClassTweakerReader.create(remapper).read(inputBytes);
+    @OutputFile
+    @Option(option = "output", description = "Remapped access widener file")
+    public abstract RegularFileProperty getOutputFile();
 
-			final boolean inPlace = getOverrideInputs().get();
-			final Path targetFile = inPlace ? inputFile : getOutputFile().get().getAsFile().toPath();
-			Files.write(targetFile, writer.getOutput());
-		}
-	}
+    @Nested
+    protected abstract Property<MigrateClassTweakerMappingsService.Options> getMigrationServiceOptions();
 }

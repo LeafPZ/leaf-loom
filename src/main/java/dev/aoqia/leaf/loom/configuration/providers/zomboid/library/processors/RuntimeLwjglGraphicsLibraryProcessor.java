@@ -50,27 +50,27 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.library.LibraryProces
 import dev.aoqia.leaf.loom.util.Platform;
 
 public class RuntimeLwjglGraphicsLibraryProcessor extends LibraryProcessor {
-	private static final String LWJGL_OPENGL = "org.lwjgl:lwjgl-opengl";
-	private static final String LWJGL_VULKAN = "org.lwjgl:lwjgl-vulkan";
+    private static final String LWJGL_OPENGL = "org.lwjgl:lwjgl-opengl";
+    private static final String LWJGL_VULKAN = "org.lwjgl:lwjgl-vulkan";
 
-	public RuntimeLwjglGraphicsLibraryProcessor(Platform platform, LibraryContext context) {
-		super(platform, context);
-	}
+    public RuntimeLwjglGraphicsLibraryProcessor(Platform platform, LibraryContext context) {
+        super(platform, context);
+    }
 
-	@Override
-	public ApplicationResult getApplicationResult() {
-		return ApplicationResult.CAN_APPLY;
-	}
+    @Override
+    public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
+        return library -> {
+            if (library.is(LWJGL_OPENGL) || library.is(LWJGL_VULKAN)) {
+                dependencyConsumer.accept(library.withTarget(Library.Target.RUNTIME));
+                return false;
+            }
 
-	@Override
-	public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
-		return library -> {
-			if (library.is(LWJGL_OPENGL) || library.is(LWJGL_VULKAN)) {
-				dependencyConsumer.accept(library.withTarget(Library.Target.RUNTIME));
-				return false;
-			}
+            return true;
+        };
+    }
 
-			return true;
-		};
-	}
+    @Override
+    public ApplicationResult getApplicationResult() {
+        return ApplicationResult.CAN_APPLY;
+    }
 }

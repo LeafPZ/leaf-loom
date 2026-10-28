@@ -54,23 +54,23 @@ import dev.aoqia.leaf.loom.configuration.mods.dependency.ModDependency;
 import dev.aoqia.leaf.loom.configuration.mods.dependency.refmap.MixinRefmapInliner;
 
 final class MixinRemap implements ModProcessorExtension {
-	static final MixinRemap INSTANCE = new MixinRemap();
+    static final MixinRemap INSTANCE = new MixinRemap();
 
-	private MixinRemap() {
-	}
+    private MixinRemap() {
+    }
 
-	@Override
-	public boolean appliesTo(ModDependency modDependency) {
-		return modDependency.getMetadata().mixinRemapType() == ArtifactMetadata.MixinRemapType.STATIC;
-	}
+    @Override
+    public boolean appliesTo(ModDependency modDependency) {
+        return modDependency.getMetadata().mixinRemapType() == ArtifactMetadata.MixinRemapType.STATIC;
+    }
 
-	@Override
-	public TinyRemapper.Extension createExtension(Context ctx, Predicate<InputTag> applyPredicate) {
-		return new MixinExtension(applyPredicate);
-	}
+    @Override
+    public TinyRemapper.Extension createExtension(Context ctx, Predicate<InputTag> applyPredicate) {
+        return new MixinExtension(applyPredicate);
+    }
 
-	@Override
-	public void finalise(ModDependency modDependency, Path path) throws IOException {
-		MixinRefmapInliner.removeRefmap(modDependency, path);
-	}
+    @Override
+    public void finalise(ModDependency modDependency, Path path) throws IOException {
+        MixinRefmapInliner.removeRefmap(modDependency, path);
+    }
 }

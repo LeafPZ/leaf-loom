@@ -64,48 +64,48 @@ import dev.aoqia.leaf.loom.task.AbstractLoomTask;
 
 @DisableCachingByDefault
 public abstract class ExportClasspathTask extends AbstractLoomTask {
-	@Input
-	public abstract Property<String> getClasspathDtoJson();
+    @Inject
+    public ExportClasspathTask() {
+        getClasspathDtoJson().set(getProject().provider(() -> ExternalClasspathGroupDTO.createFromProject(getProject()))
+            .map(LoomGradlePlugin.GSON::toJson));
+        getOutput().set(getProject().getLayout().getBuildDirectory().file("export_classpath.json"));
+    }
 
-	@OutputFile
-	public abstract RegularFileProperty getOutput();
+    @Input
+    public abstract Property<String> getClasspathDtoJson();
 
-	@Inject
-	protected abstract WorkerExecutor getWorkerExecutor();
+    @OutputFile
+    public abstract RegularFileProperty getOutput();
 
-	@Inject
-	public ExportClasspathTask() {
-		getClasspathDtoJson().set(getProject()
-				.provider(() -> ExternalClasspathGroupDTO.createFromProject(getProject()))
-				.map(LoomGradlePlugin.GSON::toJson));
-		getOutput().set(getProject().getLayout().getBuildDirectory().file("export_classpath.json"));
-	}
+    @TaskAction
+    public void run() {
+        final WorkQueue workQueue = getWorkerExecutor().noIsolation();
+        workQueue.submit(ExportClassPathWorkAction.class, p -> {
+            p.getClasspathDtoJson().set(getClasspathDtoJson());
+            p.getOutput().set(getOutput());
+        });
+    }
 
-	@TaskAction
-	public void run() {
-		final WorkQueue workQueue = getWorkerExecutor().noIsolation();
-		workQueue.submit(ExportClassPathWorkAction.class, p -> {
-			p.getClasspathDtoJson().set(getClasspathDtoJson());
-			p.getOutput().set(getOutput());
-		});
-	}
+    @Inject
+    protected abstract WorkerExecutor getWorkerExecutor();
 
-	protected interface ExportClassPathWorkParameters extends WorkParameters {
-		Property<String> getClasspathDtoJson();
-		RegularFileProperty getOutput();
-	}
+    public abstract static class ExportClassPathWorkAction implements WorkAction<ExportClassPathWorkParameters> {
+        @Override
+        public void execute() {
+            File outputFile = getParameters().getOutput().getAsFile().get();
+            String json = getParameters().getClasspathDtoJson().get();
 
-	public abstract static class ExportClassPathWorkAction implements WorkAction<ExportClassPathWorkParameters> {
-		@Override
-		public void execute() {
-			File outputFile = getParameters().getOutput().getAsFile().get();
-			String json = getParameters().getClasspathDtoJson().get();
+            try {
+                Files.writeString(outputFile.toPath(), json);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to write classpath groups", e);
+            }
+        }
+    }
 
-			try {
-				Files.writeString(outputFile.toPath(), json);
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to write classpath groups", e);
-			}
-		}
-	}
+    protected interface ExportClassPathWorkParameters extends WorkParameters {
+        Property<String> getClasspathDtoJson();
+
+        RegularFileProperty getOutput();
+    }
 }

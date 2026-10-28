@@ -49,18 +49,18 @@ import dev.aoqia.leaf.loom.configuration.ConfigContext;
 import dev.aoqia.leaf.loom.util.LazyCloseable;
 
 public record MappingProcessorContextImpl(ConfigContext configContext) implements MappingProcessorContext {
-	@Override
-	public LazyCloseable<TinyRemapper> createRemapper(MappingsNamespace from, MappingsNamespace to) {
-		return ContextImplHelper.createRemapper(configContext, from, to);
-	}
+    @Override
+    public LazyCloseable<TinyRemapper> createRemapper(MappingsNamespace from, MappingsNamespace to) {
+        return ContextImplHelper.createRemapper(configContext, from, to);
+    }
 
-	@Override
-	public MappingsNamespace getProductionNamespace() {
-		return configContext().extension().getProductionNamespaceEnum().get();
-	}
+    @Override
+    public MappingsNamespace getProductionNamespace() {
+        return configContext().extension().getProductionNamespaceEnum().get();
+    }
 
-	@Override
-	public boolean disableObfuscation() {
-		return configContext().extension().disableObfuscation();
-	}
+    @Override
+    public boolean disableObfuscation() {
+        return configContext().extension().disableObfuscation();
+    }
 }

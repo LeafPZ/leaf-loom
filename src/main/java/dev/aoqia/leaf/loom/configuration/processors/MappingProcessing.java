@@ -52,75 +52,81 @@ import net.fabricmc.mappingio.tree.MappingTree;
 import net.fabricmc.mappingio.tree.VisitableMappingTree;
 
 public final class MappingProcessing {
-	public static MappingTree.@Nullable ClassMapping getOrCreateClassMapping(VisitableMappingTree tree, String name, int namespaceId, boolean create) {
-		if (create && namespaceId != MappingTree.MIN_NAMESPACE_ID) {
-			throw new UnsupportedOperationException("Cannot create entry from dst namespace");
-		}
+    public static MappingTree.@Nullable ClassMapping getOrCreateClassMapping(VisitableMappingTree tree, String name,
+        int namespaceId, boolean create)
+    {
+        if (create && namespaceId != MappingTree.MIN_NAMESPACE_ID) {
+            throw new UnsupportedOperationException("Cannot create entry from dst namespace");
+        }
 
-		final MappingTree.ClassMapping existing = tree.getClass(name, namespaceId);
+        final MappingTree.ClassMapping existing = tree.getClass(name, namespaceId);
 
-		if (existing != null || !create) {
-			return existing;
-		}
+        if (existing != null || !create) {
+            return existing;
+        }
 
-		final FlatMappingVisitor flat = new RegularAsFlatMappingVisitor(tree);
+        final FlatMappingVisitor flat = new RegularAsFlatMappingVisitor(tree);
 
-		try {
-			flat.visitContent();
-			flat.visitClass(name, (String[]) null);
-			flat.visitEnd();
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
+        try {
+            flat.visitContent();
+            flat.visitClass(name, (String[]) null);
+            flat.visitEnd();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
 
-		return tree.getClass(name);
-	}
+        return tree.getClass(name);
+    }
 
-	public static MappingTree.@Nullable FieldMapping getOrCreateFieldMapping(VisitableMappingTree tree, MappingTree.ClassMapping owner, String name, @Nullable String desc, int namespaceId, boolean create) {
-		if (create && namespaceId != MappingTree.MIN_NAMESPACE_ID) {
-			throw new UnsupportedOperationException("Cannot create entry from dst namespace");
-		}
+    public static MappingTree.@Nullable FieldMapping getOrCreateFieldMapping(VisitableMappingTree tree,
+        MappingTree.ClassMapping owner, String name, @Nullable String desc, int namespaceId, boolean create)
+    {
+        if (create && namespaceId != MappingTree.MIN_NAMESPACE_ID) {
+            throw new UnsupportedOperationException("Cannot create entry from dst namespace");
+        }
 
-		final MappingTree.FieldMapping existing = owner.getField(name, desc, namespaceId);
+        final MappingTree.FieldMapping existing = owner.getField(name, desc, namespaceId);
 
-		if (existing != null || !create) {
-			return existing;
-		}
+        if (existing != null || !create) {
+            return existing;
+        }
 
-		final FlatMappingVisitor flat = new RegularAsFlatMappingVisitor(tree);
+        final FlatMappingVisitor flat = new RegularAsFlatMappingVisitor(tree);
 
-		try {
-			flat.visitContent();
-			flat.visitField(owner.getSrcName(), name, desc, (String[]) null, null, null);
-			flat.visitEnd();
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
+        try {
+            flat.visitContent();
+            flat.visitField(owner.getSrcName(), name, desc, (String[]) null, null, null);
+            flat.visitEnd();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
 
-		return owner.getField(name, desc);
-	}
+        return owner.getField(name, desc);
+    }
 
-	public static MappingTree.@Nullable MethodMapping getOrCreateMethodMapping(VisitableMappingTree tree, MappingTree.ClassMapping owner, String name, @Nullable String desc, int namespaceId, boolean create) {
-		if (create && namespaceId != MappingTree.MIN_NAMESPACE_ID) {
-			throw new UnsupportedOperationException("Cannot create entry from dst namespace");
-		}
+    public static MappingTree.@Nullable MethodMapping getOrCreateMethodMapping(VisitableMappingTree tree,
+        MappingTree.ClassMapping owner, String name, @Nullable String desc, int namespaceId, boolean create)
+    {
+        if (create && namespaceId != MappingTree.MIN_NAMESPACE_ID) {
+            throw new UnsupportedOperationException("Cannot create entry from dst namespace");
+        }
 
-		final MappingTree.MethodMapping existing = owner.getMethod(name, desc, namespaceId);
+        final MappingTree.MethodMapping existing = owner.getMethod(name, desc, namespaceId);
 
-		if (existing != null || !create) {
-			return existing;
-		}
+        if (existing != null || !create) {
+            return existing;
+        }
 
-		final FlatMappingVisitor flat = new RegularAsFlatMappingVisitor(tree);
+        final FlatMappingVisitor flat = new RegularAsFlatMappingVisitor(tree);
 
-		try {
-			flat.visitContent();
-			flat.visitMethod(owner.getSrcName(), name, desc, (String[]) null, null, null);
-			flat.visitEnd();
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
+        try {
+            flat.visitContent();
+            flat.visitMethod(owner.getSrcName(), name, desc, (String[]) null, null, null);
+            flat.visitEnd();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
 
-		return owner.getMethod(name, desc);
-	}
+        return owner.getMethod(name, desc);
+    }
 }

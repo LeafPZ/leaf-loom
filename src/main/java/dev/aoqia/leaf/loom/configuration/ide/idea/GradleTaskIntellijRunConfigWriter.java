@@ -53,30 +53,32 @@ import dev.aoqia.leaf.loom.configuration.ide.RunConfigUtils;
 import dev.aoqia.leaf.loom.task.LoomTasks;
 
 public final class GradleTaskIntellijRunConfigWriter extends AbstractIntellijRunConfigWriter {
-	public GradleTaskIntellijRunConfigWriter(RunConfiguration run, Project project) {
-		super(run, project);
-	}
+    public GradleTaskIntellijRunConfigWriter(RunConfiguration run, Project project) {
+        super(run, project);
+    }
 
-	@Override
-	public String render() throws IOException {
-		final String xml;
+    @Override
+    public String getType() {
+        return GRADLE_TASK_TYPE;
+    }
 
-		try (InputStream input = IdeaSyncTask.class.getClassLoader().getResourceAsStream("idea_gradle_run_config_template.xml")) {
-			xml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-		}
+    @Override
+    public String render() throws IOException {
+        final String xml;
 
-		String folderName = run.getIdeConfigFolder().getOrNull();
-		String taskPath = project.getPath().equals(":")
-				? ":" + LoomTasks.getRunConfigTaskName(run)
-				: project.getPath() + ":" + LoomTasks.getRunConfigTaskName(run);
+        try (InputStream input = IdeaSyncTask.class.getClassLoader()
+            .getResourceAsStream("idea_gradle_run_config_template.xml"))
+        {
+            xml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
 
-		return xml.replace("%NAME%", RunConfigUtils.getDisplayName(run, project))
-				.replace("%TASK_NAME%", taskPath)
-				.replace("%IDEA_FOLDER_NAME%", folderName == null ? "" : "folderName=\"" + XmlUtil.escapeXml(folderName) + "\"");
-	}
+        String folderName = run.getIdeConfigFolder().getOrNull();
+        String taskPath = project.getPath().equals(":") ? ":" + LoomTasks.getRunConfigTaskName(run)
+            : project.getPath() + ":" + LoomTasks.getRunConfigTaskName(run);
 
-	@Override
-	public String getType() {
-		return GRADLE_TASK_TYPE;
-	}
+        return xml.replace("%NAME%", RunConfigUtils.getDisplayName(run, project))
+            .replace("%TASK_NAME%", taskPath)
+            .replace("%IDEA_FOLDER_NAME%",
+                folderName == null ? "" : "folderName=\"" + XmlUtil.escapeXml(folderName) + "\"");
+    }
 }

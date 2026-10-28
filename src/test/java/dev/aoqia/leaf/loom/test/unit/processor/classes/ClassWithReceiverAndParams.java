@@ -42,9 +42,12 @@
 package dev.aoqia.leaf.loom.test.unit.processor.classes;
 
 public class ClassWithReceiverAndParams {
-	public void instanceMethod(int a, String b) { }
+    public ClassWithReceiverAndParams(int a) {
+    }
 
-	public static void staticMethod(int a) { }
+    public static void staticMethod(int a) {
+    }
 
-	public ClassWithReceiverAndParams(int a) { }
+    public void instanceMethod(int a, String b) {
+    }
 }

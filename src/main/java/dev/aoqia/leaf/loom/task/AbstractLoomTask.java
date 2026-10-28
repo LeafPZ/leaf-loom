@@ -50,12 +50,12 @@ import dev.aoqia.leaf.loom.util.Constants;
 
 @DisableCachingByDefault
 public abstract class AbstractLoomTask extends DefaultTask {
-	public AbstractLoomTask() {
-		setGroup(Constants.TaskGroup.LEAF);
-	}
+    public AbstractLoomTask() {
+        setGroup(Constants.TaskGroup.LEAF);
+    }
 
-	@Internal
-	protected LoomGradleExtension getExtension() {
-		return LoomGradleExtension.get(getProject());
-	}
+    @Internal
+    protected LoomGradleExtension getExtension() {
+        return LoomGradleExtension.get(getProject());
+    }
 }

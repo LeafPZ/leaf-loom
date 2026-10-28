@@ -53,118 +53,116 @@ import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 
 public sealed interface UnpickMetadata permits UnpickMetadata.V1, UnpickMetadata.V2 {
-	String UNPICK_METADATA_PATH = "extras/unpick.json";
-	String UNPICK_DEFINITIONS_PATH = "extras/definitions.unpick";
+    String UNPICK_DEFINITIONS_PATH = "extras/definitions.unpick";
 
-	/**
-	 * @return whether constants are required by the Unpick definitions
-	 */
-	boolean hasConstants();
+    String UNPICK_METADATA_PATH = "extras/unpick.json";
 
-	/**
-	 * @return whether the maven location of the constants is specified by this metadata
-	 */
-	boolean hasConstantsLocation();
+    static UnpickMetadata parse(Path path) throws IOException {
+        JsonObject jsonObject = LoomGradlePlugin.GSON.fromJson(Files.readString(path, StandardCharsets.UTF_8),
+            JsonObject.class);
 
-	UnpickMetadata withConstants(String constants);
+        if (!jsonObject.has("version")) {
+            throw new UnsupportedOperationException("Missing unpick metadata version");
+        }
 
-	default UnpickMetadata withoutConstants() {
-		return withConstants(null);
-	}
+        int version = jsonObject.get("version").getAsInt();
 
-	/**
-	 * @param unpickGroup Deprecated, always uses the version of unpick loom depends on.
-	 * @param unpickVersion Deprecated, always uses the version of unpick loom depends on.
-	 */
-	record V1(@Deprecated String unpickGroup, @Deprecated String unpickVersion) implements UnpickMetadata {
-		@Override
-		public boolean hasConstants() {
-			return true;
-		}
+        switch (version) {
+            case 1 -> {
+                return new V1(getString(jsonObject, "unpickGroup"), getString(jsonObject, "unpickVersion"));
+            }
+            case 2 -> {
+                return new V2(getString(jsonObject, "namespace"), getOptionalString(jsonObject, "constants"));
+            }
+            default -> throw new UnsupportedOperationException(
+                "Unsupported unpick metadata version: %s. Please update loom.".formatted(version));
+        }
+    }
 
-		@Override
-		public boolean hasConstantsLocation() {
-			return false;
-		}
+    static String toJson(UnpickMetadata metadata) {
+        JsonObject json = LoomGradlePlugin.GSON.toJsonTree(metadata).getAsJsonObject();
 
-		@Override
-		public UnpickMetadata withConstants(String constants) {
-			// all v1 data is deprecated and ignored by Loom
-			// and only v2 format allows setting the constants location
-			return new UnpickMetadata.V2(MappingsNamespace.NAMED.toString(), constants);
-		}
-	}
+        int version = switch (metadata) {
+            case UnpickMetadata.V1 v1 -> 1;
+            case UnpickMetadata.V2 v2 -> 2;
+        };
+        json.addProperty("version", version);
 
-	/**
-	 * Unpick metadata v2.
-	 *
-	 * @param namespace the mapping namespace of the unpick definitions
-	 * @param constants An optional maven notation of the constants jar.
-	 */
-	record V2(String namespace, @Nullable String constants) implements UnpickMetadata {
-		@Override
-		public boolean hasConstants() {
-			return constants != null;
-		}
+        return json.toString();
+    }
 
-		@Override
-		public boolean hasConstantsLocation() {
-			return true;
-		}
+    @Nullable
+    private static String getOptionalString(JsonObject jsonObject, String key) {
+        return jsonObject.has(key) ? jsonObject.get(key).getAsString() : null;
+    }
 
-		@Override
-		public UnpickMetadata withConstants(String constants) {
-			return new UnpickMetadata.V2(namespace, constants);
-		}
-	}
+    private static String getString(JsonObject jsonObject, String key) {
+        if (!jsonObject.has(key)) {
+            throw new UnsupportedOperationException("Missing unpick metadata %s".formatted(key));
+        }
 
-	static String toJson(UnpickMetadata metadata) {
-		JsonObject json = LoomGradlePlugin.GSON.toJsonTree(metadata).getAsJsonObject();
+        return jsonObject.get(key).getAsString();
+    }
 
-		int version = switch (metadata) {
-		case UnpickMetadata.V1 v1 -> 1;
-		case UnpickMetadata.V2 v2 -> 2;
-		};
-		json.addProperty("version", version);
+    /**
+     * @return whether constants are required by the Unpick definitions
+     */
+    boolean hasConstants();
 
-		return json.toString();
-	}
+    /**
+     * @return whether the maven location of the constants is specified by this metadata
+     */
+    boolean hasConstantsLocation();
 
-	static UnpickMetadata parse(Path path) throws IOException {
-		JsonObject jsonObject = LoomGradlePlugin.GSON.fromJson(Files.readString(path, StandardCharsets.UTF_8), JsonObject.class);
+    UnpickMetadata withConstants(String constants);
 
-		if (!jsonObject.has("version")) {
-			throw new UnsupportedOperationException("Missing unpick metadata version");
-		}
+    default UnpickMetadata withoutConstants() {
+        return withConstants(null);
+    }
 
-		int version = jsonObject.get("version").getAsInt();
+    /**
+     * @param unpickGroup Deprecated, always uses the version of unpick loom depends on.
+     * @param unpickVersion Deprecated, always uses the version of unpick loom depends on.
+     */
+    record V1(@Deprecated String unpickGroup, @Deprecated String unpickVersion) implements UnpickMetadata {
+        @Override
+        public boolean hasConstants() {
+            return true;
+        }
 
-		switch (version) {
-		case 1 -> {
-			return new V1(
-				getString(jsonObject, "unpickGroup"),
-				getString(jsonObject, "unpickVersion")
-			);
-		}
-		case 2 -> {
-			return new V2(
-				getString(jsonObject, "namespace"),
-				getOptionalString(jsonObject, "constants")
-			);
-		}
-		default -> throw new UnsupportedOperationException("Unsupported unpick metadata version: %s. Please update loom.".formatted(version));
-		}
-	}
+        @Override
+        public boolean hasConstantsLocation() {
+            return false;
+        }
 
-	private static String getString(JsonObject jsonObject, String key) {
-		if (!jsonObject.has(key)) {
-			throw new UnsupportedOperationException("Missing unpick metadata %s".formatted(key));
-		}
+        @Override
+        public UnpickMetadata withConstants(String constants) {
+            // all v1 data is deprecated and ignored by Loom
+            // and only v2 format allows setting the constants location
+            return new UnpickMetadata.V2(MappingsNamespace.NAMED.toString(), constants);
+        }
+    }
 
-		return jsonObject.get(key).getAsString();
-	}
+    /**
+     * Unpick metadata v2.
+     *
+     * @param namespace the mapping namespace of the unpick definitions
+     * @param constants An optional maven notation of the constants jar.
+     */
+    record V2(String namespace, @Nullable String constants) implements UnpickMetadata {
+        @Override
+        public boolean hasConstants() {
+            return constants != null;
+        }
 
-	@Nullable private static String getOptionalString(JsonObject jsonObject, String key) {
-		return jsonObject.has(key) ? jsonObject.get(key).getAsString() : null;
-	}
+        @Override
+        public boolean hasConstantsLocation() {
+            return true;
+        }
+
+        @Override
+        public UnpickMetadata withConstants(String constants) {
+            return new UnpickMetadata.V2(namespace, constants);
+        }
+    }
 }

@@ -58,48 +58,47 @@ import dev.aoqia.leaf.loom.api.processor.ZomboidJarProcessor;
 import dev.aoqia.leaf.loom.util.TinyRemapperLoggerAdapter;
 
 public class JsrAnnotationRemapperProcessor implements ZomboidJarProcessor<JsrAnnotationRemapperProcessor.Spec> {
-	private static final Map<String, String> JETBRAINS_TO_JSR = Map.of(
-			"org/jetbrains/annotations/Nullable", "javax/annotation/Nullable",
-			"org/jetbrains/annotations/NotNull", "javax/annotation/Nonnull",
-			"org/jetbrains/annotations/Unmodifiable", "javax/annotation/concurrent/Immutable"
-	);
+    private static final Map<String,
+        String> JETBRAINS_TO_JSR = Map.of("org/jetbrains/annotations/Nullable", "javax/annotation/Nullable",
+            "org/jetbrains/annotations/NotNull", "javax/annotation/Nonnull", "org/jetbrains/annotations/Unmodifiable",
+            "javax/annotation/concurrent/Immutable");
 
-	private final String name;
+    private final String name;
 
-	@Inject
-	public JsrAnnotationRemapperProcessor(String name) {
-		this.name = name;
-	}
+    @Inject
+    public JsrAnnotationRemapperProcessor(String name) {
+        this.name = name;
+    }
 
-	@Override
-	public @Nullable Spec buildSpec(SpecContext context) {
-		return new Spec(JETBRAINS_TO_JSR);
-	}
+    @Override
+    public @Nullable Spec buildSpec(SpecContext context) {
+        return new Spec(JETBRAINS_TO_JSR);
+    }
 
-	@Override
-	public void processJar(Path jar, Spec spec, ProcessorContext context) throws IOException {
-		TinyRemapper tinyRemapper = TinyRemapper.newRemapper(TinyRemapperLoggerAdapter.INSTANCE)
-				.withMappings(spec.getMappings())
-				.build();
+    @Override
+    public String getName() {
+        return name;
+    }
 
-		try (OutputConsumerPath outputConsumer = new OutputConsumerPath.Builder(jar).build()) {
-			tinyRemapper.readInputs(jar);
-			tinyRemapper.apply(outputConsumer);
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to remap JAR " + jar + " with mapping " + spec.annotationMapping(), e);
-		} finally {
-			tinyRemapper.finish();
-		}
-	}
+    @Override
+    public void processJar(Path jar, Spec spec, ProcessorContext context) throws IOException {
+        TinyRemapper tinyRemapper = TinyRemapper.newRemapper(TinyRemapperLoggerAdapter.INSTANCE)
+            .withMappings(spec.getMappings())
+            .build();
 
-	@Override
-	public String getName() {
-		return name;
-	}
+        try (OutputConsumerPath outputConsumer = new OutputConsumerPath.Builder(jar).build()) {
+            tinyRemapper.readInputs(jar);
+            tinyRemapper.apply(outputConsumer);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to remap JAR " + jar + " with mapping " + spec.annotationMapping(), e);
+        } finally {
+            tinyRemapper.finish();
+        }
+    }
 
-	public record Spec(Map<String, String> annotationMapping) implements ZomboidJarProcessor.Spec {
-		public IMappingProvider getMappings() {
-			return out -> annotationMapping.forEach(out::acceptClass);
-		}
-	}
+    public record Spec(Map<String, String> annotationMapping) implements ZomboidJarProcessor.Spec {
+        public IMappingProvider getMappings() {
+            return out -> annotationMapping.forEach(out::acceptClass);
+        }
+    }
 }

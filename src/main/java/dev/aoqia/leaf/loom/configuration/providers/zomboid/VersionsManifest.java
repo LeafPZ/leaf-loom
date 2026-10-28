@@ -46,13 +46,14 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 public record VersionsManifest(Map<String, Version> versions, Map<String, String> latest) {
-	public record Version(String url, @Nullable String hash) {
-		public Version(String url) {
+    public record Version(String url, @Nullable String hash) {
+        public Version(String url) {
             this(url, null);
         }
-	}
+    }
 
-	@Nullable public Version getVersion(String id) {
-		return versions.getOrDefault(id, null);
-	}
+    @Nullable
+    public Version getVersion(String id) {
+        return versions.getOrDefault(id, null);
+    }
 }

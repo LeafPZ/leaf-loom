@@ -60,253 +60,263 @@ import org.gradle.api.tasks.bundling.ZipEntryCompression;
 import org.intellij.lang.annotations.MagicConstant;
 
 public class ZipReprocessorUtil {
-	private ZipReprocessorUtil() { }
+    private static final String META_INF = "META-INF/";
 
-	private static final String META_INF = "META-INF/";
+    private ZipReprocessorUtil() {
+    }
 
-	// See https://docs.oracle.com/en/java/javase/20/docs/specs/jar/jar.html#signed-jar-file
-	public static boolean isSpecialFile(String zipEntryName) {
-		if (!zipEntryName.startsWith(META_INF)) {
-			return false;
-		}
+    /**
+     * Appends files to a zip file, preserving the existing entry order and time stamps.
+     * The new entries are appended in map iteration order with constant time stamps to ensure reproducibility.
+     * This method should only be used when a reproducible output is required, use
+     * {@link ZipUtils#add(Path, Iterable)} normally.
+     */
+    public static void appendZipEntries(Path file, Map<String, Path> paths) throws IOException {
+        if (paths.isEmpty()) {
+            return;
+        }
 
-		String[] parts = zipEntryName.split("/");
+        final Path tempFile = file.resolveSibling(file.getFileName() + ".tmp");
 
-		if (parts.length != 2) {
-			return false;
-		}
+        try (var zipFile = new ZipFile(file.toFile()); var fileOutputStream = Files.newOutputStream(tempFile)) {
+            ZipEntry[] entries = zipFile.stream().toArray(ZipEntry[]::new);
 
-		return parts[1].startsWith("SIG-")
-				|| parts[1].endsWith(".SF")
-				|| parts[1].endsWith(".DSA")
-				|| parts[1].endsWith(".RSA")
-				|| parts[1].endsWith(".EC");
-	}
+            try (var zipOutputStream = new ZipOutputStream(fileOutputStream)) {
+                for (ZipEntry entry : entries) {
+                    if (paths.containsKey(entry.getName())) {
+                        throw new IllegalArgumentException("Zip file (%s) already contains entry (%s)"
+                            .formatted(file.getFileName().toString(), entry.getName()));
+                    }
 
-	private static int specialOrdering(String name1, String name2) {
-		if (name1.equals(name2)) {
-			return 0;
-		} else if (name1.equals(Constants.Manifest.PATH)) {
-			return -1;
-		} else if (name2.equals(Constants.Manifest.PATH)) {
-			return 1;
-		}
+                    copyZipEntry(zipOutputStream, entry, zipFile.getInputStream(entry));
+                }
 
-		boolean isName1Special = isSpecialFile(name1);
-		boolean isName2Special = isSpecialFile(name2);
+                for (Map.Entry<String, Path> path : paths.entrySet()) {
+                    var entry = new ZipEntry(path.getKey());
+                    setConstantFileTime(entry);
 
-		if (isName1Special && isName2Special) {
-			return name1.compareTo(name2);
-		} else if (isName1Special) {
-			return -1;
-		} else if (isName2Special) {
-			return 1;
-		}
+                    try (var inputStream = Files.newInputStream(path.getValue())) {
+                        copyZipEntry(zipOutputStream, entry, inputStream);
+                    }
+                }
+            }
+        }
 
-		return name1.compareTo(name2);
-	}
+        Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
+    }
 
-	public static void reprocessZip(Path file, boolean reproducibleFileOrder, boolean preserveFileTimestamps) throws IOException {
-		reprocessZip(file, reproducibleFileOrder, preserveFileTimestamps, ZipEntryCompression.DEFLATED);
-	}
+    /**
+     * Appends an entry to a zip file, persevering the existing entry order and time stamps.
+     * The new entry is added with a constant time stamp to ensure reproducibility.
+     * This method should only be used when a reproducible output is required, use
+     * {@link ZipUtils#add(Path, String, byte[])} normally.
+     */
+    public static void appendZipEntry(Path file, String path, byte[] data) throws IOException {
+        appendZipEntry(file, path, new ByteArrayInputStream(data));
+    }
 
-	public static void reprocessZip(Path file, boolean reproducibleFileOrder, boolean preserveFileTimestamps, ZipEntryCompression zipEntryCompression) throws IOException {
-		final Path tempFile = file.resolveSibling(file.getFileName() + ".tmp");
+    /**
+     * Appends an entry to a zip file, persevering the existing entry order and time stamps.
+     * The new entry is added with a constant time stamp to ensure reproducibility.
+     * This method should only be used when a reproducible output is required, use
+     * {@link ZipUtils#add(Path, String, byte[])} normally.
+     */
+    public static void appendZipEntry(Path file, String path, InputStream data) throws IOException {
+        final Path tempFile = file.resolveSibling(file.getFileName() + ".tmp");
 
-		try (var zipFile = new ZipFile(file.toFile());
-				var fileOutputStream = Files.newOutputStream(tempFile)) {
-			ZipEntry[] entries;
+        try (var zipFile = new ZipFile(file.toFile()); var fileOutputStream = Files.newOutputStream(tempFile)) {
+            ZipEntry[] entries = zipFile.stream().toArray(ZipEntry[]::new);
 
-			if (reproducibleFileOrder) {
-				entries = zipFile.stream()
-						.sorted(Comparator.comparing(ZipEntry::getName, ZipReprocessorUtil::specialOrdering))
-						.toArray(ZipEntry[]::new);
-			} else {
-				entries = zipFile.stream()
-						.toArray(ZipEntry[]::new);
-			}
+            try (var zipOutputStream = new ZipOutputStream(fileOutputStream)) {
+                // Copy existing entries
+                for (ZipEntry entry : entries) {
+                    if (entry.getName().equals(path)) {
+                        throw new IllegalArgumentException(
+                            "Zip file (%s) already contains entry (%s)".formatted(file.getFileName().toString(), path));
+                    }
 
-			try (var zipOutputStream = new ZipOutputStream(fileOutputStream)) {
-				zipOutputStream.setMethod(zipOutputStreamCompressionMethod(zipEntryCompression));
+                    copyZipEntry(zipOutputStream, entry, zipFile.getInputStream(entry));
+                }
 
-				for (ZipEntry entry : entries) {
-					ZipEntry newEntry = entry;
+                // Append the new entry
+                var entry = new ZipEntry(path);
+                setConstantFileTime(entry);
+                copyZipEntry(zipOutputStream, entry, data);
+            }
+        }
 
-					if (!preserveFileTimestamps) {
-						newEntry = new ZipEntry(entry.getName());
-						setConstantFileTime(newEntry);
-					}
+        Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
+    }
 
-					newEntry.setMethod(zipEntryCompressionMethod(zipEntryCompression));
+    // See https://docs.oracle.com/en/java/javase/20/docs/specs/jar/jar.html#signed-jar-file
+    public static boolean isSpecialFile(String zipEntryName) {
+        if (!zipEntryName.startsWith(META_INF)) {
+            return false;
+        }
 
-					if (zipEntryCompression == ZipEntryCompression.STORED) {
-						copyUncompressedZipEntry(zipOutputStream, newEntry, zipFile.getInputStream(entry));
-					} else {
-						copyZipEntry(zipOutputStream, newEntry, zipFile.getInputStream(entry));
-					}
-				}
-			}
-		}
+        String[] parts = zipEntryName.split("/");
 
-		Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
-	}
+        if (parts.length != 2) {
+            return false;
+        }
 
-	/**
-	 * Transforms a single entry in a zip file, preserving the existing entry order.
-	 * The transformed entry is written with a constant time stamp to ensure reproducibility.
-	 * This method should only be used when a reproducible output is required, use {@link ZipUtils#transform(Path, java.util.Map)} normally.
-	 *
-	 * @throws IllegalArgumentException if the zip file does not contain the specified entry
-	 */
-	public static void transformZipEntry(Path file, String path, ZipUtils.UnsafeUnaryOperator<byte[]> transformer) throws IOException {
-		final Path tempFile = file.resolveSibling(file.getFileName() + ".tmp");
+        return parts[1].startsWith("SIG-") || parts[1].endsWith(".SF") || parts[1].endsWith(".DSA")
+            || parts[1].endsWith(".RSA") || parts[1].endsWith(".EC");
+    }
 
-		try (var zipFile = new ZipFile(file.toFile());
-				var fileOutputStream = Files.newOutputStream(tempFile)) {
-			ZipEntry[] entries = zipFile.stream().toArray(ZipEntry[]::new);
-			boolean found = false;
+    public static void reprocessZip(Path file, boolean reproducibleFileOrder, boolean preserveFileTimestamps)
+        throws IOException
+    {
+        reprocessZip(file, reproducibleFileOrder, preserveFileTimestamps, ZipEntryCompression.DEFLATED);
+    }
 
-			try (var zipOutputStream = new ZipOutputStream(fileOutputStream)) {
-				for (ZipEntry entry : entries) {
-					if (entry.getName().equals(path)) {
-						found = true;
-						byte[] transformed = transformer.apply(zipFile.getInputStream(entry).readAllBytes());
-						var newEntry = new ZipEntry(path);
-						setConstantFileTime(newEntry);
-						copyZipEntry(zipOutputStream, newEntry, new ByteArrayInputStream(transformed));
-					} else {
-						copyZipEntry(zipOutputStream, entry, zipFile.getInputStream(entry));
-					}
-				}
-			}
+    public static void reprocessZip(Path file, boolean reproducibleFileOrder, boolean preserveFileTimestamps,
+        ZipEntryCompression zipEntryCompression) throws IOException
+    {
+        final Path tempFile = file.resolveSibling(file.getFileName() + ".tmp");
 
-			if (!found) {
-				throw new IllegalArgumentException("Zip file (%s) does not contain entry (%s)".formatted(file.getFileName().toString(), path));
-			}
-		}
+        try (var zipFile = new ZipFile(file.toFile()); var fileOutputStream = Files.newOutputStream(tempFile)) {
+            ZipEntry[] entries;
 
-		Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
-	}
+            if (reproducibleFileOrder) {
+                entries = zipFile.stream()
+                    .sorted(Comparator.comparing(ZipEntry::getName, ZipReprocessorUtil::specialOrdering))
+                    .toArray(ZipEntry[]::new);
+            } else {
+                entries = zipFile.stream().toArray(ZipEntry[]::new);
+            }
 
-	/**
-	 * Appends an entry to a zip file, persevering the existing entry order and time stamps.
-	 * The new entry is added with a constant time stamp to ensure reproducibility.
-	 * This method should only be used when a reproducible output is required, use {@link ZipUtils#add(Path, String, byte[])} normally.
-	 */
-	public static void appendZipEntry(Path file, String path, byte[] data) throws IOException {
-		appendZipEntry(file, path, new ByteArrayInputStream(data));
-	}
+            try (var zipOutputStream = new ZipOutputStream(fileOutputStream)) {
+                zipOutputStream.setMethod(zipOutputStreamCompressionMethod(zipEntryCompression));
 
-	/**
-	 * Appends an entry to a zip file, persevering the existing entry order and time stamps.
-	 * The new entry is added with a constant time stamp to ensure reproducibility.
-	 * This method should only be used when a reproducible output is required, use {@link ZipUtils#add(Path, String, byte[])} normally.
-	 */
-	public static void appendZipEntry(Path file, String path, InputStream data) throws IOException {
-		final Path tempFile = file.resolveSibling(file.getFileName() + ".tmp");
+                for (ZipEntry entry : entries) {
+                    ZipEntry newEntry = entry;
 
-		try (var zipFile = new ZipFile(file.toFile());
-				var fileOutputStream = Files.newOutputStream(tempFile)) {
-			ZipEntry[] entries = zipFile.stream().toArray(ZipEntry[]::new);
+                    if (!preserveFileTimestamps) {
+                        newEntry = new ZipEntry(entry.getName());
+                        setConstantFileTime(newEntry);
+                    }
 
-			try (var zipOutputStream = new ZipOutputStream(fileOutputStream)) {
-				// Copy existing entries
-				for (ZipEntry entry : entries) {
-					if (entry.getName().equals(path)) {
-						throw new IllegalArgumentException("Zip file (%s) already contains entry (%s)".formatted(file.getFileName().toString(), path));
-					}
+                    newEntry.setMethod(zipEntryCompressionMethod(zipEntryCompression));
 
-					copyZipEntry(zipOutputStream, entry, zipFile.getInputStream(entry));
-				}
+                    if (zipEntryCompression == ZipEntryCompression.STORED) {
+                        copyUncompressedZipEntry(zipOutputStream, newEntry, zipFile.getInputStream(entry));
+                    } else {
+                        copyZipEntry(zipOutputStream, newEntry, zipFile.getInputStream(entry));
+                    }
+                }
+            }
+        }
 
-				// Append the new entry
-				var entry = new ZipEntry(path);
-				setConstantFileTime(entry);
-				copyZipEntry(zipOutputStream, entry, data);
-			}
-		}
+        Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
+    }
 
-		Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
-	}
+    /**
+     * Transforms a single entry in a zip file, preserving the existing entry order.
+     * The transformed entry is written with a constant time stamp to ensure reproducibility.
+     * This method should only be used when a reproducible output is required, use
+     * {@link ZipUtils#transform(Path, java.util.Map)} normally.
+     *
+     * @throws IllegalArgumentException if the zip file does not contain the specified entry
+     */
+    public static void transformZipEntry(Path file, String path, ZipUtils.UnsafeUnaryOperator<byte[]> transformer)
+        throws IOException
+    {
+        final Path tempFile = file.resolveSibling(file.getFileName() + ".tmp");
 
-	/**
-	 * Appends files to a zip file, preserving the existing entry order and time stamps.
-	 * The new entries are appended in map iteration order with constant time stamps to ensure reproducibility.
-	 * This method should only be used when a reproducible output is required, use {@link ZipUtils#add(Path, Iterable)} normally.
-	 */
-	public static void appendZipEntries(Path file, Map<String, Path> paths) throws IOException {
-		if (paths.isEmpty()) {
-			return;
-		}
+        try (var zipFile = new ZipFile(file.toFile()); var fileOutputStream = Files.newOutputStream(tempFile)) {
+            ZipEntry[] entries = zipFile.stream().toArray(ZipEntry[]::new);
+            boolean found = false;
 
-		final Path tempFile = file.resolveSibling(file.getFileName() + ".tmp");
+            try (var zipOutputStream = new ZipOutputStream(fileOutputStream)) {
+                for (ZipEntry entry : entries) {
+                    if (entry.getName().equals(path)) {
+                        found = true;
+                        byte[] transformed = transformer.apply(zipFile.getInputStream(entry).readAllBytes());
+                        var newEntry = new ZipEntry(path);
+                        setConstantFileTime(newEntry);
+                        copyZipEntry(zipOutputStream, newEntry, new ByteArrayInputStream(transformed));
+                    } else {
+                        copyZipEntry(zipOutputStream, entry, zipFile.getInputStream(entry));
+                    }
+                }
+            }
 
-		try (var zipFile = new ZipFile(file.toFile());
-				var fileOutputStream = Files.newOutputStream(tempFile)) {
-			ZipEntry[] entries = zipFile.stream().toArray(ZipEntry[]::new);
+            if (!found) {
+                throw new IllegalArgumentException(
+                    "Zip file (%s) does not contain entry (%s)".formatted(file.getFileName().toString(), path));
+            }
+        }
 
-			try (var zipOutputStream = new ZipOutputStream(fileOutputStream)) {
-				for (ZipEntry entry : entries) {
-					if (paths.containsKey(entry.getName())) {
-						throw new IllegalArgumentException("Zip file (%s) already contains entry (%s)".formatted(file.getFileName().toString(), entry.getName()));
-					}
+        Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
+    }
 
-					copyZipEntry(zipOutputStream, entry, zipFile.getInputStream(entry));
-				}
+    private static void copyUncompressedZipEntry(ZipOutputStream zipOutputStream, ZipEntry entry,
+        InputStream inputStream) throws IOException
+    {
+        // We need to read the entire input stream to calculate the CRC32 checksum and the size of the entry.
+        final byte[] data = inputStream.readAllBytes();
 
-				for (Map.Entry<String, Path> path : paths.entrySet()) {
-					var entry = new ZipEntry(path.getKey());
-					setConstantFileTime(entry);
+        var crc = new CRC32();
+        crc.update(data);
+        entry.setCrc(crc.getValue());
+        entry.setSize(data.length);
+        entry.setCompressedSize(data.length);
 
-					try (var inputStream = Files.newInputStream(path.getValue())) {
-						copyZipEntry(zipOutputStream, entry, inputStream);
-					}
-				}
-			}
-		}
+        zipOutputStream.putNextEntry(entry);
+        zipOutputStream.write(data, 0, data.length);
+        zipOutputStream.closeEntry();
+    }
 
-		Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
-	}
+    private static void copyZipEntry(ZipOutputStream zipOutputStream, ZipEntry entry, InputStream inputStream)
+        throws IOException
+    {
+        zipOutputStream.putNextEntry(entry);
+        inputStream.transferTo(zipOutputStream);
+        zipOutputStream.closeEntry();
+    }
 
-	private static void copyZipEntry(ZipOutputStream zipOutputStream, ZipEntry entry, InputStream inputStream) throws IOException {
-		zipOutputStream.putNextEntry(entry);
-		inputStream.transferTo(zipOutputStream);
-		zipOutputStream.closeEntry();
-	}
+    private static void setConstantFileTime(ZipEntry entry) {
+        // See https://github.com/openjdk/jdk/blob/master/test/jdk/java/util/zip/ZipFile/ZipEntryTimeBounds.java
+        entry.setTime(new GregorianCalendar(1980, Calendar.JANUARY, 1, 0, 0, 0).getTimeInMillis());
+    }
 
-	private static void copyUncompressedZipEntry(ZipOutputStream zipOutputStream, ZipEntry entry, InputStream inputStream) throws IOException {
-		// We need to read the entire input stream to calculate the CRC32 checksum and the size of the entry.
-		final byte[] data = inputStream.readAllBytes();
+    private static int specialOrdering(String name1, String name2) {
+        if (name1.equals(name2)) {
+            return 0;
+        } else if (name1.equals(Constants.Manifest.PATH)) {
+            return -1;
+        } else if (name2.equals(Constants.Manifest.PATH)) {
+            return 1;
+        }
 
-		var crc = new CRC32();
-		crc.update(data);
-		entry.setCrc(crc.getValue());
-		entry.setSize(data.length);
-		entry.setCompressedSize(data.length);
+        boolean isName1Special = isSpecialFile(name1);
+        boolean isName2Special = isSpecialFile(name2);
 
-		zipOutputStream.putNextEntry(entry);
-		zipOutputStream.write(data, 0, data.length);
-		zipOutputStream.closeEntry();
-	}
+        if (isName1Special && isName2Special) {
+            return name1.compareTo(name2);
+        } else if (isName1Special) {
+            return -1;
+        } else if (isName2Special) {
+            return 1;
+        }
 
-	private static void setConstantFileTime(ZipEntry entry) {
-		// See https://github.com/openjdk/jdk/blob/master/test/jdk/java/util/zip/ZipFile/ZipEntryTimeBounds.java
-		entry.setTime(new GregorianCalendar(1980, Calendar.JANUARY, 1, 0, 0, 0).getTimeInMillis());
-	}
+        return name1.compareTo(name2);
+    }
 
-	@MagicConstant(valuesFromClass = ZipOutputStream.class)
-	private static int zipOutputStreamCompressionMethod(ZipEntryCompression compression) {
-		return switch (compression) {
-		case STORED -> ZipOutputStream.STORED;
-		case DEFLATED -> ZipOutputStream.DEFLATED;
-		};
-	}
+    @MagicConstant(valuesFromClass = ZipEntry.class)
+    private static int zipEntryCompressionMethod(ZipEntryCompression compression) {
+        return switch (compression) {
+            case STORED -> ZipEntry.STORED;
+            case DEFLATED -> ZipEntry.DEFLATED;
+        };
+    }
 
-	@MagicConstant(valuesFromClass = ZipEntry.class)
-	private static int zipEntryCompressionMethod(ZipEntryCompression compression) {
-		return switch (compression) {
-		case STORED -> ZipEntry.STORED;
-		case DEFLATED -> ZipEntry.DEFLATED;
-		};
-	}
+    @MagicConstant(valuesFromClass = ZipOutputStream.class)
+    private static int zipOutputStreamCompressionMethod(ZipEntryCompression compression) {
+        return switch (compression) {
+            case STORED -> ZipOutputStream.STORED;
+            case DEFLATED -> ZipOutputStream.DEFLATED;
+        };
+    }
 }

@@ -53,16 +53,19 @@ import dev.aoqia.leaf.loom.util.LazyCloseable;
 import dev.aoqia.leaf.loom.util.fmj.ModEnvironment;
 
 public interface AccessWidenerEntry {
-	ModEnvironment environment();
+    ModEnvironment environment();
 
-	/**
-	 * @return The mod id to be used in {@link TransitiveAccessWidenerMappingsProcessor} or null when this entry does not contain transitive entries.
-	 */
-	@Nullable String mappingId();
+    String getSortKey();
 
-	String getSortKey();
+    /**
+     * @return The mod id to be used in {@link TransitiveAccessWidenerMappingsProcessor} or null when this entry does
+     * not contain transitive entries.
+     */
+    @Nullable
+    String mappingId();
 
-	void read(ClassTweakerVisitor visitor, LazyCloseable<TinyRemapper> remapper, MappingsNamespace productionNamespace) throws IOException;
+    void read(ClassTweakerVisitor visitor, LazyCloseable<TinyRemapper> remapper, MappingsNamespace productionNamespace)
+        throws IOException;
 
-	void readOfficial(ClassTweakerVisitor visitor) throws IOException;
+    void readOfficial(ClassTweakerVisitor visitor) throws IOException;
 }

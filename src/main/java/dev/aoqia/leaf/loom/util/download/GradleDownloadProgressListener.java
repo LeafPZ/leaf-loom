@@ -48,62 +48,65 @@ import org.gradle.internal.logging.progress.ProgressLogger;
 import org.jspecify.annotations.Nullable;
 
 public class GradleDownloadProgressListener implements DownloadProgressListener {
-	private final String name;
-	private final Function<String, ProgressLogger> progressLoggerFactory;
+    private static final long KB = 1024L;
+    private static final long MB = KB * 1024L;
+    private static final long GB = MB * 1024L;
+    private static final double KB_DIVISOR = 1024;
+    private static final double MB_DIVISOR = 1024 * 1024;
+    private static final double GB_DIVISOR = 1024 * 1024 * 1024;
 
-	private static final long REPORT_INTERVAL_MS = 500;
+    private static final long REPORT_INTERVAL_MS = 500;
 
-	@Nullable private ProgressLogger progressLogger;
-	private long lastReportTime = 0;
+    private long lastReportTime = 0;
 
-	public GradleDownloadProgressListener(String name, Function<String, ProgressLogger> progressLoggerFactory) {
-		this.name = name;
-		this.progressLoggerFactory = progressLoggerFactory;
-	}
+    private final String name;
 
-	@Override
-	public void onStart() {
-		progressLogger = progressLoggerFactory.apply(this.name);
-		lastReportTime = 0;
-	}
+    @Nullable
+    private ProgressLogger progressLogger;
+    private final Function<String, ProgressLogger> progressLoggerFactory;
 
-	@Override
-	public void onProgress(long bytesTransferred, long contentLength) {
-		Objects.requireNonNull(progressLogger);
+    public GradleDownloadProgressListener(String name, Function<String, ProgressLogger> progressLoggerFactory) {
+        this.name = name;
+        this.progressLoggerFactory = progressLoggerFactory;
+    }
 
-		long currentTime = System.currentTimeMillis();
+    private static String humanBytes(long bytes) {
+        if (bytes < KB) {
+            return bytes + " B";
+        } else if (bytes < MB) {
+            return (bytes / KB_DIVISOR) + " KB";
+        } else if (bytes < GB) {
+            return String.format("%.2f MB", bytes / MB_DIVISOR);
+        } else {
+            return String.format("%.2f GB", bytes / GB_DIVISOR);
+        }
+    }
 
-		// Only update if at least 0.5 seconds have passed since last report, or if we're at 100%
-		if (currentTime - lastReportTime >= REPORT_INTERVAL_MS || bytesTransferred >= contentLength) {
-			progressLogger.progress("Downloading %s - %s / %s".formatted(name, humanBytes(bytesTransferred), humanBytes(contentLength)));
-			lastReportTime = currentTime;
-		}
-	}
+    @Override
+    public void onEnd() {
+        if (progressLogger != null) {
+            progressLogger.completed();
+            progressLogger = null;
+        }
+    }
 
-	@Override
-	public void onEnd() {
-		if (progressLogger != null) {
-			progressLogger.completed();
-			progressLogger = null;
-		}
-	}
+    @Override
+    public void onProgress(long bytesTransferred, long contentLength) {
+        Objects.requireNonNull(progressLogger);
 
-	private static final long KB = 1024L;
-	private static final long MB = KB * 1024L;
-	private static final long GB = MB * 1024L;
-	private static final double KB_DIVISOR = 1024;
-	private static final double MB_DIVISOR = 1024 * 1024;
-	private static final double GB_DIVISOR = 1024 * 1024 * 1024;
+        long currentTime = System.currentTimeMillis();
 
-	private static String humanBytes(long bytes) {
-		if (bytes < KB) {
-			return bytes + " B";
-		} else if (bytes < MB) {
-			return (bytes / KB_DIVISOR) + " KB";
-		} else if (bytes < GB) {
-			return String.format("%.2f MB", bytes / MB_DIVISOR);
-		} else {
-			return String.format("%.2f GB", bytes / GB_DIVISOR);
-		}
-	}
+        // Only update if at least 0.5 seconds have passed since last report, or if we're at 100%
+        if (currentTime - lastReportTime >= REPORT_INTERVAL_MS || bytesTransferred >= contentLength) {
+            progressLogger.progress(
+                "Downloading %s - %s / %s".formatted(name, humanBytes(bytesTransferred), humanBytes(contentLength)));
+            lastReportTime = currentTime;
+        }
+    }
+
+    @Override
+    public void onStart() {
+        progressLogger = progressLoggerFactory.apply(this.name);
+        lastReportTime = 0;
+    }
 }

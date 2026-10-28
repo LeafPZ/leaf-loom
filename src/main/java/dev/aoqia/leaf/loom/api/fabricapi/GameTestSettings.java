@@ -54,67 +54,80 @@ import dev.aoqia.leaf.loom.util.fmj.LeafModJsonFactory;
  */
 @ApiStatus.Experimental
 public interface GameTestSettings {
-	/**
-	 * Contains a boolean property indicating whether a new source set should be created for the tests.
-	 *
-	 * <p>Default: false
-	 */
-	Property<Boolean> getCreateSourceSet();
+    /**
+     * Contains a boolean property indicating whether the run directories should be cleared before running the tests.
+     *
+     * <p>
+     * This only works when {@link #getEnableClientGameTests()} is enabled.
+     *
+     * <p>
+     * Default: true
+     */
+    Property<Boolean> getClearRunDirectory();
 
-	/**
-	 * Contains a string property representing the mod ID associated with the tests.
-	 *
-	 * <p>This must be set when {@link #getCreateSourceSet()} is set.
-	 */
-	@Optional
-	Property<String> getModId();
+    /**
+     * Contains a boolean property indicating whether a new source set should be created for the tests.
+     *
+     * <p>
+     * Default: false
+     */
+    Property<Boolean> getCreateSourceSet();
 
-	/**
-	 * Contains a boolean property indicating whether a run configuration will be created for the server side game tests, using Vanilla Game Test framework.
-	 *
-	 * <p>Default: true
-	 */
-	Property<Boolean> getEnableGameTests();
+    /**
+     * Contains a boolean property indicating whether a run configuration will be created for the client side game
+     * tests, using the Fabric API Client Test framework.
+     *
+     * <p>
+     * Default: true
+     */
+    Property<Boolean> getEnableClientGameTests();
 
-	/**
-	 * Contains a boolean property indicating whether a run configuration will be created for the client side game tests, using the Fabric API Client Test framework.
-	 *
-	 * <p>Default: true
-	 */
-	Property<Boolean> getEnableClientGameTests();
+    /**
+     * Contains a boolean property indicating whether a run configuration will be created for the server side game
+     * tests, using Vanilla Game Test framework.
+     *
+     * <p>
+     * Default: true
+     */
+    Property<Boolean> getEnableGameTests();
 
-	/**
-	 * Contains a boolean property indicating whether the eula has been accepted. By enabling this you agree to the Minecraft EULA located at <a href="https://aka.ms/MinecraftEULA">https://aka.ms/MinecraftEULA</a>.
-	 *
-	 * <p>This only works when {@link #getEnableClientGameTests()} is enabled.
-	 *
-	 * <p>Default: false
-	 */
-	Property<Boolean> getEula();
+    /**
+     * Contains a boolean property indicating whether the eula has been accepted. By enabling this you agree to the
+     * Minecraft EULA located at <a href="https://aka.ms/MinecraftEULA">https://aka.ms/MinecraftEULA</a>.
+     *
+     * <p>
+     * This only works when {@link #getEnableClientGameTests()} is enabled.
+     *
+     * <p>
+     * Default: false
+     */
+    Property<Boolean> getEula();
 
-	/**
-	 * Contains a boolean property indicating whether the run directories should be cleared before running the tests.
-	 *
-	 * <p>This only works when {@link #getEnableClientGameTests()} is enabled.
-	 *
-	 * <p>Default: true
-	 */
-	Property<Boolean> getClearRunDirectory();
+    /**
+     * Contains a string property representing the mod ID associated with the tests.
+     *
+     * <p>
+     * This must be set when {@link #getCreateSourceSet()} is set.
+     */
+    @Optional
+    Property<String> getModId();
 
-	/**
-	 * Contains a string property representing the username to use for the client side game tests.
-	 *
-	 * <p>This only works when {@link #getEnableClientGameTests()} is enabled.
-	 *
-	 * <p>Default: Player0
-	 */
-	@Optional
-	Property<String> getUsername();
+    /**
+     * Contains a string property representing the username to use for the client side game tests.
+     *
+     * <p>
+     * This only works when {@link #getEnableClientGameTests()} is enabled.
+     *
+     * <p>
+     * Default: Player0
+     */
+    @Optional
+    Property<String> getUsername();
 
-	/**
-	 * Sets {@link #getModId()} property based on the {@code id} field defined in the provided file.
-	 */
-	default void modId(File fabricModJsonFile) {
-		getModId().set(LeafModJsonFactory.createFromFile(fabricModJsonFile).getId());
-	}
+    /**
+     * Sets {@link #getModId()} property based on the {@code id} field defined in the provided file.
+     */
+    default void modId(File fabricModJsonFile) {
+        getModId().set(LeafModJsonFactory.createFromFile(fabricModJsonFile).getId());
+    }
 }

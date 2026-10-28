@@ -73,103 +73,103 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public final class SourceRemapperService extends Service<SourceRemapperService.Options> {
-	public static ServiceType<Options, SourceRemapperService> TYPE = new ServiceType<>(Options.class, SourceRemapperService.class);
+    public static ServiceType<Options,
+        SourceRemapperService> TYPE = new ServiceType<>(Options.class, SourceRemapperService.class);
 
-	public interface Options extends Service.Options {
-		@Nested
-		Property<MappingsService.Options> getMappings();
-		@Input
-		Property<Integer> getJavaCompileRelease();
-		@Classpath
-		ConfigurableFileCollection getClasspath();
-	}
+    private static final Logger LOGGER = LoggerFactory.getLogger(SourceRemapperService.class);
 
-	public static Provider<Options> createOptions(RemapSourcesJarTask task) {
-		return TYPE.create(task.getProject(), o -> {
-			o.getMappings().set(MappingsService.createForRemapTask(task));
-			o.getJavaCompileRelease().set(getJavaCompileRelease(task.getProject()));
-			o.getClasspath().from(task.getClasspath());
-		});
-	}
+    public SourceRemapperService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(SourceRemapperService.class);
+    public static Provider<Options> createOptions(RemapSourcesJarTask task) {
+        return TYPE.create(task.getProject(), o -> {
+            o.getMappings().set(MappingsService.createForRemapTask(task));
+            o.getJavaCompileRelease().set(getJavaCompileRelease(task.getProject()));
+            o.getClasspath().from(task.getClasspath());
+        });
+    }
 
-	public SourceRemapperService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    public static Provider<Integer> getJavaCompileRelease(Project project) {
+        ProviderFactory providers = project.getProviders();
+        Provider<Integer> result = providers.provider(() -> -1);
 
-	public void remapSourcesJar(Path source, Path destination) throws IOException {
-		if (source.equals(destination)) {
-			throw new UnsupportedOperationException("Cannot remap in place");
-		}
+        for (JavaCompile task : project.getTasks().withType(JavaCompile.class)) {
+            result = result.zip(task.getOptions().getRelease().orElse(-1), Math::max);
+        }
 
-		Path srcPath = source;
-		boolean isSrcTmp = false;
+        return result.map(i ->
+        // Unable to find the release used to compile with, default to the current version
+        i < 0 ? Integer.parseInt(JavaVersion.current().getMajorVersion()) : i);
+    }
 
-		// Create a temp directory with all of the sources
-		if (!Files.isDirectory(source)) {
-			isSrcTmp = true;
-			srcPath = Files.createTempDirectory("fabric-loom-src");
-			ZipUtils.unpackAll(source, srcPath);
-		}
+    public void remapSourcesJar(Path source, Path destination) throws IOException {
+        if (source.equals(destination)) {
+            throw new UnsupportedOperationException("Cannot remap in place");
+        }
 
-		if (!Files.isDirectory(destination) && Files.exists(destination)) {
-			Files.delete(destination);
-		}
+        Path srcPath = source;
+        boolean isSrcTmp = false;
 
-		Mercury mercury = createMercury();
+        // Create a temp directory with all of the sources
+        if (!Files.isDirectory(source)) {
+            isSrcTmp = true;
+            srcPath = Files.createTempDirectory("fabric-loom-src");
+            ZipUtils.unpackAll(source, srcPath);
+        }
 
-		try (FileSystemUtil.Delegate dstFs = Files.isDirectory(destination) ? null : FileSystemUtil.getJarFileSystem(destination, true)) {
-			Path dstPath = dstFs != null ? dstFs.get().getPath("/") : destination;
+        if (!Files.isDirectory(destination) && Files.exists(destination)) {
+            Files.delete(destination);
+        }
 
-			try {
-				mercury.rewrite(srcPath, dstPath);
-			} catch (Exception e) {
-				LOGGER.warn("Could not remap " + source + " fully!", e);
-			}
+        Mercury mercury = createMercury();
 
-			SourceRemapper.copyNonJavaFiles(srcPath, dstPath, LOGGER, source);
-		} finally {
-			if (isSrcTmp) {
-				Files.walkFileTree(srcPath, new DeletingFileVisitor());
-			}
-		}
-	}
+        try (FileSystemUtil.Delegate dstFs = Files.isDirectory(destination) ? null
+            : FileSystemUtil.getJarFileSystem(destination, true))
+        {
+            Path dstPath = dstFs != null ? dstFs.get().getPath("/") : destination;
 
-	private Mercury createMercury() throws IOException {
-		var mercury = new Mercury();
-		mercury.setGracefulClasspathChecks(true);
-		mercury.setSourceCompatibilityFromRelease(getOptions().getJavaCompileRelease().get());
+            try {
+                mercury.rewrite(srcPath, dstPath);
+            } catch (Exception e) {
+                LOGGER.warn("Could not remap " + source + " fully!", e);
+            }
 
-		MappingsService mappingsService = getServiceFactory().get(getOptions().getMappings());
-		var tinyMappingsReader = new TinyMappingsReader(mappingsService.getMemoryMappingTree(), mappingsService.getFrom(), mappingsService.getTo()).read();
-		mercury.getProcessors().add(MercuryRemapper.create(tinyMappingsReader));
+            SourceRemapper.copyNonJavaFiles(srcPath, dstPath, LOGGER, source);
+        } finally {
+            if (isSrcTmp) {
+                Files.walkFileTree(srcPath, new DeletingFileVisitor());
+            }
+        }
+    }
 
-		for (File file : getOptions().getClasspath().getFiles()) {
-			if (file.exists()) {
-				mercury.getClassPath().add(file.toPath());
-			}
-		}
+    private Mercury createMercury() throws IOException {
+        var mercury = new Mercury();
+        mercury.setGracefulClasspathChecks(true);
+        mercury.setSourceCompatibilityFromRelease(getOptions().getJavaCompileRelease().get());
 
-		return mercury;
-	}
+        MappingsService mappingsService = getServiceFactory().get(getOptions().getMappings());
+        var tinyMappingsReader = new TinyMappingsReader(mappingsService.getMemoryMappingTree(),
+            mappingsService.getFrom(), mappingsService.getTo()).read();
+        mercury.getProcessors().add(MercuryRemapper.create(tinyMappingsReader));
 
-	public static Provider<Integer> getJavaCompileRelease(Project project) {
-		ProviderFactory providers = project.getProviders();
-		Provider<Integer> result = providers.provider(() -> -1);
+        for (File file : getOptions().getClasspath().getFiles()) {
+            if (file.exists()) {
+                mercury.getClassPath().add(file.toPath());
+            }
+        }
 
-		for (JavaCompile task : project.getTasks().withType(JavaCompile.class)) {
-			result = result.zip(
-					task.getOptions().getRelease().orElse(-1),
-					Math::max
-			);
-		}
+        return mercury;
+    }
 
-		return result.map(i ->
-				// Unable to find the release used to compile with, default to the current version
-				i < 0
-					? Integer.parseInt(JavaVersion.current().getMajorVersion())
-					: i
-		);
-	}
+    public interface Options extends Service.Options {
+        @Classpath
+        ConfigurableFileCollection getClasspath();
+
+        @Input
+        Property<Integer> getJavaCompileRelease();
+
+        @Nested
+        Property<MappingsService.Options> getMappings();
+    }
 }

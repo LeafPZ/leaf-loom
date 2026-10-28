@@ -70,158 +70,169 @@ import dev.aoqia.leaf.loom.util.FileSystemUtil;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 public abstract sealed class MappingConfiguration permits RemapMappingConfiguration, NoRemapMappingConfiguration {
-	public static final String MARKDOWN_METADATA_KEY = "markdown";
-	protected static final Logger LOGGER = LoggerFactory.getLogger(MappingConfiguration.class);
+    public static final String MARKDOWN_METADATA_KEY = "markdown";
+    protected static final Logger LOGGER = LoggerFactory.getLogger(MappingConfiguration.class);
 
-	public final String mappingsIdentifier;
+    public final String mappingsIdentifier;
 
-	private final Path inputJar;
-	@Nullable private byte[] unpickDefinitions;
+    private List<AnnotationsData> annotationsData = List.of();
 
-	private List<AnnotationsData> annotationsData = List.of();
-	@Nullable private UnpickMetadata unpickMetadata;
+    private final Path inputJar;
 
-	protected MappingConfiguration(String mappingsIdentifier, Path inputJar) {
-		this.mappingsIdentifier = mappingsIdentifier;
-		this.inputJar = inputJar;
-	}
+    @Nullable
+    private byte[] unpickDefinitions;
 
-	protected final void setup(Project project, ZomboidProvider gameProvider, DependencyInfo dependency, String displayName) {
-		try {
-			prepare(gameProvider);
+    @Nullable
+    private UnpickMetadata unpickMetadata;
 
-			try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(inputJar)) {
-				readExtras(delegate.fs());
-				setupMappings(project, gameProvider, delegate.fs());
-			}
-		} catch (IOException e) {
-			try {
-				cleanup();
-			} catch (IOException cleanupException) {
-				e.addSuppressed(cleanupException);
-			}
+    protected MappingConfiguration(String mappingsIdentifier, Path inputJar) {
+        this.mappingsIdentifier = mappingsIdentifier;
+        this.inputJar = inputJar;
+    }
 
-			throw new UncheckedIOException("Failed to setup %s: %s".formatted(displayName, dependency.getDepString()), e);
-		}
-	}
+    protected static String createMappingsIdentifier(String mappingsName, String version, String classifier,
+        String gameVersion)
+    {
+        // mappingsName . mcVersion . version classifier
+        // Example: net.fabricmc.yarn . 1_16_5 . 1.16.5+build.5 -v2
+        return mappingsName + "." + gameVersion.replace(' ', '_').replace('.', '_').replace('-', '_') + "." + version
+            + classifier;
+    }
 
-	protected void prepare(ZomboidProvider gameProvider) throws IOException {
-	}
+    protected static String getMappingsClassifier(DependencyInfo dependency, boolean isV2) {
+        String[] depStringSplit = dependency.getDepString().split(":");
 
-	protected void cleanup() throws IOException {
-	}
+        if (depStringSplit.length >= 4) {
+            return "-" + depStringSplit[3] + (isV2 ? "-v2" : "");
+        }
 
-	protected abstract void setupMappings(Project project, ZomboidProvider gameProvider, FileSystem inputJar) throws IOException;
+        return isV2 ? "-v2" : "";
+    }
 
-	public abstract Provider<TinyMappingsService.Options> getMappingsServiceOptions(Project project);
+    protected static TinyJarInfo readJarInfo(Path inputJar, DependencyInfo dependency, ZomboidProvider gameProvider,
+        String displayName)
+    {
+        TinyJarInfo jarInfo = TinyJarInfo.get(inputJar);
+        jarInfo.gameVersionId().ifPresent(id -> {
+            if (!gameProvider.gameVersion().equals(id)) {
+                LOGGER.warn("The %s (%s) were not built for Zomboid version %s, proceed with caution."
+                    .formatted(displayName, dependency.getDepString(), gameProvider.gameVersion()));
+            }
+        });
+        return jarInfo;
+    }
 
-	public abstract String getMappingsHash();
+    protected static Path resolveInputJar(DependencyInfo dependency, String displayName) {
+        return dependency.resolveFile()
+            .orElseThrow(() -> new RuntimeException("Could not resolve %s: %s".formatted(displayName, dependency)))
+            .toPath();
+    }
 
-	public abstract MappingsNamespace getRuntimeNamespace();
+    public void applyToProject(Project project, DependencyInfo dependency) {
+        if (unpickMetadata != null && unpickMetadata.hasConstants()) {
+            String notation = switch (unpickMetadata) {
+                case UnpickMetadata.V1 v1 -> String.format("%s:%s:%s:constants", dependency.getDependency().getGroup(),
+                    dependency.getDependency().getName(), dependency.getDependency().getVersion());
+                case UnpickMetadata.V2 v2 -> Objects.requireNonNull(v2.constants());
+            };
 
-	public abstract JavadocStyle getJavadocStyle();
+            project.getDependencies().add(Constants.Configurations.MAPPING_CONSTANTS, notation);
+        }
+    }
 
-	public TinyMappingsService getMappingsService(Project project, ServiceFactory serviceFactory) {
-		return serviceFactory.get(getMappingsServiceOptions(project));
-	}
+    public List<AnnotationsData> getAnnotationsData() {
+        return annotationsData;
+    }
 
-	public void applyToProject(Project project, DependencyInfo dependency) {
-		if (unpickMetadata != null && unpickMetadata.hasConstants()) {
-			String notation = switch (unpickMetadata) {
-			case UnpickMetadata.V1 v1 -> String.format("%s:%s:%s:constants",
-					dependency.getDependency().getGroup(),
-					dependency.getDependency().getName(),
-					dependency.getDependency().getVersion()
-			);
-			case UnpickMetadata.V2 v2 -> Objects.requireNonNull(v2.constants());
-			};
+    public abstract JavadocStyle getJavadocStyle();
 
-			project.getDependencies().add(Constants.Configurations.MAPPING_CONSTANTS, notation);
-		}
-	}
+    public abstract String getMappingsHash();
 
-	protected static Path resolveInputJar(DependencyInfo dependency, String displayName) {
-		return dependency.resolveFile()
-				.orElseThrow(() -> new RuntimeException("Could not resolve %s: %s".formatted(displayName, dependency)))
-				.toPath();
-	}
+    public TinyMappingsService getMappingsService(Project project, ServiceFactory serviceFactory) {
+        return serviceFactory.get(getMappingsServiceOptions(project));
+    }
 
-	protected static TinyJarInfo readJarInfo(Path inputJar, DependencyInfo dependency, ZomboidProvider gameProvider, String displayName) {
-		TinyJarInfo jarInfo = TinyJarInfo.get(inputJar);
-		jarInfo.gameVersionId().ifPresent(id -> {
-			if (!gameProvider.gameVersion().equals(id)) {
-				LOGGER.warn("The %s (%s) were not built for Zomboid version %s, proceed with caution.".formatted(displayName, dependency.getDepString(), gameProvider.gameVersion()));
-			}
-		});
-		return jarInfo;
-	}
+    public abstract Provider<TinyMappingsService.Options> getMappingsServiceOptions(Project project);
 
-	protected static String getMappingsClassifier(DependencyInfo dependency, boolean isV2) {
-		String[] depStringSplit = dependency.getDepString().split(":");
+    public abstract MappingsNamespace getRuntimeNamespace();
 
-		if (depStringSplit.length >= 4) {
-			return "-" + depStringSplit[3] + (isV2 ? "-v2" : "");
-		}
+    public byte[] getUnpickDefinitions() {
+        return Objects.requireNonNull(unpickDefinitions, "Unpick definitions are not available");
+    }
 
-		return isV2 ? "-v2" : "";
-	}
+    public UnpickMetadata getUnpickMetadata() {
+        return Objects.requireNonNull(unpickMetadata, "Unpick metadata is not available");
+    }
 
-	protected static String createMappingsIdentifier(String mappingsName, String version, String classifier, String gameVersion) {
-		//          mappingsName      . mcVersion . version        classifier
-		// Example: net.fabricmc.yarn . 1_16_5    . 1.16.5+build.5 -v2
-		return mappingsName + "." + gameVersion.replace(' ', '_').replace('.', '_').replace('-', '_') + "." + version + classifier;
-	}
+    public boolean hasUnpickDefinitions() {
+        return unpickMetadata != null;
+    }
 
-	private void readExtras(FileSystem jar) throws IOException {
-		readAnnotationsData(jar);
-		readUnpickDefinitions(jar);
-	}
+    public String mappingsIdentifier() {
+        return mappingsIdentifier;
+    }
 
-	private void readAnnotationsData(FileSystem jar) throws IOException {
-		Path annotationsPath = jar.getPath(AnnotationsLayer.ANNOTATIONS_PATH);
+    protected void cleanup() throws IOException {
+    }
 
-		if (!Files.exists(annotationsPath)) {
-			return;
-		}
+    protected final Path inputJar() {
+        return inputJar;
+    }
 
-		try (BufferedReader reader = Files.newBufferedReader(annotationsPath, StandardCharsets.UTF_8)) {
-			annotationsData = AnnotationsData.readList(reader);
-		}
-	}
+    protected void prepare(ZomboidProvider gameProvider) throws IOException {
+    }
 
-	private void readUnpickDefinitions(FileSystem jar) throws IOException {
-		Path unpickPath = jar.getPath(UnpickMetadata.UNPICK_DEFINITIONS_PATH);
-		Path unpickMetadataPath = jar.getPath(UnpickMetadata.UNPICK_METADATA_PATH);
+    protected final void setup(Project project, ZomboidProvider gameProvider, DependencyInfo dependency,
+        String displayName)
+    {
+        try {
+            prepare(gameProvider);
 
-		if (!Files.exists(unpickPath) || !Files.exists(unpickMetadataPath)) {
-			return;
-		}
+            try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(inputJar)) {
+                readExtras(delegate.fs());
+                setupMappings(project, gameProvider, delegate.fs());
+            }
+        } catch (IOException e) {
+            try {
+                cleanup();
+            } catch (IOException cleanupException) {
+                e.addSuppressed(cleanupException);
+            }
 
-		unpickMetadata = UnpickMetadata.parse(unpickMetadataPath);
-		unpickDefinitions = Files.readAllBytes(unpickPath);
-	}
+            throw new UncheckedIOException("Failed to setup %s: %s".formatted(displayName, dependency.getDepString()),
+                e);
+        }
+    }
 
-	protected final Path inputJar() {
-		return inputJar;
-	}
+    protected abstract void setupMappings(Project project, ZomboidProvider gameProvider, FileSystem inputJar)
+        throws IOException;
 
-	public String mappingsIdentifier() {
-		return mappingsIdentifier;
-	}
+    private void readAnnotationsData(FileSystem jar) throws IOException {
+        Path annotationsPath = jar.getPath(AnnotationsLayer.ANNOTATIONS_PATH);
 
-	public byte[] getUnpickDefinitions() {
-		return Objects.requireNonNull(unpickDefinitions, "Unpick definitions are not available");
-	}
+        if (!Files.exists(annotationsPath)) {
+            return;
+        }
 
-	public boolean hasUnpickDefinitions() {
-		return unpickMetadata != null;
-	}
+        try (BufferedReader reader = Files.newBufferedReader(annotationsPath, StandardCharsets.UTF_8)) {
+            annotationsData = AnnotationsData.readList(reader);
+        }
+    }
 
-	public List<AnnotationsData> getAnnotationsData() {
-		return annotationsData;
-	}
+    private void readExtras(FileSystem jar) throws IOException {
+        readAnnotationsData(jar);
+        readUnpickDefinitions(jar);
+    }
 
-	public UnpickMetadata getUnpickMetadata() {
-		return Objects.requireNonNull(unpickMetadata, "Unpick metadata is not available");
-	}
+    private void readUnpickDefinitions(FileSystem jar) throws IOException {
+        Path unpickPath = jar.getPath(UnpickMetadata.UNPICK_DEFINITIONS_PATH);
+        Path unpickMetadataPath = jar.getPath(UnpickMetadata.UNPICK_METADATA_PATH);
+
+        if (!Files.exists(unpickPath) || !Files.exists(unpickMetadataPath)) {
+            return;
+        }
+
+        unpickMetadata = UnpickMetadata.parse(unpickMetadataPath);
+        unpickDefinitions = Files.readAllBytes(unpickPath);
+    }
 }

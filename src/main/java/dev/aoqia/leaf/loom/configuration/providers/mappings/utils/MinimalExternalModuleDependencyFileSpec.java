@@ -50,22 +50,23 @@ import dev.aoqia.leaf.loom.api.mappings.layered.MappingContext;
 import dev.aoqia.leaf.loom.api.mappings.layered.spec.FileSpec;
 
 public record MinimalExternalModuleDependencyFileSpec(MinimalExternalModuleDependency dependency) implements FileSpec {
-	@Override
-	public Path get(MappingContext context) {
-		return context.resolveDependency(dependency);
-	}
+    @Override
+    public Path get(MappingContext context) {
+        return context.resolveDependency(dependency);
+    }
 
-	@Override
-	public int hashCode() {
-		return Objects.hash(dependency.getModule().getGroup(), dependency.getModule().getName(), dependency.getVersionConstraint());
-	}
+    @Override
+    public int hashCode() {
+        return Objects.hash(dependency.getModule().getGroup(), dependency.getModule().getName(),
+            dependency.getVersionConstraint());
+    }
 
-	@Override
-	public boolean equals(Object obj) {
-		if (obj instanceof MinimalExternalModuleDependencyFileSpec other) {
-			return other.dependency().equals(this.dependency());
-		}
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof MinimalExternalModuleDependencyFileSpec(MinimalExternalModuleDependency dependency1)) {
+            return dependency1.equals(this.dependency());
+        }
 
-		return false;
-	}
+        return false;
+    }
 }

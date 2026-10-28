@@ -55,47 +55,42 @@ import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
 import dev.aoqia.leaf.loom.util.fmj.LeafModJsonFactory;
 
 public class AccessWidenerUtils {
-	/**
-	 * Remap a mods access widener from intermediary to named, so that loader can apply it in our dev-env.
-	 */
-	public static byte[] remapAccessWidener(byte[] input, Remapper remapper, String fromNamespace, String toNamespace) {
-		int version = ClassTweakerReader.readVersion(input);
+    public static AccessWidenerData readAccessWidenerData(Path inputJar) throws IOException {
+        if (!LeafModJsonFactory.isModJar(inputJar)) {
+            return null;
+        }
 
-		ClassTweakerWriter writer = ClassTweakerWriter.create(version);
-		ClassTweakerRemapperVisitor awRemapper = new ClassTweakerRemapperVisitor(
-				writer,
-				remapper,
-				fromNamespace,
-				toNamespace
-		);
-		ClassTweakerReader reader = ClassTweakerReader.create(awRemapper);
-		reader.read(input);
-		return writer.getOutput();
-	}
+        final LeafModJson fabricModJson = LeafModJsonFactory.createFromZip(inputJar);
+        final List<String> classTweakers = List.copyOf(fabricModJson.getClassTweakers().keySet());
 
-	public static AccessWidenerData readAccessWidenerData(Path inputJar) throws IOException {
-		if (!LeafModJsonFactory.isModJar(inputJar)) {
-			return null;
-		}
+        if (classTweakers.isEmpty()) {
+            return null;
+        }
 
-		final LeafModJson fabricModJson = LeafModJsonFactory.createFromZip(inputJar);
-		final List<String> classTweakers = List.copyOf(fabricModJson.getClassTweakers().keySet());
+        if (classTweakers.size() != 1) {
+            throw new UnsupportedOperationException("TODO: support multiple class tweakers");
+        }
 
-		if (classTweakers.isEmpty()) {
-			return null;
-		}
+        final String accessWidenerPath = classTweakers.get(0);
+        final byte[] accessWidener = fabricModJson.getSource().read(accessWidenerPath);
+        final ClassTweakerReader.Header header = ClassTweakerReader.readHeader(accessWidener);
 
-		if (classTweakers.size() != 1) {
-			throw new UnsupportedOperationException("TODO: support multiple class tweakers");
-		}
+        return new AccessWidenerData(accessWidenerPath, header, accessWidener);
+    }
 
-		final String accessWidenerPath = classTweakers.get(0);
-		final byte[] accessWidener = fabricModJson.getSource().read(accessWidenerPath);
-		final ClassTweakerReader.Header header = ClassTweakerReader.readHeader(accessWidener);
+    /**
+     * Remap a mods access widener from intermediary to named, so that loader can apply it in our dev-env.
+     */
+    public static byte[] remapAccessWidener(byte[] input, Remapper remapper, String fromNamespace, String toNamespace) {
+        int version = ClassTweakerReader.readVersion(input);
 
-		return new AccessWidenerData(accessWidenerPath, header, accessWidener);
-	}
+        ClassTweakerWriter writer = ClassTweakerWriter.create(version);
+        ClassTweakerRemapperVisitor awRemapper = new ClassTweakerRemapperVisitor(writer, remapper, fromNamespace,
+            toNamespace);
+        ClassTweakerReader reader = ClassTweakerReader.create(awRemapper);
+        reader.read(input);
+        return writer.getOutput();
+    }
 
-	public record AccessWidenerData(String path, ClassTweakerReader.Header header, byte[] content) {
-	}
+    public record AccessWidenerData(String path, ClassTweakerReader.Header header, byte[] content) {}
 }

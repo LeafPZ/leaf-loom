@@ -64,228 +64,231 @@ import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;
 
 public class JarSplitter {
-	private static final Attributes.Name MANIFEST_SPLIT_ENV_NAME = new Attributes.Name(Constants.Manifest.SPLIT_ENV);
-	private static final Attributes.Name MANIFEST_CLIENT_ENTRIES_NAME = new Attributes.Name(Constants.Manifest.CLIENT_ENTRIES);
+    private static final Attributes.Name MANIFEST_CLIENT_ENTRIES_NAME = new Attributes.Name(
+        Constants.Manifest.CLIENT_ENTRIES);
 
-	final Path inputJar;
+    private static final Attributes.Name MANIFEST_SPLIT_ENV_NAME = new Attributes.Name(Constants.Manifest.SPLIT_ENV);
 
-	public JarSplitter(Path inputJar) {
-		this.inputJar = inputJar;
-	}
+    final Path inputJar;
 
-	@Nullable public Target analyseTarget() {
-		try (FileSystemUtil.Delegate input = FileSystemUtil.getJarFileSystem(inputJar)) {
-			final Manifest manifest = input.fromInputStream(Manifest::new, Constants.Manifest.PATH);
+    public JarSplitter(Path inputJar) {
+        this.inputJar = inputJar;
+    }
 
-			if (!Boolean.parseBoolean(manifest.getMainAttributes().getValue(Constants.Manifest.SPLIT_ENV))) {
-				// Jar was not built with splitting enabled.
-				return null;
-			}
+    // Based off tiny-remapper's MetaInfFixer
+    private static void stripSignatureData(Manifest manifest) {
+        for (Iterator<Attributes> it = manifest.getEntries().values().iterator(); it.hasNext();) {
+            Attributes attrs = it.next();
 
-			final HashSet<String> clientEntries = new HashSet<>(readClientEntries(manifest));
+            for (Iterator<Object> it2 = attrs.keySet().iterator(); it2.hasNext();) {
+                Attributes.Name attrName = (Attributes.Name) it2.next();
+                String name = attrName.toString();
 
-			if (clientEntries.isEmpty()) {
-				// No client entries.
-				return Target.COMMON_ONLY;
-			}
+                if (name.endsWith("-Digest") || name.contains("-Digest-") || name.equals("Magic")) {
+                    it2.remove();
+                }
+            }
 
-			final List<String> entries = new ArrayList<>();
+            if (attrs.isEmpty()) {
+                it.remove();
+            }
+        }
+    }
 
-			// Must collect all the input entries to see if this might be a client only jar.
-			try (Stream<Path> walk = Files.walk(input.get().getPath("/"))) {
-				final Iterator<Path> iterator = walk.iterator();
+    private static void writeBytes(byte[] bytes, Path path) throws IOException {
+        final Path parent = path.getParent();
 
-				while (iterator.hasNext()) {
-					final Path entry = iterator.next();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
 
-					if (!Files.isRegularFile(entry)) {
-						continue;
-					}
+        Files.write(path, bytes);
+    }
 
-					final Path relativePath = input.get().getPath("/").relativize(entry);
+    @Nullable
+    public Target analyseTarget() {
+        try (FileSystemUtil.Delegate input = FileSystemUtil.getJarFileSystem(inputJar)) {
+            final Manifest manifest = input.fromInputStream(Manifest::new, Constants.Manifest.PATH);
 
-					if (relativePath.startsWith("META-INF")) {
-						if (isSignatureData(relativePath)) {
-							// Ignore any signature data
-							continue;
-						}
+            if (!Boolean.parseBoolean(manifest.getMainAttributes().getValue(Constants.Manifest.SPLIT_ENV))) {
+                // Jar was not built with splitting enabled.
+                return null;
+            }
 
-						if (relativePath.endsWith("MANIFEST.MF")) {
-							// Ignore the manifest
-							continue;
-						}
-					}
+            final HashSet<String> clientEntries = new HashSet<>(readClientEntries(manifest));
 
-					entries.add(relativePath.toString());
-				}
-			}
+            if (clientEntries.isEmpty()) {
+                // No client entries.
+                return Target.COMMON_ONLY;
+            }
 
-			for (String entry : entries) {
-				if (!clientEntries.contains(entry)) {
-					// Found a common entry, we need to split,.
-					return Target.SPLIT;
-				}
-			}
+            final List<String> entries = new ArrayList<>();
 
-			// All input entries are client only entries.
-			return Target.CLIENT_ONLY;
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read jar", e);
-		}
-	}
+            // Must collect all the input entries to see if this might be a client only jar.
+            try (Stream<Path> walk = Files.walk(input.get().getPath("/"))) {
+                final Iterator<Path> iterator = walk.iterator();
 
-	public boolean split(Path commonOutputJar, Path clientOutputJar) throws IOException {
-		Files.deleteIfExists(commonOutputJar);
-		Files.deleteIfExists(clientOutputJar);
+                while (iterator.hasNext()) {
+                    final Path entry = iterator.next();
 
-		try (FileSystemUtil.Delegate input = FileSystemUtil.getJarFileSystem(inputJar)) {
-			final Manifest manifest = input.fromInputStream(Manifest::new, Constants.Manifest.PATH);
+                    if (!Files.isRegularFile(entry)) {
+                        continue;
+                    }
 
-			if (!Boolean.parseBoolean(manifest.getMainAttributes().getValue(Constants.Manifest.SPLIT_ENV))) {
-				throw new UnsupportedOperationException("Cannot split jar that has not been built with a split env");
-			}
+                    final Path relativePath = input.get().getPath("/").relativize(entry);
 
-			final List<String> clientEntries = readClientEntries(manifest);
+                    if (relativePath.startsWith("META-INF")) {
+                        if (isSignatureData(relativePath)) {
+                            // Ignore any signature data
+                            continue;
+                        }
 
-			if (clientEntries.isEmpty()) {
-				throw new IllegalStateException("Expected to split jar with no client entries");
-			}
+                        if (relativePath.endsWith("MANIFEST.MF")) {
+                            // Ignore the manifest
+                            continue;
+                        }
+                    }
 
-			try (FileSystemUtil.Delegate commonOutput = FileSystemUtil.getJarFileSystem(commonOutputJar, true);
-					FileSystemUtil.Delegate clientOutput = FileSystemUtil.getJarFileSystem(clientOutputJar, true);
-					Stream<Path> walk = Files.walk(input.get().getPath("/"))) {
-				final Iterator<Path> iterator = walk.iterator();
+                    entries.add(relativePath.toString());
+                }
+            }
 
-				while (iterator.hasNext()) {
-					final Path entry = iterator.next();
+            for (String entry : entries) {
+                if (!clientEntries.contains(entry)) {
+                    // Found a common entry, we need to split,.
+                    return Target.SPLIT;
+                }
+            }
 
-					if (!Files.isRegularFile(entry)) {
-						continue;
-					}
+            // All input entries are client only entries.
+            return Target.CLIENT_ONLY;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read jar", e);
+        }
+    }
 
-					final Path relativePath = input.get().getPath("/").relativize(entry);
+    public boolean split(Path commonOutputJar, Path clientOutputJar) throws IOException {
+        Files.deleteIfExists(commonOutputJar);
+        Files.deleteIfExists(clientOutputJar);
 
-					if (relativePath.startsWith("META-INF")) {
-						if (isSignatureData(relativePath)) {
-							// Strip any signature data
-							continue;
-						}
-					}
+        try (FileSystemUtil.Delegate input = FileSystemUtil.getJarFileSystem(inputJar)) {
+            final Manifest manifest = input.fromInputStream(Manifest::new, Constants.Manifest.PATH);
 
-					final String entryPath = relativePath.toString();
+            if (!Boolean.parseBoolean(manifest.getMainAttributes().getValue(Constants.Manifest.SPLIT_ENV))) {
+                throw new UnsupportedOperationException("Cannot split jar that has not been built with a split env");
+            }
 
-					if (entryPath.equals(Constants.Manifest.PATH)) {
-						continue;
-					}
+            final List<String> clientEntries = readClientEntries(manifest);
 
-					final FileSystemUtil.Delegate target = clientEntries.contains(entryPath) ? clientOutput : commonOutput;
-					final Path outputEntry = target.getPath(entryPath);
-					final Path outputParent = outputEntry.getParent();
+            if (clientEntries.isEmpty()) {
+                throw new IllegalStateException("Expected to split jar with no client entries");
+            }
 
-					if (outputParent != null) {
-						Files.createDirectories(outputParent);
-					}
+            try (FileSystemUtil.Delegate commonOutput = FileSystemUtil.getJarFileSystem(commonOutputJar, true);
+                 FileSystemUtil.Delegate clientOutput = FileSystemUtil.getJarFileSystem(clientOutputJar, true);
+                 Stream<Path> walk = Files.walk(input.get().getPath("/")))
+            {
+                final Iterator<Path> iterator = walk.iterator();
 
-					Files.copy(entry, outputEntry, StandardCopyOption.COPY_ATTRIBUTES);
-				}
+                while (iterator.hasNext()) {
+                    final Path entry = iterator.next();
 
-				/*
-				Write the manifest to both jars
-				- Remove signature data
-				- Remove split data as its already been split.
-				- Add env name.
-				 */
-				final Manifest outManifest = new Manifest(manifest);
-				final Attributes attributes = outManifest.getMainAttributes();
-				stripSignatureData(outManifest);
+                    if (!Files.isRegularFile(entry)) {
+                        continue;
+                    }
 
-				attributes.remove(Attributes.Name.SIGNATURE_VERSION);
-				Objects.requireNonNull(attributes.remove(MANIFEST_SPLIT_ENV_NAME));
-				Objects.requireNonNull(attributes.remove(MANIFEST_CLIENT_ENTRIES_NAME));
+                    final Path relativePath = input.get().getPath("/").relativize(entry);
 
-				writeBytes(writeWithEnvironment(outManifest, "common"), commonOutput.getPath(Constants.Manifest.PATH));
-				writeBytes(writeWithEnvironment(outManifest, "client"), clientOutput.getPath(Constants.Manifest.PATH));
-			}
-		}
+                    if (relativePath.startsWith("META-INF")) {
+                        if (isSignatureData(relativePath)) {
+                            // Strip any signature data
+                            continue;
+                        }
+                    }
 
-		return true;
-	}
+                    final String entryPath = relativePath.toString();
 
-	private byte[] writeWithEnvironment(Manifest in, String value) throws IOException {
-		final Manifest manifest = new Manifest(in);
-		final Attributes attributes = manifest.getMainAttributes();
-		attributes.putValue(Constants.Manifest.SPLIT_ENV_NAME, value);
+                    if (entryPath.equals(Constants.Manifest.PATH)) {
+                        continue;
+                    }
 
-		final ByteArrayOutputStream out = new ByteArrayOutputStream();
-		manifest.write(out);
-		return out.toByteArray();
-	}
+                    final FileSystemUtil.Delegate target = clientEntries.contains(entryPath) ? clientOutput
+                        : commonOutput;
+                    final Path outputEntry = target.getPath(entryPath);
+                    final Path outputParent = outputEntry.getParent();
 
-	private List<String> readClientEntries(Manifest manifest) {
-		final Attributes attributes = manifest.getMainAttributes();
-		final String clientEntriesValue = attributes.getValue(Constants.Manifest.CLIENT_ENTRIES);
+                    if (outputParent != null) {
+                        Files.createDirectories(outputParent);
+                    }
 
-		if (clientEntriesValue == null || clientEntriesValue.isBlank()) {
-			return Collections.emptyList();
-		}
+                    Files.copy(entry, outputEntry, StandardCopyOption.COPY_ATTRIBUTES);
+                }
 
-		return Arrays.stream(clientEntriesValue.split(";")).toList();
-	}
+                /*
+                 * Write the manifest to both jars
+                 * - Remove signature data
+                 * - Remove split data as its already been split.
+                 * - Add env name.
+                 */
+                final Manifest outManifest = new Manifest(manifest);
+                final Attributes attributes = outManifest.getMainAttributes();
+                stripSignatureData(outManifest);
 
-	private boolean isSignatureData(Path path) {
-		final String fileName = path.getFileName().toString();
-		return fileName.endsWith(".SF")
-				|| fileName.endsWith(".DSA")
-				|| fileName.endsWith(".RSA")
-				|| fileName.startsWith("SIG-");
-	}
+                attributes.remove(Attributes.Name.SIGNATURE_VERSION);
+                Objects.requireNonNull(attributes.remove(MANIFEST_SPLIT_ENV_NAME));
+                Objects.requireNonNull(attributes.remove(MANIFEST_CLIENT_ENTRIES_NAME));
 
-	// Based off tiny-remapper's MetaInfFixer
-	private static void stripSignatureData(Manifest manifest) {
-		for (Iterator<Attributes> it = manifest.getEntries().values().iterator(); it.hasNext(); ) {
-			Attributes attrs = it.next();
+                writeBytes(writeWithEnvironment(outManifest, "common"), commonOutput.getPath(Constants.Manifest.PATH));
+                writeBytes(writeWithEnvironment(outManifest, "client"), clientOutput.getPath(Constants.Manifest.PATH));
+            }
+        }
 
-			for (Iterator<Object> it2 = attrs.keySet().iterator(); it2.hasNext(); ) {
-				Attributes.Name attrName = (Attributes.Name) it2.next();
-				String name = attrName.toString();
+        return true;
+    }
 
-				if (name.endsWith("-Digest") || name.contains("-Digest-") || name.equals("Magic")) {
-					it2.remove();
-				}
-			}
+    private boolean isSignatureData(Path path) {
+        final String fileName = path.getFileName().toString();
+        return fileName.endsWith(".SF") || fileName.endsWith(".DSA") || fileName.endsWith(".RSA")
+            || fileName.startsWith("SIG-");
+    }
 
-			if (attrs.isEmpty()) it.remove();
-		}
-	}
+    private List<String> readClientEntries(Manifest manifest) {
+        final Attributes attributes = manifest.getMainAttributes();
+        final String clientEntriesValue = attributes.getValue(Constants.Manifest.CLIENT_ENTRIES);
 
-	private static void writeBytes(byte[] bytes, Path path) throws IOException {
-		final Path parent = path.getParent();
+        if (clientEntriesValue == null || clientEntriesValue.isBlank()) {
+            return Collections.emptyList();
+        }
 
-		if (parent != null) {
-			Files.createDirectories(parent);
-		}
+        return Arrays.stream(clientEntriesValue.split(";")).toList();
+    }
 
-		Files.write(path, bytes);
-	}
+    private byte[] writeWithEnvironment(Manifest in, String value) throws IOException {
+        final Manifest manifest = new Manifest(in);
+        final Attributes attributes = manifest.getMainAttributes();
+        attributes.putValue(Constants.Manifest.SPLIT_ENV_NAME, value);
 
-	public enum Target {
-		COMMON_ONLY(true, false),
-		CLIENT_ONLY(false, true),
-		SPLIT(true, true);
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        manifest.write(out);
+        return out.toByteArray();
+    }
 
-		final boolean common, client;
+    public enum Target {
+        CLIENT_ONLY(false, true), COMMON_ONLY(true, false), SPLIT(true, true);
 
-		Target(boolean common, boolean client) {
-			this.common = common;
-			this.client = client;
-		}
+        final boolean common, client;
 
-		public boolean common() {
-			return common;
-		}
+        Target(boolean common, boolean client) {
+            this.common = common;
+            this.client = client;
+        }
 
-		public boolean client() {
-			return client;
-		}
-	}
+        public boolean client() {
+            return client;
+        }
+
+        public boolean common() {
+            return common;
+        }
+    }
 }

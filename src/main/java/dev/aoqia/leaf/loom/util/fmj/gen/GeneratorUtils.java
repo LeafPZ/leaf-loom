@@ -54,107 +54,120 @@ import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 
 public final class GeneratorUtils {
-	private GeneratorUtils() {
-	}
+    private GeneratorUtils() {
+    }
 
-	public static void add(JsonObject json, String key, Property<String> property) {
-		add(json, key, property, JsonPrimitive::new);
-	}
+    public static <V> void add(JsonObject json, String key, ListProperty<V> property,
+        Function<List<V>, JsonElement> converter)
+    {
+        if (property.get().isEmpty()) {
+            return;
+        }
 
-	public static void addRequired(JsonObject json, String key, Property<String> property) {
-		addRequired(json, key, property, JsonPrimitive::new);
-	}
+        json.add(key, converter.apply(property.get()));
+    }
 
-	public static void addStringOrArray(JsonObject json, String key, ListProperty<String> property) {
-		if (property.get().isEmpty()) {
-			return;
-		}
+    public static <K, V> void add(JsonObject json, String key, MapProperty<K, V> property,
+        Function<Map<K, V>, JsonElement> converter)
+    {
+        if (property.get().isEmpty()) {
+            return;
+        }
 
-		add(json, key, property, GeneratorUtils::stringOrArray);
-	}
+        json.add(key, converter.apply(property.get()));
+    }
 
-	public static <V> void addSingleOrArray(JsonObject json, String key, ListProperty<V> property, Function<V, JsonElement> converter) {
-		if (property.get().isEmpty()) {
-			return;
-		}
+    public static void add(JsonObject json, String key, MapProperty<String, String> property) {
+        if (property.get().isEmpty()) {
+            return;
+        }
 
-		add(json, key, property, entries -> singleOrArray(entries, converter));
-	}
+        add(json, key, property, GeneratorUtils::map);
+    }
 
-	public static <V> void addArray(JsonObject json, String key, ListProperty<V> property, Function<V, JsonElement> converter) {
-		if (property.get().isEmpty()) {
-			return;
-		}
+    public static <V, P extends Property<V>> void add(JsonObject json, String key, P property,
+        Function<V, JsonElement> converter)
+    {
+        if (!property.isPresent()) {
+            return;
+        }
 
-		add(json, key, property, entries -> array(entries, converter));
-	}
+        json.add(key, converter.apply(property.get()));
+    }
 
-	public static <V, P extends Property<V>> void add(JsonObject json, String key, P property, Function<V, JsonElement> converter) {
-		if (!property.isPresent()) {
-			return;
-		}
+    public static void add(JsonObject json, String key, Property<String> property) {
+        add(json, key, property, JsonPrimitive::new);
+    }
 
-		json.add(key, converter.apply(property.get()));
-	}
+    public static <V> void addArray(JsonObject json, String key, ListProperty<V> property,
+        Function<V, JsonElement> converter)
+    {
+        if (property.get().isEmpty()) {
+            return;
+        }
 
-	public static <V, P extends Property<V>> void addRequired(JsonObject json, String key, P property, Function<V, JsonElement> converter) {
-		property.get(); // Ensure it's present
-		add(json, key, property, converter);
-	}
+        add(json, key, property, entries -> array(entries, converter));
+    }
 
-	public static <V> void add(JsonObject json, String key, ListProperty<V> property, Function<List<V>, JsonElement> converter) {
-		if (property.get().isEmpty()) {
-			return;
-		}
+    public static <V, P extends Property<V>> void addRequired(JsonObject json, String key, P property,
+        Function<V, JsonElement> converter)
+    {
+        // Ensure it's present
+        property.get();
+        add(json, key, property, converter);
+    }
 
-		json.add(key, converter.apply(property.get()));
-	}
+    public static void addRequired(JsonObject json, String key, Property<String> property) {
+        addRequired(json, key, property, JsonPrimitive::new);
+    }
 
-	public static <K, V> void add(JsonObject json, String key, MapProperty<K, V> property, Function<Map<K, V>, JsonElement> converter) {
-		if (property.get().isEmpty()) {
-			return;
-		}
+    public static <V> void addSingleOrArray(JsonObject json, String key, ListProperty<V> property,
+        Function<V, JsonElement> converter)
+    {
+        if (property.get().isEmpty()) {
+            return;
+        }
 
-		json.add(key, converter.apply(property.get()));
-	}
+        add(json, key, property, entries -> singleOrArray(entries, converter));
+    }
 
-	public static void add(JsonObject json, String key, MapProperty<String, String> property) {
-		if (property.get().isEmpty()) {
-			return;
-		}
+    public static void addStringOrArray(JsonObject json, String key, ListProperty<String> property) {
+        if (property.get().isEmpty()) {
+            return;
+        }
 
-		add(json, key, property, GeneratorUtils::map);
-	}
+        add(json, key, property, GeneratorUtils::stringOrArray);
+    }
 
-	public static JsonElement stringOrArray(List<String> strings) {
-		return singleOrArray(strings, JsonPrimitive::new);
-	}
+    public static <V> JsonElement array(List<V> entries, Function<V, JsonElement> converter) {
+        JsonArray array = new JsonArray();
 
-	public static <V> JsonElement singleOrArray(List<V> entries, Function<V, JsonElement> converter) {
-		if (entries.size() == 1) {
-			return converter.apply(entries.getFirst());
-		}
+        for (V entry : entries) {
+            array.add(converter.apply(entry));
+        }
 
-		return array(entries, converter);
-	}
+        return array;
+    }
 
-	public static <V> JsonElement array(List<V> entries, Function<V, JsonElement> converter) {
-		JsonArray array = new JsonArray();
+    public static JsonObject map(Map<String, String> map) {
+        JsonObject obj = new JsonObject();
 
-		for (V entry : entries) {
-			array.add(converter.apply(entry));
-		}
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            obj.addProperty(entry.getKey(), entry.getValue());
+        }
 
-		return array;
-	}
+        return obj;
+    }
 
-	public static JsonObject map(Map<String, String> map) {
-		JsonObject obj = new JsonObject();
+    public static <V> JsonElement singleOrArray(List<V> entries, Function<V, JsonElement> converter) {
+        if (entries.size() == 1) {
+            return converter.apply(entries.getFirst());
+        }
 
-		for (Map.Entry<String, String> entry : map.entrySet()) {
-			obj.addProperty(entry.getKey(), entry.getValue());
-		}
+        return array(entries, converter);
+    }
 
-		return obj;
-	}
+    public static JsonElement stringOrArray(List<String> strings) {
+        return singleOrArray(strings, JsonPrimitive::new);
+    }
 }

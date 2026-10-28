@@ -64,68 +64,77 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public final class MigrateMappingsService extends Service<MigrateMappingsService.Options> {
-	private static final Logger LOGGER = LoggerFactory.getLogger(MigrateMappingsService.class);
-	private static final ServiceType<Options, MigrateMappingsService> TYPE = new ServiceType<>(Options.class, MigrateMappingsService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MigrateMappingsService.class);
 
-	public MigrateMappingsService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    private static final ServiceType<Options,
+        MigrateMappingsService> TYPE = new ServiceType<>(Options.class, MigrateMappingsService.class);
 
-	public interface Options extends Service.Options {
-		@Nested
-		Property<MappingsService.Options> getSourceMappings();
-		@Nested
-		Property<TinyMappingsService.Options> getTargetMappings();
-		@Classpath
-		ConfigurableFileCollection getClasspath();
-	}
+    public MigrateMappingsService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	public static Provider<Options> createOptions(Project project, Provider<String> targetMappings) {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final Provider<String> from = project.provider(() -> "intermediary");
-		final Provider<String> to = project.provider(() -> "named");
+    public static Provider<Options> createOptions(Project project, Provider<String> targetMappings) {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final Provider<String> from = project.provider(() -> "intermediary");
+        final Provider<String> to = project.provider(() -> "named");
 
-		ConfigurableFileCollection classpath = project.getObjects().fileCollection();
-		classpath.from(project.getConfigurations().named(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME));
-		// Question: why are both of these needed?
-		classpath.from(extension.getZomboidJars(MappingsNamespace.INTERMEDIARY));
-		classpath.from(extension.getZomboidJars(MappingsNamespace.NAMED));
+        ConfigurableFileCollection classpath = project.getObjects().fileCollection();
+        classpath.from(project.getConfigurations().named(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME));
+        // Question: why are both of these needed?
+        classpath.from(extension.getZomboidJars(MappingsNamespace.INTERMEDIARY));
+        classpath.from(extension.getZomboidJars(MappingsNamespace.NAMED));
 
-		return TYPE.create(project, (o) -> {
-			Provider<File> targetMappingsFile = getTargetMappingsFile(project, targetMappings.get());
-			o.getSourceMappings().set(MappingsService.createOptionsWithProjectMappings(project, from, to));
-			o.getTargetMappings().set(TinyMappingsService.createOptions(project, targetMappingsFile, "mappings/mappings.tiny"));
-			o.getClasspath().from(classpath);
-		});
-	}
+        return TYPE.create(project, (o) -> {
+            Provider<File> targetMappingsFile = getTargetMappingsFile(project, targetMappings.get());
+            o.getSourceMappings().set(MappingsService.createOptionsWithProjectMappings(project, from, to));
+            o.getTargetMappings()
+                .set(TinyMappingsService.createOptions(project, targetMappingsFile, "mappings/mappings.tiny"));
+            o.getClasspath().from(classpath);
+        });
+    }
 
-	public MappingsService getSourceMappingsService() {
-		return getServiceFactory().get(getOptions().getSourceMappings().get());
-	}
+    /**
+     * Return a mappings file for the requested mappings.
+     */
+    private static Provider<File> getTargetMappingsFile(Project project, String mappings) {
+        if (mappings == null || mappings.isEmpty()) {
+            throw new IllegalArgumentException(
+                "No mappings were specified. Use --mappings=\"\" to specify target mappings");
+        }
 
-	public TinyMappingsService getTargetMappingsService() {
-		return getServiceFactory().get(getOptions().getTargetMappings().get());
-	}
-
-	public FileCollection getClasspath() {
-		return getOptions().getClasspath();
-	}
-
-	/**
-	 * Return a mappings file for the requested mappings.
-	 */
-	private static Provider<File> getTargetMappingsFile(Project project, String mappings) {
-		if (mappings == null || mappings.isEmpty()) {
-			throw new IllegalArgumentException("No mappings were specified. Use --mappings=\"\" to specify target mappings");
-		}
-
-		try {
+        try {
             Dependency dependency = project.getDependencies().create(mappings);
-            return project.provider(() -> project.getConfigurations().detachedConfiguration(dependency).getSingleFile());
-		} catch (IllegalDependencyNotation ignored) {
-			LOGGER.info("Could not locate mappings, presuming V2 Yarn");
-			String mavenNotation = "dev.aoqia.leaf:yarn:%s:v2".formatted(mappings);
-			return project.provider(() -> project.getConfigurations().detachedConfiguration(project.getDependencies().create(mavenNotation)).getSingleFile());
-		}
-	}
+            return project
+                .provider(() -> project.getConfigurations().detachedConfiguration(dependency).getSingleFile());
+        } catch (IllegalDependencyNotation ignored) {
+            LOGGER.info("Could not locate mappings, presuming V2 Yarn");
+            String mavenNotation = "dev.aoqia.leaf:yarn:%s:v2".formatted(mappings);
+            return project.provider(() -> project.getConfigurations()
+                .detachedConfiguration(project.getDependencies().create(mavenNotation))
+                .getSingleFile());
+        }
+    }
+
+    public FileCollection getClasspath() {
+        return getOptions().getClasspath();
+    }
+
+    public MappingsService getSourceMappingsService() {
+        return getServiceFactory().get(getOptions().getSourceMappings().get());
+    }
+
+    public TinyMappingsService getTargetMappingsService() {
+        return getServiceFactory().get(getOptions().getTargetMappings().get());
+    }
+
+    public interface Options extends Service.Options {
+        @Classpath
+        ConfigurableFileCollection getClasspath();
+
+        @Nested
+        Property<MappingsService.Options> getSourceMappings();
+
+        @Nested
+        Property<TinyMappingsService.Options> getTargetMappings();
+    }
 }

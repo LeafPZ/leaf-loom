@@ -59,100 +59,102 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public abstract class ClientEntriesService<O extends ClientEntriesService.Options> extends Service<O> {
-	public interface Options extends Service.Options {
-	}
+    public ClientEntriesService(O options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	public ClientEntriesService(O options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    static List<String> getRootPaths(Set<File> files) {
+        return files.stream().map(root -> {
+            String rootPath = root.getAbsolutePath().replace("\\", "/");
 
-	public abstract List<String> getClientOnlyEntries();
+            if (rootPath.charAt(rootPath.length() - 1) != '/') {
+                rootPath += '/';
+            }
 
-	public static class Source extends ClientEntriesService<Source.Options> {
-		public static final ServiceType<Source.Options, Source> TYPE = new ServiceType<>(Source.Options.class, Source.class);
+            return rootPath;
+        }).toList();
+    }
 
-		public interface Options extends ClientEntriesService.Options {
-			@InputFiles
-			@PathSensitive(PathSensitivity.ABSOLUTE)
-			ConfigurableFileCollection getAllSourceFiles();
-			@InputFiles
-			@PathSensitive(PathSensitivity.ABSOLUTE)
-			ConfigurableFileCollection getSourceDirectories();
-		}
+    static Function<File, String> relativePath(List<String> rootPaths) {
+        return file -> {
+            String s = file.getAbsolutePath().replace("\\", "/");
 
-		public static Provider<Options> createOptions(Project project, SourceSet sourceSet) {
-			return TYPE.create(project, o -> {
-				o.getAllSourceFiles().from(sourceSet.getAllSource().getAsFileTree());
-				o.getSourceDirectories().from(sourceSet.getAllSource().getSourceDirectories());
-			});
-		}
+            for (String rootPath : rootPaths) {
+                if (s.startsWith(rootPath)) {
+                    s = s.substring(rootPath.length());
+                }
+            }
 
-		public Source(Source.Options options, ServiceFactory serviceFactory) {
-			super(options, serviceFactory);
-		}
+            return s;
+        };
+    }
 
-		@Override
-		public List<String> getClientOnlyEntries() {
-			return getOptions().getAllSourceFiles().getFiles().stream()
-					.map(relativePath(getRootPaths(getOptions().getSourceDirectories().getFiles())))
-					.toList();
-		}
-	}
+    public abstract List<String> getClientOnlyEntries();
 
-	public static class Classes extends ClientEntriesService<Classes.Options> {
-		public static final ServiceType<Classes.Options, Classes> TYPE = new ServiceType<>(Classes.Options.class, Classes.class);
+    public static class Classes extends ClientEntriesService<Classes.Options> {
+        public static final ServiceType<Classes.Options,
+            Classes> TYPE = new ServiceType<>(Classes.Options.class, Classes.class);
 
-		public interface Options extends ClientEntriesService.Options {
-			@InputFiles
-			@PathSensitive(PathSensitivity.ABSOLUTE)
-			ConfigurableFileCollection getAllOutputDirs();
-		}
+        public Classes(Options options, ServiceFactory serviceFactory) {
+            super(options, serviceFactory);
+        }
 
-		public static Provider<Classes.Options> createOptions(Project project, SourceSet sourceSet) {
-			return TYPE.create(project, o -> {
-				o.getAllOutputDirs().from(sourceSet.getOutput().getClassesDirs());
-				o.getAllOutputDirs().from(sourceSet.getOutput().getResourcesDir());
-			});
-		}
+        public static Provider<Classes.Options> createOptions(Project project, SourceSet sourceSet) {
+            return TYPE.create(project, o -> {
+                o.getAllOutputDirs().from(sourceSet.getOutput().getClassesDirs());
+                o.getAllOutputDirs().from(sourceSet.getOutput().getResourcesDir());
+            });
+        }
 
-		public Classes(Options options, ServiceFactory serviceFactory) {
-			super(options, serviceFactory);
-		}
+        @Override
+        public List<String> getClientOnlyEntries() {
+            final Set<File> outputFiles = getOptions().getAllOutputDirs().getAsFileTree().getFiles();
+            final List<String> rootPaths = getRootPaths(getOptions().getAllOutputDirs().getFiles());
+            return outputFiles.stream().map(relativePath(rootPaths)).toList();
+        }
 
-		@Override
-		public List<String> getClientOnlyEntries() {
-			final Set<File> outputFiles = getOptions().getAllOutputDirs().getAsFileTree().getFiles();
-			final List<String> rootPaths = getRootPaths(getOptions().getAllOutputDirs().getFiles());
-			return outputFiles.stream()
-					.map(relativePath(rootPaths))
-					.toList();
-		}
-	}
+        public interface Options extends ClientEntriesService.Options {
+            @InputFiles
+            @PathSensitive(PathSensitivity.ABSOLUTE)
+            ConfigurableFileCollection getAllOutputDirs();
+        }
+    }
 
-	static List<String> getRootPaths(Set<File> files) {
-		return files.stream()
-				.map(root -> {
-					String rootPath = root.getAbsolutePath().replace("\\", "/");
+    public interface Options extends Service.Options {
+    }
 
-					if (rootPath.charAt(rootPath.length() - 1) != '/') {
-						rootPath += '/';
-					}
+    public static class Source extends ClientEntriesService<Source.Options> {
+        public static final ServiceType<Source.Options,
+            Source> TYPE = new ServiceType<>(Source.Options.class, Source.class);
 
-					return rootPath;
-				}).toList();
-	}
+        public Source(Source.Options options, ServiceFactory serviceFactory) {
+            super(options, serviceFactory);
+        }
 
-	static Function<File, String> relativePath(List<String> rootPaths) {
-		return file -> {
-			String s = file.getAbsolutePath().replace("\\", "/");
+        public static Provider<Options> createOptions(Project project, SourceSet sourceSet) {
+            return TYPE.create(project, o -> {
+                o.getAllSourceFiles().from(sourceSet.getAllSource().getAsFileTree());
+                o.getSourceDirectories().from(sourceSet.getAllSource().getSourceDirectories());
+            });
+        }
 
-			for (String rootPath : rootPaths) {
-				if (s.startsWith(rootPath)) {
-					s = s.substring(rootPath.length());
-				}
-			}
+        @Override
+        public List<String> getClientOnlyEntries() {
+            return getOptions().getAllSourceFiles()
+                .getFiles()
+                .stream()
+                .map(relativePath(getRootPaths(getOptions().getSourceDirectories().getFiles())))
+                .toList();
+        }
 
-			return s;
-		};
-	}
+        public interface Options extends ClientEntriesService.Options {
+            @InputFiles
+            @PathSensitive(PathSensitivity.ABSOLUTE)
+            ConfigurableFileCollection getAllSourceFiles();
+
+            @InputFiles
+            @PathSensitive(PathSensitivity.ABSOLUTE)
+            ConfigurableFileCollection getSourceDirectories();
+        }
+    }
 }

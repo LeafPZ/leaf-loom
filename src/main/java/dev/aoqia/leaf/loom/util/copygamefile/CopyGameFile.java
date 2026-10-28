@@ -43,18 +43,20 @@ import dev.aoqia.leaf.loom.util.Checksum;
 
 public final class CopyGameFile {
     private static final Logger LOGGER = LoggerFactory.getLogger(CopyGameFile.class);
-    private final Path path;
-    private final String expectedHash;
-    private final Duration maxAge;
-    private final boolean forced;
-    private final boolean fallback;
+
     private final int attempt;
+
+    private final String expectedHash;
+
+    private final boolean fallback;
+    private final boolean forced;
+    private final Duration maxAge;
+    private final Path path;
     private final CopyGameFileProgressListener progressListener;
 
-    CopyGameFile(
-        Path path, String expectedHash, Duration maxAge, boolean forced, boolean fallback, int attempt,
-        CopyGameFileProgressListener progressListener
-    ) {
+    CopyGameFile(Path path, String expectedHash, Duration maxAge, boolean forced, boolean fallback, int attempt,
+        CopyGameFileProgressListener progressListener)
+    {
         this.path = path;
         this.expectedHash = expectedHash;
         this.maxAge = maxAge;
@@ -70,11 +72,31 @@ public final class CopyGameFile {
 
     /**
      * This function is faster than the normal exists check.
+     *
      * @param path Path to check.
      * @return True if the file exists.
      */
     private static boolean exists(Path path) {
         return path.getFileSystem() == FileSystems.getDefault() ? path.toFile().exists() : Files.exists(path);
+    }
+
+    void copyGameFile(Path output) throws IOException {
+        boolean required = requiresCopy(output);
+
+        if (!required) {
+            // Does not require download, we are done here.
+            progressListener.onEnd();
+            return;
+        }
+
+        try {
+            doCopyGameFile(output);
+        } catch (Throwable throwable) {
+            tryCleanup(output);
+            throw error(throwable, "Failed to copy file from (%s) to (%s)", path, output);
+        } finally {
+            progressListener.onEnd();
+        }
     }
 
     private void copyGameFileToPath(Path output) throws IOException {
@@ -91,10 +113,9 @@ public final class CopyGameFile {
         final long length = this.path.toFile().length();
         AtomicLong totalBytes = new AtomicLong(0);
 
-        try (
-            InputStream inputStream = Files.newInputStream(this.path, StandardOpenOption.READ);
-            OutputStream outputStream = Files.newOutputStream(partFile, StandardOpenOption.CREATE_NEW)
-        ) {
+        try (InputStream inputStream = Files.newInputStream(this.path, StandardOpenOption.READ);
+             OutputStream outputStream = Files.newOutputStream(partFile, StandardOpenOption.CREATE_NEW))
+        {
             copyWithCallback(inputStream, outputStream, value -> {
                 progressListener.onProgress(totalBytes.addAndGet(value), length);
             });
@@ -112,8 +133,7 @@ public final class CopyGameFile {
 
                 if (actualLength != length) {
                     throw error(
-                        "Unexpected file length of %d bytes, expected %d bytes".formatted(actualLength, length)
-                    );
+                        "Unexpected file length of %d bytes, expected %d bytes".formatted(actualLength, length));
                 }
             } catch (IOException e) {
                 throw error(e);
@@ -142,137 +162,6 @@ public final class CopyGameFile {
         }
     }
 
-    private Path getPartFile(Path output) {
-        return output.resolveSibling(output.getFileName() + ".part");
-    }
-
-    private IOException error(Throwable throwable) {
-        return new IOException(throwable);
-    }
-
-    private boolean requiresCopy(Path output) throws IOException {
-        final boolean locked = getAndResetLock(output);
-
-        if (forced || !exists(output)) {
-            // File does not exist, or we are forced to download again.
-            return true;
-        }
-
-        if (locked && attempt == 1) {
-            LOGGER.warn(
-                "Forcing copy of game file {} as existing lock file was found. This may happen if"
-                    + " the gradle build " + "was " + "forcefully canceled.",
-                output
-            );
-            return true;
-        }
-
-        if (expectedHash != null) {
-            final String hashAttribute = readHash(output).orElse("");
-
-            if (expectedHash.equalsIgnoreCase(hashAttribute)) {
-                // File has a matching hash attribute, assume file intact.
-                return false;
-            }
-
-            if (isHashValid(output)) {
-                // Valid hash, no need to re-download
-                writeHash(output, expectedHash);
-                return false;
-            }
-
-            LOGGER.info("Found existing file ({}) to copy with unexpected hash.", output);
-        }
-
-        // noinspection RedundantIfStatement
-        if (!maxAge.equals(Duration.ZERO) && !isOutdated(output)) {
-            return false;
-        }
-
-        // Default to re-downloading, may check the etag
-        return true;
-    }
-
-    private boolean isHashValid(Path path) {
-        int i = expectedHash.indexOf(':');
-        String algorithm = expectedHash.substring(0, i);
-        String hash = expectedHash.substring(i + 1);
-
-        try {
-            if (!algorithm.equals("sha1")) {
-                throw error("Unsupported hash algorithm (%s)", algorithm);
-            }
-
-            return Checksum.of(path).sha1().hex().equalsIgnoreCase(hash);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private boolean isOutdated(Path path) throws IOException {
-        try {
-            final FileTime lastModified = Files.getLastModifiedTime(path);
-            return lastModified.toInstant().isBefore(Instant.now().minus(maxAge));
-        } catch (IOException e) {
-            throw error(e, "Failed to check if (%s) is outdated", path);
-        }
-    }
-
-    private Optional<String> readHash(Path output) {
-        try {
-            return AttributeHelper.readAttribute(output, "LoomHash");
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-    }
-
-    private void writeHash(Path output, String value) throws IOException {
-        try {
-            AttributeHelper.writeAttribute(output, "LoomHash", value);
-        } catch (IOException e) {
-            throw error(e, "Failed to write hash to (%s)", output);
-        }
-    }
-
-    private boolean getAndResetLock(Path output) throws IOException {
-        final Path lock = getLockFile(output);
-        final boolean exists = exists(lock);
-
-        if (exists) {
-            try {
-                Files.delete(lock);
-            } catch (IOException e) {
-                throw error(e, "Failed to release lock on %s", lock);
-            }
-        }
-
-        return exists;
-    }
-
-    private Path getLockFile(Path output) {
-        return output.resolveSibling(output.getFileName() + ".lock");
-    }
-
-    private void tryCleanup(Path output) {
-        try {
-            Files.deleteIfExists(output);
-        } catch (IOException ignored) {
-            // ignored
-        }
-
-        try {
-            Files.deleteIfExists(getLockFile(output));
-        } catch (IOException ignored) {
-            // ignored
-        }
-
-        try {
-            Files.deleteIfExists(getPartFile(output));
-        } catch (IOException ignored) {
-            // ignored
-        }
-    }
-
     private void createLock(Path output) throws IOException {
         final Path lock = getLockFile(output);
 
@@ -280,25 +169,6 @@ public final class CopyGameFile {
             Files.createFile(lock);
         } catch (IOException e) {
             throw error(e, "Failed to acquire lock on %s", lock);
-        }
-    }
-
-    void copyGameFile(Path output) throws IOException {
-        boolean required = requiresCopy(output);
-
-        if (!required) {
-            // Does not require download, we are done here.
-            progressListener.onEnd();
-            return;
-        }
-
-        try {
-            doCopyGameFile(output);
-        } catch (Throwable throwable) {
-            tryCleanup(output);
-            throw error(throwable, "Failed to copy file from (%s) to (%s)", path, output);
-        } finally {
-            progressListener.onEnd();
         }
     }
 
@@ -357,7 +227,135 @@ public final class CopyGameFile {
         return new IOException(String.format(Locale.ENGLISH, message, args));
     }
 
+    private IOException error(Throwable throwable) {
+        return new IOException(throwable);
+    }
+
     private IOException error(Throwable throwable, String message, Object... args) {
         return new IOException(message.formatted(args), throwable);
+    }
+
+    private boolean getAndResetLock(Path output) throws IOException {
+        final Path lock = getLockFile(output);
+        final boolean exists = exists(lock);
+
+        if (exists) {
+            try {
+                Files.delete(lock);
+            } catch (IOException e) {
+                throw error(e, "Failed to release lock on %s", lock);
+            }
+        }
+
+        return exists;
+    }
+
+    private Path getLockFile(Path output) {
+        return output.resolveSibling(output.getFileName() + ".lock");
+    }
+
+    private Path getPartFile(Path output) {
+        return output.resolveSibling(output.getFileName() + ".part");
+    }
+
+    private boolean isHashValid(Path path) {
+        int i = expectedHash.indexOf(':');
+        String algorithm = expectedHash.substring(0, i);
+        String hash = expectedHash.substring(i + 1);
+
+        try {
+            if (!algorithm.equals("sha1")) {
+                throw error("Unsupported hash algorithm (%s)", algorithm);
+            }
+
+            return Checksum.of(path).sha1().hex().equalsIgnoreCase(hash);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private boolean isOutdated(Path path) throws IOException {
+        try {
+            final FileTime lastModified = Files.getLastModifiedTime(path);
+            return lastModified.toInstant().isBefore(Instant.now().minus(maxAge));
+        } catch (IOException e) {
+            throw error(e, "Failed to check if (%s) is outdated", path);
+        }
+    }
+
+    private Optional<String> readHash(Path output) {
+        try {
+            return AttributeHelper.readAttribute(output, "LoomHash");
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    private boolean requiresCopy(Path output) throws IOException {
+        final boolean locked = getAndResetLock(output);
+
+        if (forced || !exists(output)) {
+            // File does not exist, or we are forced to download again.
+            return true;
+        }
+
+        if (locked && attempt == 1) {
+            LOGGER.warn("Forcing copy of game file {} as existing lock file was found. This may happen if"
+                + " the gradle build " + "was " + "forcefully canceled.", output);
+            return true;
+        }
+
+        if (expectedHash != null) {
+            final String hashAttribute = readHash(output).orElse("");
+
+            if (expectedHash.equalsIgnoreCase(hashAttribute)) {
+                // File has a matching hash attribute, assume file intact.
+                return false;
+            }
+
+            if (isHashValid(output)) {
+                // Valid hash, no need to re-download
+                writeHash(output, expectedHash);
+                return false;
+            }
+
+            LOGGER.info("Found existing file ({}) to copy with unexpected hash.", output);
+        }
+
+        // noinspection RedundantIfStatement
+        if (!maxAge.equals(Duration.ZERO) && !isOutdated(output)) {
+            return false;
+        }
+
+        // Default to re-downloading, may check the etag
+        return true;
+    }
+
+    private void tryCleanup(Path output) {
+        try {
+            Files.deleteIfExists(output);
+        } catch (IOException ignored) {
+            // ignored
+        }
+
+        try {
+            Files.deleteIfExists(getLockFile(output));
+        } catch (IOException ignored) {
+            // ignored
+        }
+
+        try {
+            Files.deleteIfExists(getPartFile(output));
+        } catch (IOException ignored) {
+            // ignored
+        }
+    }
+
+    private void writeHash(Path output, String value) throws IOException {
+        try {
+            AttributeHelper.writeAttribute(output, "LoomHash", value);
+        } catch (IOException e) {
+            throw error(e, "Failed to write hash to (%s)", output);
+        }
     }
 }

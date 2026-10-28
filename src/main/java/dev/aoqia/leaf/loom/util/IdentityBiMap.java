@@ -45,22 +45,22 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 
 public final class IdentityBiMap<K, V> {
-	private final Map<K, V> keyToValue = new IdentityHashMap<>();
-	private final Map<V, K> valueToKey = new IdentityHashMap<>();
+    private final Map<K, V> keyToValue = new IdentityHashMap<>();
+    private final Map<V, K> valueToKey = new IdentityHashMap<>();
 
-	public IdentityBiMap() {
-	}
+    public IdentityBiMap() {
+    }
 
-	public void put(K key, V value) {
-		keyToValue.put(key, value);
-		valueToKey.put(value, key);
-	}
+    public V getByKey(K key) {
+        return keyToValue.get(key);
+    }
 
-	public V getByKey(K key) {
-		return keyToValue.get(key);
-	}
+    public K getByValue(V value) {
+        return valueToKey.get(value);
+    }
 
-	public K getByValue(V value) {
-		return valueToKey.get(value);
-	}
+    public void put(K key, V value) {
+        keyToValue.put(key, value);
+        valueToKey.put(value, key);
+    }
 }

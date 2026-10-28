@@ -62,29 +62,75 @@ import dev.aoqia.leaf.loom.util.MirrorUtil;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public class ZomboidProvider {
-	private final ZomboidMetadataProvider metadataProvider;
-	private final ConfigContext configContext;
+    private final ConfigContext configContext;
 
-	private File gameJar;
+    private File gameJar;
 
-	public ZomboidProvider(ZomboidMetadataProvider metadataProvider, ConfigContext configContext) {
-		this.metadataProvider = metadataProvider;
-		this.configContext = configContext;
+    private final ZomboidMetadataProvider metadataProvider;
+
+    public ZomboidProvider(ZomboidMetadataProvider metadataProvider, ConfigContext configContext) {
+        this.metadataProvider = metadataProvider;
+        this.configContext = configContext;
 
         if (isLegacyVersion()) {
             throw new RuntimeException("Complete JAR provider not supported for legacy PZ versions.");
         }
-	}
+    }
 
-	protected boolean provideClient() {
-		return true;
-	}
+    public static File gameWorkingDirectory(Project project, String version) {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
+        File workingDir = new File(extension.getFiles().getUserCache(), version);
+        workingDir.mkdirs();
+        return workingDir;
+    }
 
-	protected boolean provideServer() {
-		return true;
-	}
+    public File dir(String path) {
+        File dir = file(path);
+        dir.mkdirs();
+        return dir;
+    }
 
-	public void provide() throws Exception {
+    public File file(String path) {
+        return new File(workingDir(), path);
+    }
+
+    public String gameVersion() {
+        return Objects.requireNonNull(metadataProvider, "Metadata provider not setup").getZomboidVersion();
+    }
+
+    public AssetIndex getClientAssetIndex() {
+        return Objects.requireNonNull(metadataProvider, "Metadata provider not setup").getClientAssetIndex();
+    }
+
+    public File getGameJar() {
+        Check.require(provideClient(), "Not configured to provide game jar");
+        return gameJar;
+    }
+
+    public List<Path> getGameJars() {
+        return List.of(gameJar.toPath());
+    }
+
+    public MappingsNamespace getOfficialNamespace() {
+        return MappingsNamespace.NAMED;
+    }
+
+    public ZomboidVersionMeta getVersionInfo() {
+        return Objects.requireNonNull(metadataProvider, "Metadata provider not setup").getVersionMeta();
+    }
+
+    /**
+     * @return true if the game version is older than 41.78.*
+     */
+    public boolean isLegacyVersion() {
+        return getVersionInfo().isLegacyVersion();
+    }
+
+    public Path path(String path) {
+        return file(path).toPath();
+    }
+
+    public void provide() throws Exception {
         if (!provideClient() || !provideServer()) {
             throw new UnsupportedOperationException("This provider only provides both the client and server!");
         }
@@ -99,26 +145,14 @@ public class ZomboidProvider {
 
         Project project = getProject();
         setup(project);
-//        validateFiles(project);
+        // validateFiles(project);
 
-		final ZomboidLibraryProvider libraryProvider = new ZomboidLibraryProvider(this, project);
-		libraryProvider.provide();
-	}
+        final ZomboidLibraryProvider libraryProvider = new ZomboidLibraryProvider(this, project);
+        libraryProvider.provide();
+    }
 
-    protected void setup(Project project) {
-        Path gamePath = MirrorUtil.getGameJavaPath(project);
-        gameJar = gamePath.resolve("projectzomboid.jar").toFile();
-        if (!gameJar.exists()) {
-            throw new RuntimeException(String.format(
-                "The projectzomboid.jar file doesn't exist at '%s'. Check the game paths provided to loom, such as the"
-                + " LEAF_CLIENT_GAME_PATH and LEAF_SERVER_GAME_PATH environment variables.",
-                gameJar.getAbsolutePath()
-            ));
-        }
-
-        // Find all other game lib jars in the root game folder and add them as compile libraries
-//        project.getDependencies().add(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES,
-//            project.fileTree(gamePath).include("*.jar").exclude("projectzomboid.jar", "pzexe.jar"));
+    public boolean refreshDeps() {
+        return getExtension().refreshDeps();
     }
 
     public void validateFiles(Project project) throws IOException {
@@ -143,72 +177,38 @@ public class ZomboidProvider {
         }
     }
 
-	public File workingDir() {
-		return gameWorkingDirectory(configContext.project(), gameVersion());
-	}
-
-	public File dir(String path) {
-		File dir = file(path);
-		dir.mkdirs();
-		return dir;
-	}
-
-	public File file(String path) {
-		return new File(workingDir(), path);
-	}
-
-	public Path path(String path) {
-		return file(path).toPath();
-	}
-
-	public File getGameJar() {
-		Check.require(provideClient(), "Not configured to provide game jar");
-		return gameJar;
-	}
-
-	public String gameVersion() {
-		return Objects.requireNonNull(metadataProvider, "Metadata provider not setup").getZomboidVersion();
-	}
-
-	public ZomboidVersionMeta getVersionInfo() {
-		return Objects.requireNonNull(metadataProvider, "Metadata provider not setup").getVersionMeta();
-	}
-
-    public AssetIndex getClientAssetIndex() {
-        return Objects.requireNonNull(metadataProvider, "Metadata provider not setup").getClientAssetIndex();
+    public File workingDir() {
+        return gameWorkingDirectory(configContext.project(), gameVersion());
     }
 
-	/**
-	 * @return true if the game version is older than 41.78.*
-	 */
-	public boolean isLegacyVersion() {
-		return getVersionInfo().isLegacyVersion();
-	}
-
-	public List<Path> getGameJars() {
-        return List.of(gameJar.toPath());
+    protected LoomGradleExtension getExtension() {
+        return configContext.extension();
     }
 
-	public MappingsNamespace getOfficialNamespace() {
-        return MappingsNamespace.NAMED;
+    protected Project getProject() {
+        return configContext.project();
     }
 
-	protected Project getProject() {
-		return configContext.project();
-	}
+    protected boolean provideClient() {
+        return true;
+    }
 
-	protected LoomGradleExtension getExtension() {
-		return configContext.extension();
-	}
+    protected boolean provideServer() {
+        return true;
+    }
 
-	public boolean refreshDeps() {
-		return getExtension().refreshDeps();
-	}
+    protected void setup(Project project) {
+        Path gamePath = MirrorUtil.getGameJavaPath(project);
+        gameJar = gamePath.resolve("projectzomboid.jar").toFile();
+        if (!gameJar.exists()) {
+            throw new RuntimeException(String.format(
+                "The projectzomboid.jar file doesn't exist at '%s'. Check the game paths provided to loom, such as the"
+                    + " LEAF_CLIENT_GAME_PATH and LEAF_SERVER_GAME_PATH environment variables.",
+                gameJar.getAbsolutePath()));
+        }
 
-	public static File gameWorkingDirectory(Project project, String version) {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
-		File workingDir = new File(extension.getFiles().getUserCache(), version);
-		workingDir.mkdirs();
-		return workingDir;
-	}
+        // Find all other game lib jars in the root game folder and add them as compile libraries
+        // project.getDependencies().add(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES,
+        // project.fileTree(gamePath).include("*.jar").exclude("projectzomboid.jar", "pzexe.jar"));
+    }
 }

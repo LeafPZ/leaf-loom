@@ -48,15 +48,15 @@ import org.gradle.work.DisableCachingByDefault;
 
 @DisableCachingByDefault
 public abstract class AbstractMigrateMappingsTask extends AbstractLoomTask {
-	@Input
-	@Option(option = "mappings", description = "Target mappings")
-	public abstract Property<String> getMappings();
+    public AbstractMigrateMappingsTask() {
+        getOverrideInputs().convention(false);
+    }
 
-	@Input
-	@Option(option = "overrideInputsIHaveABackup", description = "Override input files with the remapped files")
-	public abstract Property<Boolean> getOverrideInputs();
+    @Input
+    @Option(option = "mappings", description = "Target mappings")
+    public abstract Property<String> getMappings();
 
-	public AbstractMigrateMappingsTask() {
-		getOverrideInputs().convention(false);
-	}
+    @Input
+    @Option(option = "overrideInputsIHaveABackup", description = "Override input files with the remapped files")
+    public abstract Property<Boolean> getOverrideInputs();
 }

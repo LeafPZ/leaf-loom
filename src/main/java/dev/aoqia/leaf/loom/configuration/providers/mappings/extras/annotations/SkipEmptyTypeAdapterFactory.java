@@ -54,35 +54,35 @@ import com.google.gson.stream.JsonWriter;
 
 // https://github.com/google/gson/issues/512#issuecomment-1203356412
 class SkipEmptyTypeAdapterFactory implements TypeAdapterFactory {
-	@Override
-	public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
-		Class<?> rawType = type.getRawType();
-		boolean isMap = Map.class.isAssignableFrom(rawType);
+    @Override
+    public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
+        Class<?> rawType = type.getRawType();
+        boolean isMap = Map.class.isAssignableFrom(rawType);
 
-		if (!isMap && !Collection.class.isAssignableFrom(rawType)) {
-			return null;
-		}
+        if (!isMap && !Collection.class.isAssignableFrom(rawType)) {
+            return null;
+        }
 
-		TypeAdapter<T> delegate = gson.getDelegateAdapter(this, type);
+        TypeAdapter<T> delegate = gson.getDelegateAdapter(this, type);
 
-		return new TypeAdapter<>() {
-			@Override
-			public void write(JsonWriter out, T value) throws IOException {
-				if (value == null || isEmpty(value)) {
-					delegate.write(out, null);
-				} else {
-					delegate.write(out, value);
-				}
-			}
+        return new TypeAdapter<>() {
+            @Override
+            public T read(JsonReader in) throws IOException {
+                return delegate.read(in);
+            }
 
-			@Override
-			public T read(JsonReader in) throws IOException {
-				return delegate.read(in);
-			}
+            @Override
+            public void write(JsonWriter out, T value) throws IOException {
+                if (value == null || isEmpty(value)) {
+                    delegate.write(out, null);
+                } else {
+                    delegate.write(out, value);
+                }
+            }
 
-			private boolean isEmpty(T value) {
-				return isMap ? ((Map<?, ?>) value).isEmpty() : ((Collection<?>) value).isEmpty();
-			}
-		};
-	}
+            private boolean isEmpty(T value) {
+                return isMap ? ((Map<?, ?>) value).isEmpty() : ((Collection<?>) value).isEmpty();
+            }
+        };
+    }
 }

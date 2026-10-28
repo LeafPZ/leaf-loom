@@ -56,27 +56,30 @@ import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.TypeAnnotationNode;
 
 class TypeAnnotationNodeSerializer implements JsonSerializer<TypeAnnotationNode>, JsonDeserializer<TypeAnnotationNode> {
-	@Override
-	public TypeAnnotationNode deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
-		AnnotationNode annotation = context.deserialize(json, AnnotationNode.class);
-		JsonObject jsonObject = json.getAsJsonObject();
-		int typeRef = jsonObject.getAsJsonPrimitive("type_ref").getAsInt();
-		JsonPrimitive typePathPrimitive = jsonObject.getAsJsonPrimitive("type_path");
-		String typePath = typePathPrimitive == null ? "" : typePathPrimitive.getAsString();
-		TypeAnnotationNode typeAnnotation = new TypeAnnotationNode(typeRef, TypePath.fromString(typePath), annotation.desc);
-		annotation.accept(typeAnnotation);
-		return typeAnnotation;
-	}
+    @Override
+    public TypeAnnotationNode deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+        throws JsonParseException
+    {
+        AnnotationNode annotation = context.deserialize(json, AnnotationNode.class);
+        JsonObject jsonObject = json.getAsJsonObject();
+        int typeRef = jsonObject.getAsJsonPrimitive("type_ref").getAsInt();
+        JsonPrimitive typePathPrimitive = jsonObject.getAsJsonPrimitive("type_path");
+        String typePath = typePathPrimitive == null ? "" : typePathPrimitive.getAsString();
+        TypeAnnotationNode typeAnnotation = new TypeAnnotationNode(typeRef, TypePath.fromString(typePath),
+            annotation.desc);
+        annotation.accept(typeAnnotation);
+        return typeAnnotation;
+    }
 
-	@Override
-	public JsonElement serialize(TypeAnnotationNode src, Type typeOfSrc, JsonSerializationContext context) {
-		JsonObject json = context.serialize(src, AnnotationNode.class).getAsJsonObject();
-		json.addProperty("type_ref", src.typeRef);
+    @Override
+    public JsonElement serialize(TypeAnnotationNode src, Type typeOfSrc, JsonSerializationContext context) {
+        JsonObject json = context.serialize(src, AnnotationNode.class).getAsJsonObject();
+        json.addProperty("type_ref", src.typeRef);
 
-		if (src.typePath != null) {
-			json.addProperty("type_path", src.typePath.toString());
-		}
+        if (src.typePath != null) {
+            json.addProperty("type_path", src.typePath.toString());
+        }
 
-		return json;
-	}
+        return json;
+    }
 }

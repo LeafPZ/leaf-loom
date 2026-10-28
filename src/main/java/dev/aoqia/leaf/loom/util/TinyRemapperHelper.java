@@ -63,133 +63,140 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
  * Contains shortcuts to create tiny remappers using the mappings accessibly to the project.
  */
 public final class TinyRemapperHelper {
-	private static final Map<String, String> JSR_TO_JETBRAINS = Map.of(
-				"javax/annotation/Nullable", "org/jetbrains/annotations/Nullable",
-				"javax/annotation/Nonnull", "org/jetbrains/annotations/NotNull",
-				"javax/annotation/concurrent/Immutable", "org/jetbrains/annotations/Unmodifiable"
-			);
+    private static final Map<String,
+        String> JSR_TO_JETBRAINS = Map.of("javax/annotation/Nullable", "org/jetbrains/annotations/Nullable",
+            "javax/annotation/Nonnull", "org/jetbrains/annotations/NotNull", "javax/annotation/concurrent/Immutable",
+            "org/jetbrains/annotations/Unmodifiable");
 
-	/**
-	 * Matches the new local variable naming format introduced in 21w37a.
-	 */
-	private static final Pattern MC_LV_PATTERN = Pattern.compile("\\$\\$\\d+");
+    /**
+     * Matches the new local variable naming format introduced in 21w37a.
+     */
+    private static final Pattern MC_LV_PATTERN = Pattern.compile("\\$\\$\\d+");
 
-	private TinyRemapperHelper() {
-	}
+    private TinyRemapperHelper() {
+    }
 
-	public static TinyRemapper getTinyRemapper(Project project, ServiceFactory serviceFactory, String fromM, String toM) throws IOException {
-		return getTinyRemapper(project, serviceFactory, fromM, toM, false, (builder) -> { });
-	}
+    public static IMappingProvider create(MappingTree mappings, String from, String to, boolean remapLocalVariables) {
+        return (acceptor) -> {
+            final int fromId = mappings.getNamespaceId(from);
+            final int toId = mappings.getNamespaceId(to);
 
-	public static TinyRemapper getTinyRemapper(Project project, ServiceFactory serviceFactory, String fromM, String toM, boolean fixRecords, Consumer<TinyRemapper.Builder> builderConsumer) throws IOException {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
-		MemoryMappingTree mappingTree = extension.getMappingConfiguration().getMappingsService(project, serviceFactory).getMappingTree();
+            for (MappingTree.ClassMapping classDef : mappings.getClasses()) {
+                String className = classDef.getName(fromId);
 
-		int intermediaryNsId = mappingTree.getNamespaceId(MappingsNamespace.INTERMEDIARY.toString());
-		int fromNsId = mappingTree.getNamespaceId(fromM);
+                if (className == null) {
+                    continue;
+                }
 
-		TinyRemapper.Builder builder = TinyRemapper.newRemapper(TinyRemapperLoggerAdapter.INSTANCE)
-				.withMappings(create(mappingTree, fromM, toM, true))
-				.withMappings(out -> JSR_TO_JETBRAINS.forEach(out::acceptClass))
-				.renameInvalidLocals(true)
-				.rebuildSourceFilenames(true)
-				.invalidLvNamePattern(MC_LV_PATTERN)
-				.inferNameFromSameLvIndex(true)
-				.withKnownIndyBsm(extension.getKnownIndyBsms().get())
-				.extraPreApplyVisitor((cls, next) -> {
-					if (fixRecords && !cls.isRecord() && "java/lang/Record".equals(cls.getSuperName())) {
-						return new RecordComponentFixVisitor(next, mappingTree, fromNsId, intermediaryNsId);
-					}
+                String dstClassName = classDef.getName(toId);
 
-					return next;
-				});
+                if (dstClassName == null) {
+                    // Unsure if this is correct, should be better than crashing tho.
+                    dstClassName = className;
+                }
 
-		builderConsumer.accept(builder);
-		return builder.build();
-	}
+                acceptor.acceptClass(className, dstClassName);
 
-	private static IMappingProvider.Member memberOf(String className, String memberName, String descriptor) {
-		return new IMappingProvider.Member(className, memberName, descriptor);
-	}
+                for (MappingTree.FieldMapping field : classDef.getFields()) {
+                    String fieldName = field.getName(fromId);
 
-	public static IMappingProvider create(Path mappings, String from, String to, boolean remapLocalVariables) throws IOException {
-		MemoryMappingTree mappingTree = new MemoryMappingTree();
-		MappingReader.read(mappings, mappingTree);
-		return create(mappingTree, from, to, remapLocalVariables);
-	}
+                    if (fieldName == null) {
+                        continue;
+                    }
 
-	public static IMappingProvider create(MappingTree mappings, String from, String to, boolean remapLocalVariables) {
-		return (acceptor) -> {
-			final int fromId = mappings.getNamespaceId(from);
-			final int toId = mappings.getNamespaceId(to);
+                    String dstFieldName = field.getName(toId);
 
-			for (MappingTree.ClassMapping classDef : mappings.getClasses()) {
-				String className = classDef.getName(fromId);
+                    if (dstFieldName == null) {
+                        dstFieldName = fieldName;
+                    }
 
-				if (className == null) {
-					continue;
-				}
+                    acceptor.acceptField(memberOf(className, fieldName, field.getDesc(fromId)), dstFieldName);
+                }
 
-				String dstClassName = classDef.getName(toId);
+                for (MappingTree.MethodMapping method : classDef.getMethods()) {
+                    String methodName = method.getName(fromId);
 
-				if (dstClassName == null) {
-					// Unsure if this is correct, should be better than crashing tho.
-					dstClassName = className;
-				}
+                    if (methodName == null) {
+                        continue;
+                    }
 
-				acceptor.acceptClass(className, dstClassName);
+                    String dstMethodName = method.getName(toId);
 
-				for (MappingTree.FieldMapping field : classDef.getFields()) {
-					String fieldName = field.getName(fromId);
+                    if (dstMethodName == null) {
+                        dstMethodName = methodName;
+                    }
 
-					if (fieldName == null) {
-						continue;
-					}
+                    IMappingProvider.Member methodIdentifier = memberOf(className, methodName, method.getDesc(fromId));
+                    acceptor.acceptMethod(methodIdentifier, dstMethodName);
 
-					String dstFieldName = field.getName(toId);
+                    if (remapLocalVariables) {
+                        for (MappingTree.MethodArgMapping parameter : method.getArgs()) {
+                            String name = parameter.getName(toId);
 
-					if (dstFieldName == null) {
-						dstFieldName = fieldName;
-					}
+                            if (name == null) {
+                                continue;
+                            }
 
-					acceptor.acceptField(memberOf(className, fieldName, field.getDesc(fromId)), dstFieldName);
-				}
+                            acceptor.acceptMethodArg(methodIdentifier, parameter.getLvIndex(), name);
+                        }
 
-				for (MappingTree.MethodMapping method : classDef.getMethods()) {
-					String methodName = method.getName(fromId);
+                        for (MappingTree.MethodVarMapping localVariable : method.getVars()) {
+                            acceptor.acceptMethodVar(methodIdentifier, localVariable.getLvIndex(),
+                                localVariable.getStartOpIdx(), localVariable.getLvtRowIndex(),
+                                localVariable.getName(toId));
+                        }
+                    }
+                }
+            }
+        };
+    }
 
-					if (methodName == null) {
-						continue;
-					}
+    public static IMappingProvider create(Path mappings, String from, String to, boolean remapLocalVariables)
+        throws IOException
+    {
+        MemoryMappingTree mappingTree = new MemoryMappingTree();
+        MappingReader.read(mappings, mappingTree);
+        return create(mappingTree, from, to, remapLocalVariables);
+    }
 
-					String dstMethodName = method.getName(toId);
+    public static TinyRemapper getTinyRemapper(Project project, ServiceFactory serviceFactory, String fromM, String toM)
+        throws IOException
+    {
+        return getTinyRemapper(project, serviceFactory, fromM, toM, false, (builder) -> {});
+    }
 
-					if (dstMethodName == null) {
-						dstMethodName = methodName;
-					}
+    public static TinyRemapper getTinyRemapper(Project project, ServiceFactory serviceFactory, String fromM, String toM,
+        boolean fixRecords, Consumer<TinyRemapper.Builder> builderConsumer) throws IOException
+    {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
+        MemoryMappingTree mappingTree = extension.getMappingConfiguration()
+            .getMappingsService(project, serviceFactory)
+            .getMappingTree();
 
-					IMappingProvider.Member methodIdentifier = memberOf(className, methodName, method.getDesc(fromId));
-					acceptor.acceptMethod(methodIdentifier, dstMethodName);
+        int intermediaryNsId = mappingTree.getNamespaceId(MappingsNamespace.INTERMEDIARY.toString());
+        int fromNsId = mappingTree.getNamespaceId(fromM);
 
-					if (remapLocalVariables) {
-						for (MappingTree.MethodArgMapping parameter : method.getArgs()) {
-							String name = parameter.getName(toId);
+        TinyRemapper.Builder builder = TinyRemapper.newRemapper(TinyRemapperLoggerAdapter.INSTANCE)
+            .withMappings(create(mappingTree, fromM, toM, true))
+            .withMappings(out -> JSR_TO_JETBRAINS.forEach(out::acceptClass))
+            .renameInvalidLocals(true)
+            .rebuildSourceFilenames(true)
+            .invalidLvNamePattern(MC_LV_PATTERN)
+            .inferNameFromSameLvIndex(true)
+            .withKnownIndyBsm(extension.getKnownIndyBsms().get())
+            .extraPreApplyVisitor((cls, next) -> {
+                if (fixRecords && !cls.isRecord() && "java/lang/Record".equals(cls.getSuperName())) {
+                    return new RecordComponentFixVisitor(next, mappingTree, fromNsId, intermediaryNsId);
+                }
 
-							if (name == null) {
-								continue;
-							}
+                return next;
+            });
 
-							acceptor.acceptMethodArg(methodIdentifier, parameter.getLvIndex(), name);
-						}
+        builderConsumer.accept(builder);
+        return builder.build();
+    }
 
-						for (MappingTree.MethodVarMapping localVariable : method.getVars()) {
-							acceptor.acceptMethodVar(methodIdentifier, localVariable.getLvIndex(),
-									localVariable.getStartOpIdx(), localVariable.getLvtRowIndex(),
-									localVariable.getName(toId));
-						}
-					}
-				}
-			}
-		};
-	}
+    private static IMappingProvider.Member memberOf(String className, String memberName, String descriptor) {
+        return new IMappingProvider.Member(className, memberName, descriptor);
+    }
 }

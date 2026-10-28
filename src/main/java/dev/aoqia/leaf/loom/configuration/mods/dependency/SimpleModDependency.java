@@ -55,27 +55,29 @@ import dev.aoqia.leaf.loom.configuration.mods.ArtifactRef;
 
 // Single jar in and out
 public final class SimpleModDependency extends ModDependency {
-	private final NamedDomainObjectProvider<? extends Configuration> targetConfig;
-	private final LocalMavenHelper maven;
+    private final LocalMavenHelper maven;
+    private final NamedDomainObjectProvider<? extends Configuration> targetConfig;
 
-	public SimpleModDependency(ArtifactRef artifact, ArtifactMetadata metadata, ModDependencyOptions options, NamedDomainObjectProvider<? extends Configuration> targetConfig, Project project) {
-		super(artifact, metadata, options);
-		this.targetConfig = Objects.requireNonNull(targetConfig);
-		this.maven = createMavenHelper(project, null);
-	}
+    public SimpleModDependency(ArtifactRef artifact, ArtifactMetadata metadata, ModDependencyOptions options,
+        NamedDomainObjectProvider<? extends Configuration> targetConfig, Project project)
+    {
+        super(artifact, metadata, options);
+        this.targetConfig = Objects.requireNonNull(targetConfig);
+        this.maven = createMavenHelper(project, null);
+    }
 
-	@Override
-	public boolean isCacheInvalid(Project project, @Nullable String variant) {
-		return !maven.exists(variant);
-	}
+    @Override
+    public void applyToProject(Project project) {
+        project.getDependencies().add(targetConfig.getName(), maven.getNotation());
+    }
 
-	@Override
-	public void copyToCache(Project project, Path path, @Nullable String variant) throws IOException {
-		maven.copyToMaven(path, variant);
-	}
+    @Override
+    public void copyToCache(Project project, Path path, @Nullable String variant) throws IOException {
+        maven.copyToMaven(path, variant);
+    }
 
-	@Override
-	public void applyToProject(Project project) {
-		project.getDependencies().add(targetConfig.getName(), maven.getNotation());
-	}
+    @Override
+    public boolean isCacheInvalid(Project project, @Nullable String variant) {
+        return !maven.exists(variant);
+    }
 }

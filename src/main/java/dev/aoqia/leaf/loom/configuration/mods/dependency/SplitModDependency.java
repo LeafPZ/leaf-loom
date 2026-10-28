@@ -58,99 +58,99 @@ import dev.aoqia.leaf.loom.configuration.mods.JarSplitter;
 
 // Single jar in, 2 out.
 public final class SplitModDependency extends ModDependency {
-	private final NamedDomainObjectProvider<? extends Configuration> targetCommonConfig;
-	private final NamedDomainObjectProvider<? extends Configuration> targetClientConfig;
-	private final JarSplitter.Target target;
-	@Nullable private final LocalMavenHelper commonMaven;
-	@Nullable private final LocalMavenHelper clientMaven;
+    @Nullable
+    private final LocalMavenHelper clientMaven;
+    @Nullable
+    private final LocalMavenHelper commonMaven;
+    private final JarSplitter.Target target;
+    private final NamedDomainObjectProvider<? extends Configuration> targetClientConfig;
+    private final NamedDomainObjectProvider<? extends Configuration> targetCommonConfig;
 
-	public SplitModDependency(ArtifactRef artifact, ArtifactMetadata metadata, ModDependencyOptions options, NamedDomainObjectProvider<? extends Configuration> targetCommonConfig, NamedDomainObjectProvider<? extends Configuration> targetClientConfig, JarSplitter.Target target, Project project) {
-		super(artifact, metadata, options);
-		this.targetCommonConfig = Objects.requireNonNull(targetCommonConfig);
-		this.targetClientConfig = Objects.requireNonNull(targetClientConfig);
-		this.target = Objects.requireNonNull(target);
-		this.commonMaven = target.common() ? createMavenHelper(project, "common") : null;
-		this.clientMaven = target.client() ? createMavenHelper(project, "client") : null;
-	}
+    public SplitModDependency(ArtifactRef artifact, ArtifactMetadata metadata, ModDependencyOptions options,
+        NamedDomainObjectProvider<? extends Configuration> targetCommonConfig,
+        NamedDomainObjectProvider<? extends Configuration> targetClientConfig, JarSplitter.Target target,
+        Project project)
+    {
+        super(artifact, metadata, options);
+        this.targetCommonConfig = Objects.requireNonNull(targetCommonConfig);
+        this.targetClientConfig = Objects.requireNonNull(targetClientConfig);
+        this.target = Objects.requireNonNull(target);
+        this.commonMaven = target.common() ? createMavenHelper(project, "common") : null;
+        this.clientMaven = target.client() ? createMavenHelper(project, "client") : null;
+    }
 
-	@Override
-	public boolean isCacheInvalid(Project project, @Nullable String variant) {
-		boolean exists = switch (target) {
-		case COMMON_ONLY -> getCommonMaven().exists(variant);
-		case CLIENT_ONLY -> getClientMaven().exists(variant);
-		case SPLIT -> getCommonMaven().exists(variant) && getClientMaven().exists(variant);
-		};
+    @Override
+    public void applyToProject(Project project) {
+        if (target.common()) {
+            project.getDependencies().add(targetCommonConfig.getName(), getCommonMaven().getNotation());
+        }
 
-		return !exists;
-	}
+        if (target.client()) {
+            project.getDependencies().add(targetClientConfig.getName(), getClientMaven().getNotation());
+        }
 
-	@Override
-	public void copyToCache(Project project, Path path, @Nullable String variant) throws IOException {
-		// Split dependencies build with loom 0.12 do not contain the required data to split the sources
-		if (target == JarSplitter.Target.SPLIT && variant != null) {
-			final JarSplitter.Target artifactTarget = new JarSplitter(path).analyseTarget();
+        if (target == JarSplitter.Target.SPLIT) {
+            createModGroup(project, getCommonMaven().getOutputFile(null), getClientMaven().getOutputFile(null));
+        }
+    }
 
-			if (artifactTarget != target) {
-				// Found a broken artifact, copy it to both locations without splitting.
-				getCommonMaven().copyToMaven(path, variant);
-				getClientMaven().copyToMaven(path, variant);
-				return;
-			}
-		}
+    @Override
+    public void copyToCache(Project project, Path path, @Nullable String variant) throws IOException {
+        // Split dependencies build with loom 0.12 do not contain the required data to split the sources
+        if (target == JarSplitter.Target.SPLIT && variant != null) {
+            final JarSplitter.Target artifactTarget = new JarSplitter(path).analyseTarget();
 
-		switch (target) {
-		// Split the jar into 2
-		case SPLIT -> {
-			final String suffix = variant == null ? "" : "-" + variant;
-			final Path commonTempJar = getWorkingFile(project, "common" + suffix);
-			final Path clientTempJar = getWorkingFile(project, "client" + suffix);
+            if (artifactTarget != target) {
+                // Found a broken artifact, copy it to both locations without splitting.
+                getCommonMaven().copyToMaven(path, variant);
+                getClientMaven().copyToMaven(path, variant);
+                return;
+            }
+        }
 
-			final JarSplitter splitter = new JarSplitter(path);
-			splitter.split(commonTempJar, clientTempJar);
+        switch (target) {
+            // Split the jar into 2
+            case SPLIT -> {
+                final String suffix = variant == null ? "" : "-" + variant;
+                final Path commonTempJar = getWorkingFile(project, "common" + suffix);
+                final Path clientTempJar = getWorkingFile(project, "client" + suffix);
 
-			getCommonMaven().copyToMaven(commonTempJar, variant);
-			getClientMaven().copyToMaven(clientTempJar, variant);
-		}
+                final JarSplitter splitter = new JarSplitter(path);
+                splitter.split(commonTempJar, clientTempJar);
 
-		// No splitting to be done, just copy the input jar to the respective location.
-		case CLIENT_ONLY -> getClientMaven().copyToMaven(path, variant);
-		case COMMON_ONLY -> getCommonMaven().copyToMaven(path, variant);
-		}
-	}
+                getCommonMaven().copyToMaven(commonTempJar, variant);
+                getClientMaven().copyToMaven(clientTempJar, variant);
+            }
 
-	@Override
-	public void applyToProject(Project project) {
-		if (target.common()) {
-			project.getDependencies().add(targetCommonConfig.getName(), getCommonMaven().getNotation());
-		}
+            // No splitting to be done, just copy the input jar to the respective location.
+            case CLIENT_ONLY -> getClientMaven().copyToMaven(path, variant);
+            case COMMON_ONLY -> getCommonMaven().copyToMaven(path, variant);
+        }
+    }
 
-		if (target.client()) {
-			project.getDependencies().add(targetClientConfig.getName(), getClientMaven().getNotation());
-		}
+    public LocalMavenHelper getClientMaven() {
+        return Objects.requireNonNull(clientMaven, "Cannot get null client maven helper");
+    }
 
-		if (target == JarSplitter.Target.SPLIT) {
-			createModGroup(
-					project,
-					getCommonMaven().getOutputFile(null),
-					getClientMaven().getOutputFile(null)
-			);
-		}
-	}
+    public LocalMavenHelper getCommonMaven() {
+        return Objects.requireNonNull(commonMaven, "Cannot get null common maven helper");
+    }
 
-	private void createModGroup(Project project, Path commonJar, Path clientJar) {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final ModSettings modSettings = extension.getMods().maybeCreate(String.format("%s-%s-%s", getGroup(), getName(), getVersion()));
-		modSettings.getModFiles().from(
-				commonJar.toFile(),
-				clientJar.toFile()
-		);
-	}
+    @Override
+    public boolean isCacheInvalid(Project project, @Nullable String variant) {
+        boolean exists = switch (target) {
+            case COMMON_ONLY -> getCommonMaven().exists(variant);
+            case CLIENT_ONLY -> getClientMaven().exists(variant);
+            case SPLIT -> getCommonMaven().exists(variant) && getClientMaven().exists(variant);
+        };
 
-	public LocalMavenHelper getCommonMaven() {
-		return Objects.requireNonNull(commonMaven, "Cannot get null common maven helper");
-	}
+        return !exists;
+    }
 
-	public LocalMavenHelper getClientMaven() {
-		return Objects.requireNonNull(clientMaven, "Cannot get null client maven helper");
-	}
+    private void createModGroup(Project project, Path commonJar, Path clientJar) {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final ModSettings modSettings = extension.getMods()
+            .maybeCreate(String.format("%s-%s-%s", getGroup(), getName(), getVersion()));
+        modSettings.getModFiles().from(commonJar.toFile(), clientJar.toFile());
+    }
 }

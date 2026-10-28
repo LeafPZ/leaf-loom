@@ -50,10 +50,8 @@ import dev.aoqia.leaf.loom.util.Check;
  * A reference to a {@link SourceSet} from a {@link Project}.
  */
 public record SourceSetReference(SourceSet sourceSet, Project project) {
-	public SourceSetReference {
-		Check.require(
-				SourceSetHelper.isSourceSetOfProject(sourceSet, project),
-				"SourceSet (%s) does not own to (%s) project".formatted(sourceSet.getName(), project.getName())
-		);
-	}
+    public SourceSetReference {
+        Check.require(SourceSetHelper.isSourceSetOfProject(sourceSet, project),
+            "SourceSet (%s) does not own to (%s) project".formatted(sourceSet.getName(), project.getName()));
+    }
 }

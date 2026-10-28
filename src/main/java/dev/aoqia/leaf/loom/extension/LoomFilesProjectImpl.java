@@ -47,35 +47,35 @@ import java.util.Objects;
 import org.gradle.api.Project;
 
 public final class LoomFilesProjectImpl extends LoomFilesBaseImpl {
-	private final Project project;
+    private final Project project;
 
-	public LoomFilesProjectImpl(Project project) {
-		this.project = Objects.requireNonNull(project);
-	}
+    public LoomFilesProjectImpl(Project project) {
+        this.project = Objects.requireNonNull(project);
+    }
 
-	@Override
-	protected File getGradleUserHomeDir() {
-		return project.getGradle().getGradleUserHomeDir();
-	}
+    @Override
+    protected File getBuildDir() {
+        return project.getLayout().getBuildDirectory().getAsFile().get();
+    }
 
-	@Override
-	protected File getRootDir() {
-		return project.getRootDir();
-	}
+    @Override
+    protected File getGradleUserHomeDir() {
+        return project.getGradle().getGradleUserHomeDir();
+    }
 
-	@Override
-	protected File getBuildDir() {
-		return project.getLayout().getBuildDirectory().getAsFile().get();
-	}
+    @Override
+    protected File getProjectCacheDir() {
+        var overridden = project.getGradle().getStartParameter().getProjectCacheDir();
+        return overridden == null ? new File(getRootDir(), ".gradle") : overridden;
+    }
 
-	@Override
-	protected File getProjectCacheDir() {
-		var overridden = project.getGradle().getStartParameter().getProjectCacheDir();
-		return overridden == null ? new File(getRootDir(), ".gradle") : overridden;
-	}
+    @Override
+    protected String getProjectPath() {
+        return project.getPath();
+    }
 
-	@Override
-	protected String getProjectPath() {
-		return project.getPath();
-	}
+    @Override
+    protected File getRootDir() {
+        return project.getRootDir();
+    }
 }

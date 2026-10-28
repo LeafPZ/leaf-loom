@@ -49,8 +49,8 @@ import dev.aoqia.leaf.loom.api.mappings.layered.spec.MappingsSpec;
 
 @ApiStatus.Experimental
 public record SignatureFixesSpec(FileSpec fileSpec) implements MappingsSpec<SignatureFixesLayerImpl> {
-	@Override
-	public SignatureFixesLayerImpl createLayer(MappingContext context) {
-		return new SignatureFixesLayerImpl(fileSpec.get(context));
-	}
+    @Override
+    public SignatureFixesLayerImpl createLayer(MappingContext context) {
+        return new SignatureFixesLayerImpl(fileSpec.get(context));
+    }
 }

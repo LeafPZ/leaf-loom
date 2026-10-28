@@ -42,6 +42,5 @@
 package dev.aoqia.leaf.loom.api.decompilers;
 
 public enum JavadocStyle {
-	HTML,
-	MARKDOWN
+    HTML, MARKDOWN
 }

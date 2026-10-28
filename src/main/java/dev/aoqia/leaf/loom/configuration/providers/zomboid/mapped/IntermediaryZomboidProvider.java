@@ -48,41 +48,45 @@ import org.gradle.api.Project;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 
-public abstract sealed class IntermediaryZomboidProvider<M extends ZomboidProvider> extends AbstractMappedZomboidProvider<M> permits IntermediaryZomboidProvider.CompleteJarImpl {
-	public IntermediaryZomboidProvider(Project project, M minecraftProvider) {
-		super(project, minecraftProvider);
+public abstract sealed class IntermediaryZomboidProvider<M extends ZomboidProvider>
+    extends AbstractMappedZomboidProvider<M> permits IntermediaryZomboidProvider.CompleteJarImpl
+{
+    public IntermediaryZomboidProvider(Project project, M minecraftProvider) {
+        super(project, minecraftProvider);
 
-		if (extension.disableObfuscation()) {
-			throw new UnsupportedOperationException("Intermediary Minecraft providers cannot be used when obfuscation is disabled");
-		}
-	}
+        if (extension.disableObfuscation()) {
+            throw new UnsupportedOperationException(
+                "Intermediary Minecraft providers cannot be used when obfuscation is disabled");
+        }
+    }
 
-	@Override
-	public final MappingsNamespace getTargetNamespace() {
-		return MappingsNamespace.INTERMEDIARY;
-	}
+    @Override
+    public MavenScope getMavenScope() {
+        return MavenScope.GLOBAL;
+    }
 
-	@Override
-	public MavenScope getMavenScope() {
-		return MavenScope.GLOBAL;
-	}
+    @Override
+    public final MappingsNamespace getTargetNamespace() {
+        return MappingsNamespace.INTERMEDIARY;
+    }
 
-	@Override
-	protected boolean requiresBackupJars() {
-		// No backup jars should be created for intermediary providers, as we never decompile the intermediary jars.
-		return false;
-	}
+    @Override
+    protected boolean requiresBackupJars() {
+        // No backup jars should be created for intermediary providers, as we never decompile the intermediary jars.
+        return false;
+    }
 
-    public static final class CompleteJarImpl extends IntermediaryZomboidProvider<ZomboidProvider> implements CompleteJar {
+    public static final class CompleteJarImpl extends IntermediaryZomboidProvider<ZomboidProvider>
+        implements CompleteJar
+    {
         public CompleteJarImpl(Project project, ZomboidProvider provider) {
             super(project, provider);
         }
 
         @Override
         public List<RemappedJars> getRemappedJars() {
-            return List.of(
-                new RemappedJars(gameProvider.getGameJar().toPath(), getGameJar(), gameProvider.getOfficialNamespace())
-            );
+            return List.of(new RemappedJars(gameProvider.getGameJar().toPath(), getGameJar(),
+                gameProvider.getOfficialNamespace()));
         }
     }
 }

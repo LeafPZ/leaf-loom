@@ -55,85 +55,87 @@ import dev.aoqia.leaf.loom.extension.LoomFiles;
 import dev.aoqia.leaf.loom.util.MirrorUtil;
 
 public class LoomRepositoryPlugin implements Plugin<PluginAware> {
-	@Override
-	public void apply(PluginAware target) {
-		if (target instanceof Settings settings) {
-			declareRepositories(settings.getDependencyResolutionManagement().getRepositories(), LoomFiles.create(settings), settings);
+    public static void forceLWJGLFromMavenCentral(RepositoryHandler repositories) {
+        if (repositories.findByName("MavenCentralLWJGL") != null) {
+            // Already applied.
+            return;
+        }
 
-			// Leave a project-local marker so projects don't try to override these.
-			settings.getGradle().beforeProject(project -> project.getPluginManager().apply(RepositoryManagementPlugin.class));
-		} else if (target instanceof Project project) {
-			if (project.getPlugins().hasPlugin(RepositoryManagementPlugin.class)) {
-				return;
-			}
+        // Force LWJGL from central, as it contains all the platform natives.
+        MavenArtifactRepository central = repositories.maven(repo -> {
+            repo.setName("MavenCentralLWJGL");
+            repo.setUrl(ArtifactRepositoryContainer.MAVEN_CENTRAL_URL);
+            repo.content(content -> {
+                content.includeGroup("org.lwjgl");
+            });
+        });
 
-			declareRepositories(project.getRepositories(), LoomFiles.create(project), project);
-		} else if (target instanceof Gradle) {
-			return;
-		} else {
-			throw new IllegalArgumentException("Expected target to be a Project or Settings, but was a " + target.getClass());
-		}
-	}
+        repositories.exclusiveContent(repository -> {
+            repository.forRepositories(central);
+            repository.filter(filter -> {
+                filter.includeGroup("org.lwjgl");
+            });
+        });
+    }
 
-	public static final class RepositoryManagementPlugin implements Plugin<Project> {
-		@Override
-		public void apply(Project target) {
-		}
-	}
+    @Override
+    public void apply(PluginAware target) {
+        if (target instanceof Settings settings) {
+            declareRepositories(settings.getDependencyResolutionManagement().getRepositories(),
+                LoomFiles.create(settings), settings);
 
-	private void declareRepositories(RepositoryHandler repositories, LoomFiles files, ExtensionAware target) {
-		declareLocalRepositories(repositories, files);
+            // Leave a project-local marker so projects don't try to override these.
+            settings.getGradle()
+                .beforeProject(project -> project.getPluginManager().apply(RepositoryManagementPlugin.class));
+        } else if (target instanceof Project project) {
+            if (project.getPlugins().hasPlugin(RepositoryManagementPlugin.class)) {
+                return;
+            }
+
+            declareRepositories(project.getRepositories(), LoomFiles.create(project), project);
+        } else if (target instanceof Gradle) {
+        } else {
+            throw new IllegalArgumentException(
+                "Expected target to be a Project or Settings, but was a " + target.getClass());
+        }
+    }
+
+    private void declareLocalRepositories(RepositoryHandler repositories, LoomFiles files) {
+        repositories.maven(repo -> {
+            repo.setName("LoomLocalRemappedMods");
+            repo.setUrl(files.getRemappedModCache());
+        });
 
         repositories.maven(repo -> {
-			repo.setName("Leaf");
-			repo.setUrl(MirrorUtil.getLeafReleaseRepository(target));
-		});
+            repo.setName("LoomGlobalZomboid");
+            repo.setUrl(files.getGlobalZomboidRepo());
+        });
 
-		repositories.maven(repo -> {
-			repo.setName("Fabric");
-			repo.setUrl(MirrorUtil.getFabricRepository(target));
-		});
+        repositories.maven(repo -> {
+            repo.setName("LoomLocalZomboid");
+            repo.setUrl(files.getLocalZomboidRepo());
+        });
+    }
 
-		repositories.mavenCentral();
-	}
+    private void declareRepositories(RepositoryHandler repositories, LoomFiles files, ExtensionAware target) {
+        declareLocalRepositories(repositories, files);
 
-	private void declareLocalRepositories(RepositoryHandler repositories, LoomFiles files) {
-		repositories.maven(repo -> {
-			repo.setName("LoomLocalRemappedMods");
-			repo.setUrl(files.getRemappedModCache());
-		});
+        repositories.maven(repo -> {
+            repo.setName("Leaf");
+            repo.setUrl(MirrorUtil.getLeafReleaseRepository(target));
+        });
 
-		repositories.maven(repo -> {
-			repo.setName("LoomGlobalZomboid");
-			repo.setUrl(files.getGlobalZomboidRepo());
-		});
+        repositories.maven(repo -> {
+            repo.setName("Fabric");
+            repo.setUrl(MirrorUtil.getFabricRepository(target));
+        });
 
-		repositories.maven(repo -> {
-			repo.setName("LoomLocalZomboid");
-			repo.setUrl(files.getLocalZomboidRepo());
-		});
-	}
+        repositories.mavenCentral();
+    }
 
-	public static void forceLWJGLFromMavenCentral(RepositoryHandler repositories) {
-		if (repositories.findByName("MavenCentralLWJGL") != null) {
-			// Already applied.
-			return;
-		}
-
-		// Force LWJGL from central, as it contains all the platform natives.
-		MavenArtifactRepository central = repositories.maven(repo -> {
-			repo.setName("MavenCentralLWJGL");
-			repo.setUrl(ArtifactRepositoryContainer.MAVEN_CENTRAL_URL);
-			repo.content(content -> {
-				content.includeGroup("org.lwjgl");
-			});
-		});
-
-		repositories.exclusiveContent(repository -> {
-			repository.forRepositories(central);
-			repository.filter(filter -> {
-				filter.includeGroup("org.lwjgl");
-			});
-		});
-	}
+    public static final class RepositoryManagementPlugin implements Plugin<Project> {
+        @Override
+        public void apply(Project target) {
+        }
+    }
 }

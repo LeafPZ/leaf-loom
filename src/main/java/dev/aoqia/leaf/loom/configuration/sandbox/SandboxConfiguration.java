@@ -65,57 +65,58 @@ import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
  * If it is, its added to the runtime classpath and a new client run config is created
  */
 public abstract class SandboxConfiguration implements Runnable {
-	private static final Logger LOGGER = LoggerFactory.getLogger(SandboxConfiguration.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SandboxConfiguration.class);
 
-	@Inject
-	protected abstract Project getProject();
+    @Inject
+    public abstract DependencyFactory getDependencyFactory();
 
-	@Inject
-	public abstract DependencyFactory getDependencyFactory();
+    @Override
+    public void run() {
+        LoomGradleExtension extension = LoomGradleExtension.get(getProject());
 
-	@Override
-	public void run() {
-		LoomGradleExtension extension = LoomGradleExtension.get(getProject());
+        if (extension.isProjectIsolationActive()) {
+            LOGGER.debug("Skipping sandbox configuration as project isolation is enabled.");
+            return;
+        }
 
-		if (extension.isProjectIsolationActive()) {
-			LOGGER.debug("Skipping sandbox configuration as project isolation is enabled.");
-			return;
-		}
+        if (getProject().findProperty(Constants.Properties.SANDBOX) == null) {
+            LOGGER.debug("No fabric sandbox property set");
+            return;
+        }
 
-		if (getProject().findProperty(Constants.Properties.SANDBOX) == null) {
-			LOGGER.debug("No fabric sandbox property set");
-			return;
-		}
+        GradleUtils.afterSuccessfulEvaluation(getProject(), this::evaluate);
+    }
 
-		GradleUtils.afterSuccessfulEvaluation(getProject(), this::evaluate);
-	}
+    @Inject
+    protected abstract Project getProject();
 
-	private void evaluate() {
-		final String sandboxNotation = (String) Objects.requireNonNull(getProject().findProperty(Constants.Properties.SANDBOX));
-		final LoomGradleExtension extension = LoomGradleExtension.get(getProject());
-		final ExternalModuleDependency dependency = getDependencyFactory().create(sandboxNotation);
-		final Configuration configuration = getProject().getConfigurations().detachedConfiguration(dependency);
-		final Path sandboxJar = configuration.getSingleFile().toPath();
-		final SandboxMetadata metadata = SandboxMetadata.readFromJar(sandboxJar);
+    private void evaluate() {
+        final String sandboxNotation = (String) Objects
+            .requireNonNull(getProject().findProperty(Constants.Properties.SANDBOX));
+        final LoomGradleExtension extension = LoomGradleExtension.get(getProject());
+        final ExternalModuleDependency dependency = getDependencyFactory().create(sandboxNotation);
+        final Configuration configuration = getProject().getConfigurations().detachedConfiguration(dependency);
+        final Path sandboxJar = configuration.getSingleFile().toPath();
+        final SandboxMetadata metadata = SandboxMetadata.readFromJar(sandboxJar);
 
-		if (!metadata.supportsPlatform(Platform.CURRENT)) {
-			LOGGER.info("Sandbox does not support the current platform");
-			return;
-		}
+        if (!metadata.supportsPlatform(Platform.CURRENT)) {
+            LOGGER.info("Sandbox does not support the current platform");
+            return;
+        }
 
-		getProject().getDependencies().add(JavaPlugin.RUNTIME_ONLY_CONFIGURATION_NAME, dependency);
+        getProject().getDependencies().add(JavaPlugin.RUNTIME_ONLY_CONFIGURATION_NAME, dependency);
 
-		extension.getRuns().create("clientSandbox", settings -> {
-			RunConfiguration clientRun = extension.getRuns().getByName("client");
+        extension.getRuns().create("clientSandbox", settings -> {
+            RunConfiguration clientRun = extension.getRuns().getByName("client");
 
-			settings.inherit(clientRun);
+            settings.inherit(clientRun);
 
-			settings.getDisplayName().set("Client Sandbox");
+            settings.getDisplayName().set("Client Sandbox");
 
-			// The sandbox also acts as DLI
-			// Set the sandbox as the true main class
-			settings.getDevLaunchMainClass().set(metadata.mainClass());
-			settings.getSystemProperties().put("leaf.sandbox.realMain", clientRun.getMainClass().get());
-		});
-	}
+            // The sandbox also acts as DLI
+            // Set the sandbox as the true main class
+            settings.getDevLaunchMainClass().set(metadata.mainClass());
+            settings.getSystemProperties().put("leaf.sandbox.realMain", clientRun.getMainClass().get());
+        });
+    }
 }

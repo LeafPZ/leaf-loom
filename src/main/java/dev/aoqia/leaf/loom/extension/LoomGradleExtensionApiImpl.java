@@ -103,511 +103,533 @@ import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
  * This class implements the public extension api.
  */
 public abstract class LoomGradleExtensionApiImpl implements LoomGradleExtensionAPI {
-	protected final DeprecationHelper deprecationHelper;
-	protected final ConfigurableFileCollection log4jConfigs;
-	protected final RegularFileProperty accessWidener;
-	protected final RegularFileProperty fabricModJsonPath;
-	protected final ManifestLocations versionsManifests;
-	protected final Property<String> customMetadata;
-	protected final SetProperty<String> knownIndyBsms;
-	protected final Property<Boolean> transitiveAccessWideners;
-	protected final Property<Boolean> modProvidedJavadoc;
-	protected final Property<String> intermediary;
-	protected final Property<IntermediateMappingsProvider> intermediateMappingsProvider;
-	private final Property<String> productionNamespace;
-	private final Property<Boolean> useIntermediateMappings;
-	private final Property<String> defaultMixinRemapType;
-	private final Property<Boolean> remapJsrAnnotationsToJetBrains;
-	private final Property<Boolean> runtimeOnlyLog4j;
-	private final Property<Boolean> runtimeOnlyLwjglGraphics;
-	private final Property<Boolean> splitModDependencies;
-	private final Property<Boolean> uncompressNestedJars;
-	private final Property<ZomboidJarConfiguration<?, ?, ?>> zomboidJarConfiguration;
-	private final Property<Boolean> splitEnvironmentalSourceSet;
-	private final InterfaceInjectionExtensionAPI interfaceInjectionExtension;
-
-	private final NamedDomainObjectContainer<RunConfigSettings> runConfigs;
-	private final NamedDomainObjectContainer<DecompilerOptions> decompilers;
-	private final NamedDomainObjectContainer<ModSettings> mods;
-	private final NamedDomainObjectList<RemapConfigurationSettings> remapConfigurations;
-	private final ListProperty<ZomboidJarProcessor<?>> zomboidJarProcessors;
-	protected final ListProperty<RemapperExtensionHolder> remapperExtensions;
-
-	// A common mistake with layered mappings is to call the wrong `officialMojangMappings` method, use this to keep track of when we are building a layered mapping spec.
-	protected final ThreadLocal<Boolean> layeredSpecBuilderScope = ThreadLocal.withInitial(() -> false);
-	public static final String DEFAULT_INTERMEDIARY_URL = "https://maven.fabricmc.net/net/fabricmc/intermediary/%1$s/intermediary-%1$s-v2.jar";
-
-	protected boolean hasEvaluatedLayeredMappings = false;
-	protected final Map<LayeredMappingSpec, LayeredMappingsFactory> layeredMappingsDependencyMap = new HashMap<>();
-
-	protected LoomGradleExtensionApiImpl(Project project, LoomFiles directories) {
-		this.log4jConfigs = project.files(directories.getDefaultLog4jConfigFile());
-		this.accessWidener = project.getObjects().fileProperty();
-		this.fabricModJsonPath = project.getObjects().fileProperty();
-		this.versionsManifests = new ManifestLocations();
-		this.versionsManifests.add("zomboid", MirrorUtil.getVersionManifests(project), -2);
-//		this.versionsManifests.add("fabric_experimental", MirrorUtil.getExperimentalVersions(project), -1);
-		this.customMetadata = project.getObjects().property(String.class);
-		this.knownIndyBsms = project.getObjects().setProperty(String.class).convention(Set.of(
-				"java/lang/invoke/StringConcatFactory",
-				"java/lang/runtime/ObjectMethods",
-				"org/codehaus/groovy/vmplugin/v8/IndyInterface"
-		));
-		this.knownIndyBsms.finalizeValueOnRead();
-		this.transitiveAccessWideners = project.getObjects().property(Boolean.class)
-				.convention(true);
-		this.transitiveAccessWideners.finalizeValueOnRead();
-		this.modProvidedJavadoc = project.getObjects().property(Boolean.class)
-				.convention(true);
-		this.modProvidedJavadoc.finalizeValueOnRead();
-		this.intermediary = project.getObjects().property(String.class)
-				.convention(DEFAULT_INTERMEDIARY_URL);
-		this.productionNamespace = project.getObjects().property(String.class);
-		this.productionNamespace.convention(project.provider(() -> LoomGradleExtension.get(project).getMetadataProvider().isUnobfuscated() ? MappingsNamespace.OFFICIAL.toString() : MappingsNamespace.INTERMEDIARY.toString()));
-		this.productionNamespace.finalizeValueOnRead();
-		this.useIntermediateMappings = project.getObjects().property(Boolean.class);
-		this.useIntermediateMappings.convention(project.provider(() -> !LoomGradleExtension.get(project).getMetadataProvider().isUnobfuscated()));
-		this.useIntermediateMappings.finalizeValueOnRead();
-		this.defaultMixinRemapType = project.getObjects().property(String.class);
-		this.defaultMixinRemapType.convention(project.provider(() -> LoomGradleExtension.get(project).getMetadataProvider().isUnobfuscated() ? ArtifactMetadata.MixinRemapType.STATIC.name() : ArtifactMetadata.MixinRemapType.MIXIN.name()));
-		this.defaultMixinRemapType.finalizeValueOnRead();
-
-		this.intermediateMappingsProvider = project.getObjects().property(IntermediateMappingsProvider.class);
-		this.intermediateMappingsProvider.finalizeValueOnRead();
-
-		this.deprecationHelper = new DeprecationHelper.ProjectBased(project);
-
-		this.runConfigs = project.container(RunConfigSettings.class,
-				baseName -> project.getObjects().newInstance(RunConfigSettings.class, project, baseName));
-		this.decompilers = project.getObjects().domainObjectContainer(DecompilerOptions.class);
-		this.mods = project.getObjects().domainObjectContainer(ModSettings.class);
-		this.remapConfigurations = project.getObjects().namedDomainObjectList(RemapConfigurationSettings.class);
-		//noinspection unchecked
-		this.zomboidJarProcessors = (ListProperty<ZomboidJarProcessor<?>>) (Object) project.getObjects().listProperty(ZomboidJarProcessor.class);
-		this.zomboidJarProcessors.finalizeValueOnRead();
-
-		//noinspection unchecked
-		this.zomboidJarConfiguration = project.getObjects().property((Class<ZomboidJarConfiguration<?, ?, ?>>) (Class<?>) ZomboidJarConfiguration.class)
-				.convention(project.provider(() -> ZomboidJarConfiguration.COMPLETE));
-		this.zomboidJarConfiguration.finalizeValueOnRead();
-
-		this.accessWidener.finalizeValueOnRead();
-
-		this.remapJsrAnnotationsToJetBrains = project.getObjects().property(Boolean.class).convention(true);
-		this.remapJsrAnnotationsToJetBrains.finalizeValueOnRead();
-
-		this.runtimeOnlyLog4j = project.getObjects().property(Boolean.class).convention(false);
-		this.runtimeOnlyLog4j.finalizeValueOnRead();
-
-		this.runtimeOnlyLwjglGraphics = project.getObjects().property(Boolean.class).convention(false);
-		this.runtimeOnlyLwjglGraphics.finalizeValueOnRead();
-
-		this.splitModDependencies = project.getObjects().property(Boolean.class).convention(true);
-		this.splitModDependencies.finalizeValueOnRead();
-
-		this.uncompressNestedJars = project.getObjects().property(Boolean.class).convention(false);
-		this.uncompressNestedJars.finalizeValueOnRead();
-
-		this.interfaceInjectionExtension = project.getObjects().newInstance(InterfaceInjectionExtensionAPI.class);
-		this.interfaceInjectionExtension.getIsEnabled().convention(true);
-
-		this.splitEnvironmentalSourceSet = project.getObjects().property(Boolean.class).convention(false);
-		this.splitEnvironmentalSourceSet.finalizeValueOnRead();
-
-		remapperExtensions = project.getObjects().listProperty(RemapperExtensionHolder.class);
-		remapperExtensions.finalizeValueOnRead();
-
-		// Enable dep iface injection by default
-		interfaceInjection(interfaceInjection -> {
-			interfaceInjection.getEnableDependencyInterfaceInjection().convention(true).finalizeValueOnRead();
-		});
-	}
-
-	@Override
-	public DeprecationHelper getDeprecationHelper() {
-		return deprecationHelper;
-	}
-
-	@Override
-	public RegularFileProperty getAccessWidenerPath() {
-		return accessWidener;
-	}
-
-	@Override
-	public RegularFileProperty getLeafModJsonPath() {
-		return fabricModJsonPath;
-	}
-
-	@Override
-	public NamedDomainObjectContainer<DecompilerOptions> getDecompilerOptions() {
-		return decompilers;
-	}
-
-	@Override
-	public void decompilers(Action<NamedDomainObjectContainer<DecompilerOptions>> action) {
-		action.execute(decompilers);
-	}
-
-	@Override
-	public ListProperty<ZomboidJarProcessor<?>> getZomboidJarProcessors() {
-		return zomboidJarProcessors;
-	}
-
-	@Override
-	public void addZomboidJarProcessor(Class<? extends ZomboidJarProcessor<?>> clazz, Object... parameters) {
-		getZomboidJarProcessors().add(getProject().getObjects().newInstance(clazz, parameters));
-	}
-
-	@Override
-	public Dependency layered(Action<LayeredMappingSpecBuilder> action) {
-		if (notObfuscated()) {
-			throw new UnsupportedOperationException("Cannot configure layered mappings in a non-obfuscated environment");
-		}
-
-		if (hasEvaluatedLayeredMappings) {
-			throw new IllegalStateException("Layered mappings have already been evaluated");
-		}
-
-		LayeredMappingSpecBuilderImpl builder = new LayeredMappingSpecBuilderImpl();
-
-		layeredSpecBuilderScope.set(true);
-		action.execute(builder);
-		layeredSpecBuilderScope.set(false);
-
-		final LayeredMappingSpec builtSpec = builder.build();
-		final LayeredMappingsFactory layeredMappingsFactory = layeredMappingsDependencyMap.computeIfAbsent(builtSpec, LayeredMappingsFactory::new);
-		return layeredMappingsFactory.createDependency(getProject());
-	}
-
-	@Override
-	public void runs(Action<NamedDomainObjectContainer<RunConfigSettings>> action) {
-		action.execute(runConfigs);
-	}
-
-	@Override
-	public NamedDomainObjectContainer<RunConfigSettings> getRunConfigs() {
-		return runConfigs;
-	}
-
-	@Override
-	public ConfigurableFileCollection getLog4jConfigs() {
-		return log4jConfigs;
-	}
-
-	@Override
-	public void mixin(Action<MixinExtensionAPI> action) {
-		action.execute(getMixin());
-	}
-
-	@Override
-	public ManifestLocations getVersionsManifests() {
-		return versionsManifests;
-	}
-
-	@Override
-	public Property<String> getCustomZomboidMetadata() {
-		return customMetadata;
-	}
-
-	@Override
-	public SetProperty<String> getKnownIndyBsms() {
-		if (notObfuscated()) {
-			throw new UnsupportedOperationException("Cannot configure known indyBsms in a non-obfuscated environment");
-		}
-
-		return knownIndyBsms;
-	}
-
-	@Override
-	public String getModVersion() {
-		List<LeafModJson> fabricModJsons = LeafModJsonHelpers.getModsInProject(getProject());
-
-		if (fabricModJsons.isEmpty()) {
-			throw new RuntimeException("Could not find a leaf.mod.json file in the main sourceset");
-		}
-
-		return fabricModJsons.getFirst().getModVersion();
-	}
-
-	@Override
-	public Property<Boolean> getEnableTransitiveAccessWideners() {
-		return transitiveAccessWideners;
-	}
-
-	@Override
-	public Property<Boolean> getEnableModProvidedJavadoc() {
-		return modProvidedJavadoc;
-	}
-
-	protected abstract Project getProject();
-
-	protected abstract LoomFiles getFiles();
-
-	@Override
-	public Property<String> getIntermediaryUrl() {
-		return intermediary;
-	}
-
-	@Override
-	public Property<String> getProductionNamespace() {
-		return productionNamespace;
-	}
-
-	@Override
-	public Property<Boolean> getUseIntermediateMappings() {
-		return useIntermediateMappings;
-	}
-
-	@Override
-	public Property<String> getDefaultMixinRemapType() {
-		return defaultMixinRemapType;
-	}
-
-	@Override
-	public IntermediateMappingsProvider getIntermediateMappingsProvider() {
-		if (LoomGradleExtension.get(getProject()).disableObfuscation()) {
-			throw new UnsupportedOperationException("Cannot get intermediate mappings provider in a non-obfuscated environment");
-		}
-
-		return intermediateMappingsProvider.get();
-	}
-
-	@Override
-	public void setIntermediateMappingsProvider(IntermediateMappingsProvider intermediateMappingsProvider) {
-		this.intermediateMappingsProvider.set(intermediateMappingsProvider);
-	}
-
-	@Override
-	public <T extends IntermediateMappingsProvider> void setIntermediateMappingsProvider(Class<T> clazz, Action<T> action) {
-		T provider = getProject().getObjects().newInstance(clazz);
-		configureIntermediateMappingsProviderInternal(provider);
-		action.execute(provider);
-		setIntermediateMappingsProvider(provider);
-	}
-
-	@Override
-	public File getMappingsFile() {
-		if (notObfuscated()) {
-			return null;
-		}
-
-		return LoomGradleExtension.get(getProject()).getMappingConfiguration().tinyMappings.toFile();
-	}
-
-	@Override
-	public GenerateSourcesTask getDecompileTask(DecompilerOptions options, boolean client) {
-		final String decompilerName = options.getFormattedName();
-		final String taskName;
-
-		if (areEnvironmentSourceSetsSplit()) {
-			taskName = "gen%sSourcesWith%s".formatted(client ? "ClientOnly" : "Common", decompilerName);
-		} else {
-			taskName = "genSourcesWith" + decompilerName;
-		}
-
-		return (GenerateSourcesTask) getProject().getTasks().getByName(taskName);
-	}
-
-	protected abstract <T extends IntermediateMappingsProvider> void configureIntermediateMappingsProviderInternal(T provider);
-
-	@Override
-	public void disableDeprecatedPomGeneration(MavenPublication publication) {
-		dev.aoqia.leaf.loom.configuration.MavenPublication.excludePublication(publication);
-	}
-
-	@Override
-	public Property<ZomboidJarConfiguration<?, ?, ?>> getZomboidJarConfiguration() {
-		return zomboidJarConfiguration;
-	}
-
-	@Override
-	public Property<Boolean> getRemapJsrAnnotationsToJetBrains() {
-		return remapJsrAnnotationsToJetBrains;
-	}
-
-	@Override
-	public Property<Boolean> getRuntimeOnlyLog4j() {
-		return runtimeOnlyLog4j;
-	}
-
-	@Override
-	public Property<Boolean> getRuntimeOnlyLwjglGraphics() {
-		return runtimeOnlyLwjglGraphics;
-	}
-
-	@Override
-	public Property<Boolean> getSplitModDependencies() {
-		return splitModDependencies;
-	}
-
-	@Override
-	public Property<Boolean> getUncompressNestedJars() {
-		return uncompressNestedJars;
-	}
-
-	@Override
-	public void splitEnvironmentSourceSets() {
+    public static final String DEFAULT_INTERMEDIARY_URL = "https://maven.fabricmc.net/net/fabricmc/intermediary/%1$s"
+        + "/intermediary-%1$s-v2.jar";
+
+    protected final RegularFileProperty accessWidener;
+    protected final Property<String> customMetadata;
+    protected final DeprecationHelper deprecationHelper;
+    protected final RegularFileProperty fabricModJsonPath;
+    protected boolean hasEvaluatedLayeredMappings = false;
+    protected final Property<String> intermediary;
+    protected final Property<IntermediateMappingsProvider> intermediateMappingsProvider;
+    protected final SetProperty<String> knownIndyBsms;
+    protected final Map<LayeredMappingSpec, LayeredMappingsFactory> layeredMappingsDependencyMap = new HashMap<>();
+    // A common mistake with layered mappings is to call the wrong `officialMojangMappings` method, use this to keep
+    // track of when we are building a layered mapping spec.
+    protected final ThreadLocal<Boolean> layeredSpecBuilderScope = ThreadLocal.withInitial(() -> false);
+    protected final ConfigurableFileCollection log4jConfigs;
+    protected final Property<Boolean> modProvidedJavadoc;
+    protected final ListProperty<RemapperExtensionHolder> remapperExtensions;
+    protected final Property<Boolean> transitiveAccessWideners;
+    protected final ManifestLocations versionsManifests;
+    private final NamedDomainObjectContainer<DecompilerOptions> decompilers;
+    private final Property<String> defaultMixinRemapType;
+    private final InterfaceInjectionExtensionAPI interfaceInjectionExtension;
+    private final NamedDomainObjectContainer<ModSettings> mods;
+    private final Property<String> productionNamespace;
+    private final NamedDomainObjectList<RemapConfigurationSettings> remapConfigurations;
+
+    private final Property<Boolean> remapJsrAnnotationsToJetBrains;
+    private final NamedDomainObjectContainer<RunConfigSettings> runConfigs;
+    private final Property<Boolean> runtimeOnlyLog4j;
+    private final Property<Boolean> runtimeOnlyLwjglGraphics;
+    private final Property<Boolean> splitEnvironmentalSourceSet;
+    private final Property<Boolean> splitModDependencies;
+
+    private final Property<Boolean> uncompressNestedJars;
+    private final Property<Boolean> useIntermediateMappings;
+
+    private final Property<ZomboidJarConfiguration<?, ?, ?>> zomboidJarConfiguration;
+    private final ListProperty<ZomboidJarProcessor<?>> zomboidJarProcessors;
+
+    protected LoomGradleExtensionApiImpl(Project project, LoomFiles directories) {
+        this.log4jConfigs = project.files(directories.getDefaultLog4jConfigFile());
+        this.accessWidener = project.getObjects().fileProperty();
+        this.fabricModJsonPath = project.getObjects().fileProperty();
+        this.versionsManifests = new ManifestLocations();
+        this.versionsManifests.add("zomboid", MirrorUtil.getVersionManifests(project), -2);
+        // this.versionsManifests.add("fabric_experimental", MirrorUtil.getExperimentalVersions(project), -1);
+        this.customMetadata = project.getObjects().property(String.class);
+        this.knownIndyBsms = project.getObjects()
+            .setProperty(String.class)
+            .convention(Set.of("java/lang/invoke/StringConcatFactory", "java/lang/runtime/ObjectMethods",
+                "org/codehaus/groovy/vmplugin/v8/IndyInterface"));
+        this.knownIndyBsms.finalizeValueOnRead();
+        this.transitiveAccessWideners = project.getObjects().property(Boolean.class).convention(true);
+        this.transitiveAccessWideners.finalizeValueOnRead();
+        this.modProvidedJavadoc = project.getObjects().property(Boolean.class).convention(true);
+        this.modProvidedJavadoc.finalizeValueOnRead();
+        this.intermediary = project.getObjects().property(String.class).convention(DEFAULT_INTERMEDIARY_URL);
+        this.productionNamespace = project.getObjects().property(String.class);
+        this.productionNamespace
+            .convention(project.provider(() -> LoomGradleExtension.get(project).getMetadataProvider().isUnobfuscated()
+                ? MappingsNamespace.OFFICIAL.toString() : MappingsNamespace.INTERMEDIARY.toString()));
+        this.productionNamespace.finalizeValueOnRead();
+        this.useIntermediateMappings = project.getObjects().property(Boolean.class);
+        this.useIntermediateMappings.convention(
+            project.provider(() -> !LoomGradleExtension.get(project).getMetadataProvider().isUnobfuscated()));
+        this.useIntermediateMappings.finalizeValueOnRead();
+        this.defaultMixinRemapType = project.getObjects().property(String.class);
+        this.defaultMixinRemapType
+            .convention(project.provider(() -> LoomGradleExtension.get(project).getMetadataProvider().isUnobfuscated()
+                ? ArtifactMetadata.MixinRemapType.STATIC.name() : ArtifactMetadata.MixinRemapType.MIXIN.name()));
+        this.defaultMixinRemapType.finalizeValueOnRead();
+
+        this.intermediateMappingsProvider = project.getObjects().property(IntermediateMappingsProvider.class);
+        this.intermediateMappingsProvider.finalizeValueOnRead();
+
+        this.deprecationHelper = new DeprecationHelper.ProjectBased(project);
+
+        this.runConfigs = project.container(RunConfigSettings.class,
+            baseName -> project.getObjects().newInstance(RunConfigSettings.class, project, baseName));
+        this.decompilers = project.getObjects().domainObjectContainer(DecompilerOptions.class);
+        this.mods = project.getObjects().domainObjectContainer(ModSettings.class);
+        this.remapConfigurations = project.getObjects().namedDomainObjectList(RemapConfigurationSettings.class);
+        // noinspection unchecked
+        this.zomboidJarProcessors = (ListProperty<
+            ZomboidJarProcessor<?>>) (Object) project.getObjects().listProperty(ZomboidJarProcessor.class);
+        this.zomboidJarProcessors.finalizeValueOnRead();
+
+        // noinspection unchecked
+        this.zomboidJarConfiguration = project.getObjects()
+            .property((Class<ZomboidJarConfiguration<?, ?, ?>>) (Class<?>) ZomboidJarConfiguration.class)
+            .convention(project.provider(() -> ZomboidJarConfiguration.COMPLETE));
+        this.zomboidJarConfiguration.finalizeValueOnRead();
+
+        this.accessWidener.finalizeValueOnRead();
+
+        this.remapJsrAnnotationsToJetBrains = project.getObjects().property(Boolean.class).convention(true);
+        this.remapJsrAnnotationsToJetBrains.finalizeValueOnRead();
+
+        this.runtimeOnlyLog4j = project.getObjects().property(Boolean.class).convention(false);
+        this.runtimeOnlyLog4j.finalizeValueOnRead();
+
+        this.runtimeOnlyLwjglGraphics = project.getObjects().property(Boolean.class).convention(false);
+        this.runtimeOnlyLwjglGraphics.finalizeValueOnRead();
+
+        this.splitModDependencies = project.getObjects().property(Boolean.class).convention(true);
+        this.splitModDependencies.finalizeValueOnRead();
+
+        this.uncompressNestedJars = project.getObjects().property(Boolean.class).convention(false);
+        this.uncompressNestedJars.finalizeValueOnRead();
+
+        this.interfaceInjectionExtension = project.getObjects().newInstance(InterfaceInjectionExtensionAPI.class);
+        this.interfaceInjectionExtension.getIsEnabled().convention(true);
+
+        this.splitEnvironmentalSourceSet = project.getObjects().property(Boolean.class).convention(false);
+        this.splitEnvironmentalSourceSet.finalizeValueOnRead();
+
+        remapperExtensions = project.getObjects().listProperty(RemapperExtensionHolder.class);
+        remapperExtensions.finalizeValueOnRead();
+
+        // Enable dep iface injection by default
+        interfaceInjection(interfaceInjection -> {
+            interfaceInjection.getEnableDependencyInterfaceInjection().convention(true).finalizeValueOnRead();
+        });
+    }
+
+    @Override
+    public RemapConfigurationSettings addRemapConfiguration(String name, Action<RemapConfigurationSettings> action) {
+        if (notObfuscated()) {
+            throw new UnsupportedOperationException("Cannot add remap configuration in a non-obfuscated environment");
+        }
+
+        final RemapConfigurationSettings configurationSettings = getProject().getObjects()
+            .newInstance(RemapConfigurationSettings.class, name);
+
+        // TODO remove in 2.0, this is a fallback to mimic the previous (Broken) behaviour
+        configurationSettings.getSourceSet().convention(SourceSetHelper.getMainSourceSet(getProject()));
+
+        action.execute(configurationSettings);
+        RemapConfigurations.applyToProject(getProject(), configurationSettings);
+        remapConfigurations.add(configurationSettings);
+
+        return configurationSettings;
+    }
+
+    @Override
+    public <T extends RemapperParameters> void addRemapperExtension(
+        Class<? extends RemapperExtension<T>> remapperExtensionClass, Class<T> parametersClass,
+        Action<T> parameterAction)
+    {
+        if (notObfuscated()) {
+            throw new UnsupportedOperationException("Cannot add remapper extension in a non-obfuscated environment");
+        }
+
+        final ObjectFactory objectFactory = getProject().getObjects();
+        final RemapperExtensionHolder holder;
+
+        if (parametersClass != RemapperParameters.None.class) {
+            T parameters = objectFactory.newInstance(parametersClass);
+            parameterAction.execute(parameters);
+            holder = objectFactory.newInstance(RemapperExtensionHolder.class, parameters);
+        } else {
+            holder = objectFactory.newInstance(RemapperExtensionHolder.class, RemapperParameters.None.INSTANCE);
+        }
+
+        holder.getRemapperExtensionClass().set(remapperExtensionClass.getName());
+        remapperExtensions.add(holder);
+    }
+
+    @Override
+    public void addZomboidJarProcessor(Class<? extends ZomboidJarProcessor<?>> clazz, Object... parameters) {
+        getZomboidJarProcessors().add(getProject().getObjects().newInstance(clazz, parameters));
+    }
+
+    @Override
+    public boolean areEnvironmentSourceSetsSplit() {
+        return splitEnvironmentalSourceSet.get();
+    }
+
+    @Override
+    public void createRemapConfigurations(SourceSet sourceSet) {
+        if (notObfuscated()) {
+            throw new UnsupportedOperationException(
+                "Cannot create remap configurations in a non-obfuscated environment");
+        }
+
+        RemapConfigurations.setupForSourceSet(getProject(), sourceSet);
+    }
+
+    @Override
+    public void decompilers(Action<NamedDomainObjectContainer<DecompilerOptions>> action) {
+        action.execute(decompilers);
+    }
+
+    @Override
+    public void disableDeprecatedPomGeneration(MavenPublication publication) {
+        dev.aoqia.leaf.loom.configuration.MavenPublication.excludePublication(publication);
+    }
+
+    @Override
+    public RegularFileProperty getAccessWidenerPath() {
+        return accessWidener;
+    }
+
+    @Override
+    public Property<String> getCustomZomboidMetadata() {
+        return customMetadata;
+    }
+
+    @Override
+    public NamedDomainObjectContainer<DecompilerOptions> getDecompilerOptions() {
+        return decompilers;
+    }
+
+    @Override
+    public GenerateSourcesTask getDecompileTask(DecompilerOptions options, boolean client) {
+        final String decompilerName = options.getFormattedName();
+        final String taskName;
+
+        if (areEnvironmentSourceSetsSplit()) {
+            taskName = "gen%sSourcesWith%s".formatted(client ? "ClientOnly" : "Common", decompilerName);
+        } else {
+            taskName = "genSourcesWith" + decompilerName;
+        }
+
+        return (GenerateSourcesTask) getProject().getTasks().getByName(taskName);
+    }
+
+    @Override
+    public Property<String> getDefaultMixinRemapType() {
+        return defaultMixinRemapType;
+    }
+
+    @Override
+    public DeprecationHelper getDeprecationHelper() {
+        return deprecationHelper;
+    }
+
+    @Override
+    public Property<Boolean> getEnableModProvidedJavadoc() {
+        return modProvidedJavadoc;
+    }
+
+    @Override
+    public Property<Boolean> getEnableTransitiveAccessWideners() {
+        return transitiveAccessWideners;
+    }
+
+    @Override
+    public InterfaceInjectionExtensionAPI getInterfaceInjection() {
+        return interfaceInjectionExtension;
+    }
+
+    @Override
+    public Property<String> getIntermediaryUrl() {
+        return intermediary;
+    }
+
+    @Override
+    public IntermediateMappingsProvider getIntermediateMappingsProvider() {
+        if (LoomGradleExtension.get(getProject()).disableObfuscation()) {
+            throw new UnsupportedOperationException(
+                "Cannot get intermediate mappings provider in a non-obfuscated environment");
+        }
+
+        return intermediateMappingsProvider.get();
+    }
+
+    @Override
+    public SetProperty<String> getKnownIndyBsms() {
+        if (notObfuscated()) {
+            throw new UnsupportedOperationException("Cannot configure known indyBsms in a non-obfuscated environment");
+        }
+
+        return knownIndyBsms;
+    }
+
+    @Override
+    public RegularFileProperty getLeafModJsonPath() {
+        return fabricModJsonPath;
+    }
+
+    @Override
+    public ConfigurableFileCollection getLog4jConfigs() {
+        return log4jConfigs;
+    }
+
+    @Override
+    public File getMappingsFile() {
+        if (notObfuscated()) {
+            return null;
+        }
+
+        return LoomGradleExtension.get(getProject()).getMappingConfiguration().tinyMappings.toFile();
+    }
+
+    @Override
+    public NamedDomainObjectContainer<ModSettings> getMods() {
+        return mods;
+    }
+
+    @Override
+    public String getModVersion() {
+        List<LeafModJson> fabricModJsons = LeafModJsonHelpers.getModsInProject(getProject());
+
+        if (fabricModJsons.isEmpty()) {
+            throw new RuntimeException("Could not find a leaf.mod.json file in the main sourceset");
+        }
+
+        return fabricModJsons.getFirst().getModVersion();
+    }
+
+    @Override
+    public FileCollection getNamedZomboidJars() {
+        final ConfigurableFileCollection jars = getProject().getObjects().fileCollection();
+        jars.from(
+            getProject().provider(() -> LoomGradleExtension.get(getProject()).getZomboidJars(MappingsNamespace.NAMED)));
+        return jars;
+    }
+
+    @Override
+    public Property<String> getProductionNamespace() {
+        return productionNamespace;
+    }
+
+    @Override
+    public NamedDomainObjectList<RemapConfigurationSettings> getRemapConfigurations() {
+        if (notObfuscated()) {
+            throw new UnsupportedOperationException("Cannot get remap configurations in a non-obfuscated environment");
+        }
+
+        return remapConfigurations;
+    }
+
+    @Override
+    public Property<Boolean> getRemapJsrAnnotationsToJetBrains() {
+        return remapJsrAnnotationsToJetBrains;
+    }
+
+    @Override
+    public NamedDomainObjectContainer<RunConfigSettings> getRunConfigs() {
+        return runConfigs;
+    }
+
+    @Override
+    public Property<Boolean> getRuntimeOnlyLog4j() {
+        return runtimeOnlyLog4j;
+    }
+
+    @Override
+    public Property<Boolean> getRuntimeOnlyLwjglGraphics() {
+        return runtimeOnlyLwjglGraphics;
+    }
+
+    @Override
+    public Property<Boolean> getSplitModDependencies() {
+        return splitModDependencies;
+    }
+
+    @Override
+    public Property<Boolean> getUncompressNestedJars() {
+        return uncompressNestedJars;
+    }
+
+    @Override
+    public Property<Boolean> getUseIntermediateMappings() {
+        return useIntermediateMappings;
+    }
+
+    @Override
+    public ManifestLocations getVersionsManifests() {
+        return versionsManifests;
+    }
+
+    @Override
+    public Property<ZomboidJarConfiguration<?, ?, ?>> getZomboidJarConfiguration() {
+        return zomboidJarConfiguration;
+    }
+
+    @Override
+    public ListProperty<ZomboidJarProcessor<?>> getZomboidJarProcessors() {
+        return zomboidJarProcessors;
+    }
+
+    @Override
+    public Provider<String> getZomboidVersion() {
+        return getProject().provider(() -> LoomGradleExtension.get(getProject()).getZomboidProvider().gameVersion());
+    }
+
+    @Override
+    public Dependency layered(Action<LayeredMappingSpecBuilder> action) {
+        if (notObfuscated()) {
+            throw new UnsupportedOperationException(
+                "Cannot configure layered mappings in a non-obfuscated environment");
+        }
+
+        if (hasEvaluatedLayeredMappings) {
+            throw new IllegalStateException("Layered mappings have already been evaluated");
+        }
+
+        LayeredMappingSpecBuilderImpl builder = new LayeredMappingSpecBuilderImpl();
+
+        layeredSpecBuilderScope.set(true);
+        action.execute(builder);
+        layeredSpecBuilderScope.set(false);
+
+        final LayeredMappingSpec builtSpec = builder.build();
+        final LayeredMappingsFactory layeredMappingsFactory = layeredMappingsDependencyMap.computeIfAbsent(builtSpec,
+            LayeredMappingsFactory::new);
+        return layeredMappingsFactory.createDependency(getProject());
+    }
+
+    @Override
+    public void mixin(Action<MixinExtensionAPI> action) {
+        action.execute(getMixin());
+    }
+
+    @Override
+    public void mods(Action<NamedDomainObjectContainer<ModSettings>> action) {
+        action.execute(getMods());
+    }
+
+    @Override
+    public void nestJars(TaskProvider<? extends Jar> jarTask, Configuration configuration) {
+        IncludeConfigurations.nestJars(getProject(), jarTask, configuration);
+    }
+
+    @Override
+    public void nestJars(TaskProvider<? extends Jar> jarTask, FileCollection jars) {
+        jarTask.configure(task -> {
+            if (task instanceof RemapJarTask remapJarTask) {
+                // For RemapJarTask, add to the nestedJars property
+                remapJarTask.getNestedJars().from(jars);
+            } else {
+                // For regular Jar tasks (non-remap mode), add a NestJarsAction with the FileCollection
+                NestJarsAction.addToTask(task, jars);
+            }
+        });
+    }
+
+    @Override
+    public void nestJars(TaskProvider<? extends Jar> jarTask,
+        NamedDomainObjectProvider<? extends Configuration> configuration)
+    {
+        IncludeConfigurations.nestJars(getProject(), jarTask, configuration);
+    }
+
+    @Override
+    public void runs(Action<NamedDomainObjectContainer<RunConfigSettings>> action) {
+        action.execute(runConfigs);
+    }
+
+    @Override
+    public <T extends IntermediateMappingsProvider> void setIntermediateMappingsProvider(Class<T> clazz,
+        Action<T> action)
+    {
+        T provider = getProject().getObjects().newInstance(clazz);
+        configureIntermediateMappingsProviderInternal(provider);
+        action.execute(provider);
+        setIntermediateMappingsProvider(provider);
+    }
+
+    @Override
+    public void setIntermediateMappingsProvider(IntermediateMappingsProvider intermediateMappingsProvider) {
+        this.intermediateMappingsProvider.set(intermediateMappingsProvider);
+    }
+
+    @Override
+    public void splitEnvironmentSourceSets() {
         if (true) {
             throw new RuntimeException("Split environment source sets are not implemented.");
         }
 
-//		splitZomboidJar();
+        // splitZomboidJar();
 
-		splitEnvironmentalSourceSet.set(true);
+        splitEnvironmentalSourceSet.set(true);
 
-		// We need to lock these values, as we setup the new source sets right away.
-		splitEnvironmentalSourceSet.finalizeValue();
-		zomboidJarConfiguration.finalizeValue();
+        // We need to lock these values, as we setup the new source sets right away.
+        splitEnvironmentalSourceSet.finalizeValue();
+        zomboidJarConfiguration.finalizeValue();
 
-		ZomboidSourceSets.get(getProject()).evaluateSplit(getProject());
-	}
+        ZomboidSourceSets.get(getProject()).evaluateSplit(getProject());
+    }
 
-	@Override
-	public boolean areEnvironmentSourceSetsSplit() {
-		return splitEnvironmentalSourceSet.get();
-	}
+    protected abstract <T extends IntermediateMappingsProvider> void
+        configureIntermediateMappingsProviderInternal(T provider);
 
-	@Override
-	public InterfaceInjectionExtensionAPI getInterfaceInjection() {
-		return interfaceInjectionExtension;
-	}
+    protected abstract LoomFiles getFiles();
 
-	@Override
-	public void mods(Action<NamedDomainObjectContainer<ModSettings>> action) {
-		action.execute(getMods());
-	}
+    protected abstract Project getProject();
 
-	@Override
-	public NamedDomainObjectContainer<ModSettings> getMods() {
-		return mods;
-	}
+    private boolean notObfuscated() {
+        return LoomGradleExtension.get(getProject()).disableObfuscation();
+    }
 
-	@Override
-	public NamedDomainObjectList<RemapConfigurationSettings> getRemapConfigurations() {
-		if (notObfuscated()) {
-			throw new UnsupportedOperationException("Cannot get remap configurations in a non-obfuscated environment");
-		}
+    // This is here to ensure that LoomGradleExtensionApiImpl compiles without any unimplemented methods
+    private final class EnsureCompile extends LoomGradleExtensionApiImpl {
+        private EnsureCompile() {
+            super(null, null);
+            throw new RuntimeException();
+        }
 
-		return remapConfigurations;
-	}
+        @Override
+        public DeprecationHelper getDeprecationHelper() {
+            throw new RuntimeException("Yeah... something is really wrong");
+        }
 
-	@Override
-	public RemapConfigurationSettings addRemapConfiguration(String name, Action<RemapConfigurationSettings> action) {
-		if (notObfuscated()) {
-			throw new UnsupportedOperationException("Cannot add remap configuration in a non-obfuscated environment");
-		}
+        @Override
+        public MixinExtension getMixin() {
+            throw new RuntimeException("Yeah... something is really wrong");
+        }
 
-		final RemapConfigurationSettings configurationSettings = getProject().getObjects().newInstance(RemapConfigurationSettings.class, name);
+        @Override
+        protected <T extends IntermediateMappingsProvider> void
+            configureIntermediateMappingsProviderInternal(T provider)
+        {
+            throw new RuntimeException("Yeah... something is really wrong");
+        }
 
-		// TODO remove in 2.0, this is a fallback to mimic the previous (Broken) behaviour
-		configurationSettings.getSourceSet().convention(SourceSetHelper.getMainSourceSet(getProject()));
+        @Override
+        protected LoomFiles getFiles() {
+            throw new RuntimeException("Yeah... something is really wrong");
+        }
 
-		action.execute(configurationSettings);
-		RemapConfigurations.applyToProject(getProject(), configurationSettings);
-		remapConfigurations.add(configurationSettings);
-
-		return configurationSettings;
-	}
-
-	@Override
-	public void createRemapConfigurations(SourceSet sourceSet) {
-		if (notObfuscated()) {
-			throw new UnsupportedOperationException("Cannot create remap configurations in a non-obfuscated environment");
-		}
-
-		RemapConfigurations.setupForSourceSet(getProject(), sourceSet);
-	}
-
-	@Override
-	public <T extends RemapperParameters> void addRemapperExtension(Class<? extends RemapperExtension<T>> remapperExtensionClass, Class<T> parametersClass, Action<T> parameterAction) {
-		if (notObfuscated()) {
-			throw new UnsupportedOperationException("Cannot add remapper extension in a non-obfuscated environment");
-		}
-
-		final ObjectFactory objectFactory = getProject().getObjects();
-		final RemapperExtensionHolder holder;
-
-		if (parametersClass != RemapperParameters.None.class) {
-			T parameters = objectFactory.newInstance(parametersClass);
-			parameterAction.execute(parameters);
-			holder = objectFactory.newInstance(RemapperExtensionHolder.class, parameters);
-		} else {
-			holder = objectFactory.newInstance(RemapperExtensionHolder.class, RemapperParameters.None.INSTANCE);
-		}
-
-		holder.getRemapperExtensionClass().set(remapperExtensionClass.getName());
-		remapperExtensions.add(holder);
-	}
-
-	@Override
-	public Provider<String> getZomboidVersion() {
-		return getProject().provider(() -> LoomGradleExtension.get(getProject()).getZomboidProvider().gameVersion());
-	}
-
-	@Override
-	public FileCollection getNamedZomboidJars() {
-		final ConfigurableFileCollection jars = getProject().getObjects().fileCollection();
-		jars.from(getProject().provider(() -> LoomGradleExtension.get(getProject()).getZomboidJars(MappingsNamespace.NAMED)));
-		return jars;
-	}
-
-	@Override
-	public void nestJars(TaskProvider<? extends Jar> jarTask, FileCollection jars) {
-		jarTask.configure(task -> {
-			if (task instanceof RemapJarTask remapJarTask) {
-				// For RemapJarTask, add to the nestedJars property
-				remapJarTask.getNestedJars().from(jars);
-			} else {
-				// For regular Jar tasks (non-remap mode), add a NestJarsAction with the FileCollection
-				NestJarsAction.addToTask(task, jars);
-			}
-		});
-	}
-
-	@Override
-	public void nestJars(TaskProvider<? extends Jar> jarTask, Configuration configuration) {
-		IncludeConfigurations.nestJars(getProject(), jarTask, configuration);
-	}
-
-	@Override
-	public void nestJars(TaskProvider<? extends Jar> jarTask, NamedDomainObjectProvider<? extends Configuration> configuration) {
-		IncludeConfigurations.nestJars(getProject(), jarTask, configuration);
-	}
-
-	private boolean notObfuscated() {
-		return LoomGradleExtension.get(getProject()).disableObfuscation();
-	}
-
-	// This is here to ensure that LoomGradleExtensionApiImpl compiles without any unimplemented methods
-	private final class EnsureCompile extends LoomGradleExtensionApiImpl {
-		private EnsureCompile() {
-			super(null, null);
-			throw new RuntimeException();
-		}
-
-		@Override
-		public DeprecationHelper getDeprecationHelper() {
-			throw new RuntimeException("Yeah... something is really wrong");
-		}
-
-		@Override
-		protected Project getProject() {
-			throw new RuntimeException("Yeah... something is really wrong");
-		}
-
-		@Override
-		protected LoomFiles getFiles() {
-			throw new RuntimeException("Yeah... something is really wrong");
-		}
-
-		@Override
-		protected <T extends IntermediateMappingsProvider> void configureIntermediateMappingsProviderInternal(T provider) {
-			throw new RuntimeException("Yeah... something is really wrong");
-		}
-
-		@Override
-		public MixinExtension getMixin() {
-			throw new RuntimeException("Yeah... something is really wrong");
-		}
-	}
+        @Override
+        protected Project getProject() {
+            throw new RuntimeException("Yeah... something is really wrong");
+        }
+    }
 }

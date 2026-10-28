@@ -54,79 +54,82 @@ import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.Strings;
 
 public final class SplitDecompileConfiguration extends DecompileConfiguration<MappedZomboidProvider.Split> {
-	public SplitDecompileConfiguration(Project project, MappedZomboidProvider.Split zomboidProvider) {
-		super(project, zomboidProvider);
-	}
+    public SplitDecompileConfiguration(Project project, MappedZomboidProvider.Split zomboidProvider) {
+        super(project, zomboidProvider);
+    }
 
-	@Override
-	public String getTaskName(ZomboidJar.Type type) {
-		return "gen%sSources".formatted(Strings.capitalize(type.toString()));
-	}
+    @Override
+    public void afterEvaluation() {
+        final ZomboidJar commonJar = zomboidProvider.getCommonJar();
+        final ZomboidJar clientOnlyJar = zomboidProvider.getClientOnlyJar();
 
-	@Override
-	public void afterEvaluation() {
-		final ZomboidJar commonJar = zomboidProvider.getCommonJar();
-		final ZomboidJar clientOnlyJar = zomboidProvider.getClientOnlyJar();
+        final TaskProvider<Task> commonDecompileTask = createDecompileTasks("Common", task -> {
+            task.getInputJarName().set(commonJar.getName());
+            task.getSourcesOutputJar()
+                .fileValue(GenerateSourcesTask.getJarFileWithSuffix("-sources.jar", commonJar.getPath()));
+        });
 
-		final TaskProvider<Task> commonDecompileTask = createDecompileTasks("Common", task -> {
-			task.getInputJarName().set(commonJar.getName());
-			task.getSourcesOutputJar().fileValue(GenerateSourcesTask.getJarFileWithSuffix("-sources.jar", commonJar.getPath()));
-		});
+        final TaskProvider<Task> clientOnlyDecompileTask = createDecompileTasks("ClientOnly", task -> {
+            task.getInputJarName().set(clientOnlyJar.getName());
+            task.getSourcesOutputJar()
+                .fileValue(GenerateSourcesTask.getJarFileWithSuffix("-sources.jar", clientOnlyJar.getPath()));
 
-		final TaskProvider<Task> clientOnlyDecompileTask = createDecompileTasks("ClientOnly", task -> {
-			task.getInputJarName().set(clientOnlyJar.getName());
-			task.getSourcesOutputJar().fileValue(GenerateSourcesTask.getJarFileWithSuffix("-sources.jar", clientOnlyJar.getPath()));
+            // Don't allow them to run at the same time.
+            task.mustRunAfter(commonDecompileTask);
+        });
 
-			// Don't allow them to run at the same time.
-			task.mustRunAfter(commonDecompileTask);
-		});
+        for (DecompilerOptions options : extension.getDecompilerOptions()) {
+            final String decompilerName = options.getFormattedName();
 
-		for (DecompilerOptions options : extension.getDecompilerOptions()) {
-			final String decompilerName = options.getFormattedName();
+            var commonTask = project.getTasks().named("gen%sSourcesWith%s".formatted("Common", decompilerName));
+            var clientOnlyTask = project.getTasks().named("gen%sSourcesWith%s".formatted("ClientOnly", decompilerName));
 
-			var commonTask = project.getTasks().named("gen%sSourcesWith%s".formatted("Common", decompilerName));
-			var clientOnlyTask = project.getTasks().named("gen%sSourcesWith%s".formatted("ClientOnly", decompilerName));
+            clientOnlyTask.configure(task -> {
+                task.mustRunAfter(commonTask);
+            });
 
-			clientOnlyTask.configure(task -> {
-				task.mustRunAfter(commonTask);
-			});
+            project.getTasks().register("genSourcesWith" + decompilerName, task -> {
+                task.setDescription("Decompile PZ using %s.".formatted(decompilerName));
+                task.setGroup(Constants.TaskGroup.LEAF);
 
-			project.getTasks().register("genSourcesWith" + decompilerName, task -> {
-				task.setDescription("Decompile PZ using %s.".formatted(decompilerName));
-				task.setGroup(Constants.TaskGroup.LEAF);
+                task.dependsOn(commonTask);
+                task.dependsOn(clientOnlyTask);
+            });
+        }
 
-				task.dependsOn(commonTask);
-				task.dependsOn(clientOnlyTask);
-			});
-		}
+        project.getTasks().register("genSources", task -> {
+            task.setDescription("Decompile PZ using the default decompiler.");
+            task.setGroup(Constants.TaskGroup.LEAF);
 
-		project.getTasks().register("genSources", task -> {
-			task.setDescription("Decompile PZ using the default decompiler.");
-			task.setGroup(Constants.TaskGroup.LEAF);
+            task.dependsOn(commonDecompileTask);
+            task.dependsOn(clientOnlyDecompileTask);
+        });
+    }
 
-			task.dependsOn(commonDecompileTask);
-			task.dependsOn(clientOnlyDecompileTask);
-		});
-	}
+    @Override
+    public String getTaskName(ZomboidJar.Type type) {
+        return "gen%sSources".formatted(Strings.capitalize(type.toString()));
+    }
 
-	private TaskProvider<Task> createDecompileTasks(String name, Action<GenerateSourcesTask> configureAction) {
-		extension.getDecompilerOptions().forEach(options -> {
-			final String decompilerName = options.getFormattedName();
-			final String taskName = "gen%sSourcesWith%s".formatted(name, decompilerName);
+    private TaskProvider<Task> createDecompileTasks(String name, Action<GenerateSourcesTask> configureAction) {
+        extension.getDecompilerOptions().forEach(options -> {
+            final String decompilerName = options.getFormattedName();
+            final String taskName = "gen%sSourcesWith%s".formatted(name, decompilerName);
 
-			project.getTasks().register(taskName, GenerateSourcesTask.class, options).configure(task -> {
-				configureAction.execute(task);
-				task.dependsOn(project.getTasks().named("validateAccessWidener"));
-				task.setDescription("Decompile PZ using %s.".formatted(decompilerName));
-				task.setGroup(Constants.TaskGroup.LEAF);
-			});
-		});
+            project.getTasks().register(taskName, GenerateSourcesTask.class, options).configure(task -> {
+                configureAction.execute(task);
+                task.dependsOn(project.getTasks().named("validateAccessWidener"));
+                task.setDescription("Decompile PZ using %s.".formatted(decompilerName));
+                task.setGroup(Constants.TaskGroup.LEAF);
+            });
+        });
 
-		return project.getTasks().register("gen%sSources".formatted(name), task -> {
-			task.setDescription("Decompile PZ (%s) using the default decompiler.".formatted(name));
-			task.setGroup(Constants.TaskGroup.LEAF);
+        return project.getTasks().register("gen%sSources".formatted(name), task -> {
+            task.setDescription("Decompile PZ (%s) using the default decompiler.".formatted(name));
+            task.setGroup(Constants.TaskGroup.LEAF);
 
-			task.dependsOn(project.getTasks().named("gen%sSourcesWith%s".formatted(name, DecompileConfiguration.DEFAULT_DECOMPILER)));
-		});
-	}
+            task.dependsOn(project.getTasks()
+                .named("gen%sSourcesWith%s".formatted(name, DecompileConfiguration.DEFAULT_DECOMPILER)));
+        });
+    }
 }

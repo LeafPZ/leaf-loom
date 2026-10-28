@@ -61,65 +61,63 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public final class KotlinClasspathService extends Service<KotlinClasspathService.Options> implements KotlinClasspath {
-	public static ServiceType<Options, KotlinClasspathService> TYPE = new ServiceType<>(Options.class, KotlinClasspathService.class);
+    public static ServiceType<Options,
+        KotlinClasspathService> TYPE = new ServiceType<>(Options.class, KotlinClasspathService.class);
 
-	public interface Options extends Service.Options {
-		@Classpath
-		ConfigurableFileCollection getClasspath();
-		@Input
-		Property<String> getKotlinVersion();
-	}
+    public KotlinClasspathService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	public static Provider<Options> createOptions(Project project) {
-		if (!KotlinPluginUtils.hasKotlinPlugin(project)) {
-			// Return an empty provider
-			return project.getObjects().property(Options.class);
-		}
+    public static Provider<Options> createOptions(Project project) {
+        if (!KotlinPluginUtils.hasKotlinPlugin(project)) {
+            // Return an empty provider
+            return project.getObjects().property(Options.class);
+        }
 
-		return createOptions(
-				project,
-				KotlinPluginUtils.getKotlinPluginVersion(project)
-		);
-	}
+        return createOptions(project, KotlinPluginUtils.getKotlinPluginVersion(project));
+    }
 
-	private static Provider<Options> createOptions(Project project, String kotlinVersion) {
-		// Create a detached config to resolve the kotlin std lib for the provided version.
-		Configuration detachedConfiguration = project.getConfigurations().detachedConfiguration(
-				project.getDependencies().create("org.jetbrains.kotlin:kotlin-stdlib:" + kotlinVersion),
-				// Load kotlinx-metadata-jvm like this to work around: https://github.com/gradle/gradle/issues/14727
-				project.getDependencies().create("org.jetbrains.kotlin:kotlin-metadata-jvm:" + kotlinVersion)
-		);
+    private static Provider<Options> createOptions(Project project, String kotlinVersion) {
+        // Create a detached config to resolve the kotlin std lib for the provided version.
+        Configuration detachedConfiguration = project.getConfigurations()
+            .detachedConfiguration(
+                project.getDependencies().create("org.jetbrains.kotlin:kotlin-stdlib:" + kotlinVersion),
+                // Load kotlinx-metadata-jvm like this to work around: https://github.com/gradle/gradle/issues/14727
+                project.getDependencies().create("org.jetbrains.kotlin:kotlin-metadata-jvm:" + kotlinVersion));
 
-		return TYPE.create(project, options -> {
-			options.getClasspath().from(detachedConfiguration);
-			options.getKotlinVersion().set(kotlinVersion);
-		});
-	}
+        return TYPE.create(project, options -> {
+            options.getClasspath().from(detachedConfiguration);
+            options.getKotlinVersion().set(kotlinVersion);
+        });
+    }
 
-	public KotlinClasspathService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    private static URL fileToUrl(File file) {
+        try {
+            return file.toURI().toURL();
+        } catch (MalformedURLException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
-	@Override
-	public String version() {
-		return getOptions().getKotlinVersion().get();
-	}
+    @Override
+    public Set<URL> classpath() {
+        return getOptions().getClasspath()
+            .getFiles()
+            .stream()
+            .map(KotlinClasspathService::fileToUrl)
+            .collect(Collectors.toSet());
+    }
 
-	@Override
-	public Set<URL> classpath() {
-		return getOptions()
-				.getClasspath()
-				.getFiles()
-				.stream()
-				.map(KotlinClasspathService::fileToUrl)
-				.collect(Collectors.toSet());
-	}
+    @Override
+    public String version() {
+        return getOptions().getKotlinVersion().get();
+    }
 
-	private static URL fileToUrl(File file) {
-		try {
-			return file.toURI().toURL();
-		} catch (MalformedURLException e) {
-			throw new UncheckedIOException(e);
-		}
-	}
+    public interface Options extends Service.Options {
+        @Classpath
+        ConfigurableFileCollection getClasspath();
+
+        @Input
+        Property<String> getKotlinVersion();
+    }
 }

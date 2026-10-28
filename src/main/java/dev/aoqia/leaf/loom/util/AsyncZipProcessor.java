@@ -55,47 +55,48 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public interface AsyncZipProcessor {
-	static void processEntries(Path inputZip, Path outputZip, AsyncZipProcessor processor) throws IOException {
-		try (FileSystemUtil.Delegate inFs = FileSystemUtil.getJarFileSystem(inputZip, false);
-				FileSystemUtil.Delegate outFs = FileSystemUtil.getJarFileSystem(outputZip, true);
-				ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
-			final Path inRoot = inFs.get().getPath("/");
-			final Path outRoot = outFs.get().getPath("/");
+    static void processEntries(Path inputZip, Path outputZip, AsyncZipProcessor processor) throws IOException {
+        try (FileSystemUtil.Delegate inFs = FileSystemUtil.getJarFileSystem(inputZip, false);
+             FileSystemUtil.Delegate outFs = FileSystemUtil.getJarFileSystem(outputZip, true);
+             ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors()))
+        {
+            final Path inRoot = inFs.get().getPath("/");
+            final Path outRoot = outFs.get().getPath("/");
 
-			List<CompletableFuture<Void>> futures = new ArrayList<>();
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-			Files.walkFileTree(inRoot, new SimpleFileVisitor<>() {
-				@Override
-				public FileVisitResult visitFile(Path inputFile, BasicFileAttributes attrs) {
-					final CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-						try {
-							final String rel = inRoot.relativize(inputFile).toString();
-							final Path outputFile = outRoot.resolve(rel);
-							processor.processEntryAsync(inputFile, outputFile);
-						} catch (IOException e) {
-							throw new CompletionException(e);
-						}
-					}, executor);
+            Files.walkFileTree(inRoot, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path inputFile, BasicFileAttributes attrs) {
+                    final CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                        try {
+                            final String rel = inRoot.relativize(inputFile).toString();
+                            final Path outputFile = outRoot.resolve(rel);
+                            processor.processEntryAsync(inputFile, outputFile);
+                        } catch (IOException e) {
+                            throw new CompletionException(e);
+                        }
+                    }, executor);
 
-					futures.add(future);
-					return FileVisitResult.CONTINUE;
-				}
-			});
+                    futures.add(future);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
 
-			// Wait for all futures to complete, throwing the first exception if any
-			for (CompletableFuture<Void> future : futures) {
-				try {
-					future.join();
-				} catch (CompletionException e) {
-					if (e.getCause() instanceof IOException ioe) {
-						throw ioe;
-					}
+            // Wait for all futures to complete, throwing the first exception if any
+            for (CompletableFuture<Void> future : futures) {
+                try {
+                    future.join();
+                } catch (CompletionException e) {
+                    if (e.getCause() instanceof IOException ioe) {
+                        throw ioe;
+                    }
 
-					throw new RuntimeException("Failed to process zip", e.getCause());
-				}
-			}
-		}
-	}
+                    throw new RuntimeException("Failed to process zip", e.getCause());
+                }
+            }
+        }
+    }
 
-	void processEntryAsync(Path inputEntry, Path outputEntry) throws IOException;
+    void processEntryAsync(Path inputEntry, Path outputEntry) throws IOException;
 }

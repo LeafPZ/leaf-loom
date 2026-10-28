@@ -79,327 +79,339 @@ import dev.aoqia.leaf.loom.util.SidedClassVisitor;
 import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
 import dev.aoqia.leaf.loom.util.ZipUtils;
 
-public abstract class AbstractMappedZomboidProvider<M extends ZomboidProvider> implements MappedZomboidProvider.ProviderImpl {
-	private static final Logger LOGGER = LoggerFactory.getLogger(AbstractMappedZomboidProvider.class);
-
-	protected final M gameProvider;
-	private final Project project;
-	protected final LoomGradleExtension extension;
-
-	public AbstractMappedZomboidProvider(Project project, M gameProvider) {
-		this.gameProvider = gameProvider;
-		this.project = project;
-		this.extension = LoomGradleExtension.get(project);
-	}
-
-	public abstract MappingsNamespace getTargetNamespace();
-
-	/**
-	 * @return A list of jars that should be remapped
-	 */
-	public abstract List<RemappedJars> getRemappedJars();
-
-	/**
-	 * @return A list of output jars that this provider generates
-	 */
-	public List<? extends OutputJar> getOutputJars() {
-		return getRemappedJars();
-	}
-
-	// Returns a list of MinecraftJar.Type's that this provider exports to be used as a dependency
-	public List<ZomboidJar.Type> getDependencyTypes() {
-		return Collections.emptyList();
-	}
-
-	public List<ZomboidJar> provide(ProvideContext context) throws Exception {
-		final List<RemappedJars> remappedJars = getRemappedJars();
-		final List<ZomboidJar> gameJars = remappedJars.stream()
-				.map(RemappedJars::outputJar)
-				.toList();
-
-		if (remappedJars.isEmpty()) {
-			throw new IllegalStateException("No remapped jars provided");
-		}
-
-		if (shouldRefreshOutputs(context)) {
-			try {
-				remapInputs(remappedJars, context.configContext());
-				createBackupJars(gameJars);
-			} catch (Throwable t) {
-				cleanOutputs(remappedJars);
-
-				throw new RuntimeException("Failed to remap zomboid", t);
-			}
-		}
-
-		if (context.applyDependencies()) {
-			final List<ZomboidJar.Type> dependencyTargets = getDependencyTypes();
-
-			if (!dependencyTargets.isEmpty()) {
-				ZomboidSourceSets.get(getProject()).applyDependencies(
-						(configuration, type) -> getProject().getDependencies().add(configuration, getDependencyNotation(type)),
-						dependencyTargets
-				);
-			}
-		}
-
-		return gameJars;
-	}
-
-	// Create two copies of the remapped jar, the backup jar is used as the input of genSources
-	public static Path getBackupJarPath(ZomboidJar minecraftJar) {
-		final Path outputJarPath = minecraftJar.getPath();
-		return outputJarPath.resolveSibling(outputJarPath.getFileName() + ".backup");
-	}
-
-	protected boolean requiresBackupJars() {
-		return true;
-	}
-
-	protected void createBackupJars(List<ZomboidJar> minecraftJars) throws IOException {
-		if (!requiresBackupJars()) {
-			return;
-		}
-
-		for (ZomboidJar minecraftJar : minecraftJars) {
-			Files.copy(minecraftJar.getPath(), getBackupJarPath(minecraftJar), StandardCopyOption.REPLACE_EXISTING);
-		}
-	}
-
-	public record ProvideContext(boolean applyDependencies, boolean refreshOutputs, ConfigContext configContext) {
-		ProvideContext withApplyDependencies(boolean applyDependencies) {
-			return new ProvideContext(applyDependencies, refreshOutputs(), configContext());
-		}
-	}
-
-	@Override
-	public Path getJar(ZomboidJar.Type type) {
-		return getMavenHelper(type).getOutputFile(null);
-	}
-
-	public enum MavenScope {
-		// Output files will be stored per project
-		LOCAL(LoomFiles::getLocalZomboidRepo),
-		// Output files will be stored globally
-		GLOBAL(LoomFiles::getGlobalZomboidRepo);
-
-		private final Function<LoomFiles, File> fileFunction;
-
-		MavenScope(Function<LoomFiles, File> fileFunction) {
-			this.fileFunction = fileFunction;
-		}
-
-		public Path getRoot(LoomGradleExtension extension) {
-			return fileFunction.apply(extension.getFiles()).toPath();
-		}
-	}
-
-	public abstract MavenScope getMavenScope();
-
-	public LocalMavenHelper getMavenHelper(ZomboidJar.Type type) {
-		return new LocalMavenHelper("com.theindiestone", getName(type), getVersion(), null, getMavenScope().getRoot(extension));
-	}
-
-	protected String getName(ZomboidJar.Type type) {
-		var sj = new StringJoiner("-");
-		sj.add("zomboid");
-		sj.add(type.toString());
-
-		if (!extension.disableObfuscation()) {
-			// Include the intermediate mapping name if it's not the default intermediary
-			final String intermediateName = extension.getIntermediateMappingsProvider().getName();
-
-			if (!intermediateName.equals(IntermediaryMappingsProvider.NAME)) {
-				sj.add(intermediateName);
-			}
-		} else {
-			sj.add("deobf");
-		}
-
-		if (getTargetNamespace() != MappingsNamespace.NAMED) {
-			sj.add(getTargetNamespace().name());
-		}
-
-		return sj.toString().toLowerCase(Locale.ROOT);
-	}
-
-	protected String getVersion() {
-		if (extension.disableObfuscation()) {
-			MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
-
-			if (mappingConfiguration == null) {
-				return extension.getZomboidProvider().gameVersion();
-			}
-
-			return "%s-%s".formatted(extension.getZomboidProvider().gameVersion(), mappingConfiguration.mappingsIdentifier());
-		}
-
-		return "%s-%s".formatted(extension.getZomboidProvider().gameVersion(), extension.getMappingConfiguration().mappingsIdentifier());
-	}
-
-	protected String getDependencyNotation(ZomboidJar.Type type) {
-		return "com.theindiestone:%s:%s".formatted(getName(type), getVersion());
-	}
-
-	protected boolean shouldRefreshOutputs(ProvideContext context) {
-		if (context.refreshOutputs()) {
-			LOGGER.info("Refreshing outputs for mapped jar, as refresh outputs was requested");
-			return true;
-		}
-
-		final List<? extends OutputJar> outputJars = getOutputJars();
-
-		if (outputJars.isEmpty()) {
-			throw new IllegalStateException("No output jars provided");
-		}
-
-		for (OutputJar outputJar : outputJars) {
-			if (!getMavenHelper(outputJar.type()).exists(null)) {
-				LOGGER.info("Refreshing outputs for mapped jar, as {} does not exist", outputJar.outputJar());
-				return true;
-			}
-		}
-
-		if (requiresBackupJars()) {
-			for (OutputJar outputJar : outputJars) {
-				if (!Files.exists(getBackupJarPath(outputJar.outputJar()))) {
-					LOGGER.info("Refreshing outputs for mapped jar, as backup jar does not exist for {}", outputJar.outputJar());
-					return true;
-				}
-			}
-		}
-
-		LOGGER.debug("All outputs are up to date");
-		return false;
-	}
-
-	private void remapInputs(List<RemappedJars> remappedJars, ConfigContext configContext) throws IOException {
-		cleanOutputs(remappedJars);
-
-		for (RemappedJars remappedJar : remappedJars) {
-			remapJar(remappedJar, configContext);
-		}
-	}
-
-	protected void remapJar(RemappedJars remappedJars, ConfigContext configContext) throws IOException {
-		if (extension.disableObfuscation()) {
-			Files.createDirectories(remappedJars.outputJarPath().getParent());
-			Files.copy(remappedJars.inputJar(), remappedJars.outputJarPath(), StandardCopyOption.REPLACE_EXISTING);
-
-			MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
-
-			if (mappingConfiguration != null) {
-				AnnotationsData annotationsData = AnnotationsData.getRemappedAnnotations(
-						MappingsNamespace.OFFICIAL,
-						mappingConfiguration,
-						getProject(),
-						configContext.serviceFactory(),
-						MappingsNamespace.OFFICIAL.toString()
-				);
-
-				if (annotationsData != null) {
-					applyAnnotations(remappedJars.outputJarPath(), annotationsData);
-				}
-			}
-
-			getMavenHelper(remappedJars.type()).savePom();
-			return;
-		}
-
-		final RemapMappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
-		final String fromM = remappedJars.sourceNamespace().toString();
-		final String toM = getTargetNamespace().toString();
-
-		Files.deleteIfExists(remappedJars.outputJarPath());
-
-		final AnnotationsData remappedAnnotations = AnnotationsData.getRemappedAnnotations(getTargetNamespace(), mappingConfiguration, getProject(), configContext.serviceFactory(), toM);
-		final Map<String, String> remappedSignatures = SignatureFixerApplyVisitor.getRemappedSignatures(getTargetNamespace() == MappingsNamespace.INTERMEDIARY, mappingConfiguration, getProject(), configContext.serviceFactory(), toM);
-		final int javaVersion = gameProvider.getVersionInfo().javaVersion();
-		final boolean fixRecords = javaVersion >= 16;
-
-		TinyRemapper remapper = TinyRemapperHelper.getTinyRemapper(getProject(), configContext.serviceFactory(), fromM, toM, fixRecords, (builder) -> {
-			if (remappedAnnotations != null) {
-				builder.extraPostApplyVisitor(new AnnotationsApplyVisitor(remappedAnnotations));
-			}
-
-			builder.extraPostApplyVisitor(new SignatureFixerApplyVisitor(remappedSignatures));
-			configureRemapper(remappedJars, builder);
-		});
-
-		try (OutputConsumerPath outputConsumer = new OutputConsumerPath.Builder(remappedJars.outputJarPath()).build()) {
-			outputConsumer.addNonClassFiles(remappedJars.inputJar());
-
-			for (Path path : remappedJars.remapClasspath()) {
-				remapper.readClassPath(path);
-			}
-
-			remapper.readInputs(remappedJars.inputJar());
-			remapper.apply(outputConsumer);
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to remap JAR " + remappedJars.inputJar() + " with mappings from " + mappingConfiguration.tinyMappings, e);
-		} finally {
-			remapper.finish();
-		}
-
-		getMavenHelper(remappedJars.type()).savePom();
-	}
-
-	private static void applyAnnotations(Path jar, AnnotationsData annotationsData) throws IOException {
-		Map<String, ZipUtils.UnsafeUnaryOperator<byte[]>> transforms = new HashMap<>();
-		annotationsData.classes().forEach((className, classData) -> transforms.put(
-				className + ".class",
-				(ZipUtils.AsmClassOperator) classVisitor -> new AnnotationsApplyVisitor.AnnotationsApplyClassVisitor(classVisitor, classData)
-		));
-		ZipUtils.transform(jar, transforms);
-	}
-
-	protected void configureRemapper(RemappedJars remappedJars, TinyRemapper.Builder tinyRemapperBuilder) {
-	}
-
-	// Configure the remapper to add the client @Environment annotation to all classes in the client jar.
-	public static void configureSplitRemapper(RemappedJars remappedJars, TinyRemapper.Builder tinyRemapperBuilder) {
-		final ZomboidJar outputJar = remappedJars.outputJar();
-		assert !outputJar.isMerged();
-
-		if (outputJar.includesClient()) {
-			assert !outputJar.includesServer();
-			tinyRemapperBuilder.extraPostApplyVisitor(SidedClassVisitor.CLIENT);
-		}
-	}
-
-	private void cleanOutputs(List<RemappedJars> remappedJars) throws IOException {
-		for (RemappedJars remappedJar : remappedJars) {
-			Files.deleteIfExists(remappedJar.outputJarPath());
-			Files.deleteIfExists(getBackupJarPath(remappedJar.outputJar()));
-		}
-	}
-
-	public Project getProject() {
-		return project;
-	}
-
-	public M getGameProvider() {
-		return gameProvider;
-	}
-
-	public sealed interface OutputJar permits RemappedJars, SimpleOutputJar {
-		ZomboidJar outputJar();
-
-		default ZomboidJar.Type type() {
-			return outputJar().getType();
-		}
-	}
-
-	public record RemappedJars(Path inputJar, ZomboidJar outputJar, MappingsNamespace sourceNamespace, Path... remapClasspath) implements OutputJar {
-		public Path outputJarPath() {
-			return outputJar().getPath();
-		}
-
-		public String name() {
-			return outputJar().getName();
-		}
-	}
-
-	public record SimpleOutputJar(ZomboidJar outputJar) implements OutputJar {
-	}
+public abstract class AbstractMappedZomboidProvider<M extends ZomboidProvider>
+    implements MappedZomboidProvider.ProviderImpl
+{
+    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractMappedZomboidProvider.class);
+
+    protected final LoomGradleExtension extension;
+
+    protected final M gameProvider;
+
+    private final Project project;
+
+    public AbstractMappedZomboidProvider(Project project, M gameProvider) {
+        this.gameProvider = gameProvider;
+        this.project = project;
+        this.extension = LoomGradleExtension.get(project);
+    }
+
+    // Configure the remapper to add the client @Environment annotation to all classes in the client jar.
+    public static void configureSplitRemapper(RemappedJars remappedJars, TinyRemapper.Builder tinyRemapperBuilder) {
+        final ZomboidJar outputJar = remappedJars.outputJar();
+        assert !outputJar.isMerged();
+
+        if (outputJar.includesClient()) {
+            assert !outputJar.includesServer();
+            tinyRemapperBuilder.extraPostApplyVisitor(SidedClassVisitor.CLIENT);
+        }
+    }
+
+    // Create two copies of the remapped jar, the backup jar is used as the input of genSources
+    public static Path getBackupJarPath(ZomboidJar minecraftJar) {
+        final Path outputJarPath = minecraftJar.getPath();
+        return outputJarPath.resolveSibling(outputJarPath.getFileName() + ".backup");
+    }
+
+    private static void applyAnnotations(Path jar, AnnotationsData annotationsData) throws IOException {
+        Map<String, ZipUtils.UnsafeUnaryOperator<byte[]>> transforms = new HashMap<>();
+        annotationsData.classes()
+            .forEach((className, classData) -> transforms.put(className + ".class",
+                (ZipUtils.AsmClassOperator) classVisitor -> new AnnotationsApplyVisitor.AnnotationsApplyClassVisitor(
+                    classVisitor, classData)));
+        ZipUtils.transform(jar, transforms);
+    }
+
+    // Returns a list of MinecraftJar.Type's that this provider exports to be used as a dependency
+    public List<ZomboidJar.Type> getDependencyTypes() {
+        return Collections.emptyList();
+    }
+
+    public M getGameProvider() {
+        return gameProvider;
+    }
+
+    @Override
+    public Path getJar(ZomboidJar.Type type) {
+        return getMavenHelper(type).getOutputFile(null);
+    }
+
+    public LocalMavenHelper getMavenHelper(ZomboidJar.Type type) {
+        return new LocalMavenHelper("com.theindiestone", getName(type), getVersion(), null,
+            getMavenScope().getRoot(extension));
+    }
+
+    public abstract MavenScope getMavenScope();
+
+    /**
+     * @return A list of output jars that this provider generates
+     */
+    public List<? extends OutputJar> getOutputJars() {
+        return getRemappedJars();
+    }
+
+    public Project getProject() {
+        return project;
+    }
+
+    /**
+     * @return A list of jars that should be remapped
+     */
+    public abstract List<RemappedJars> getRemappedJars();
+
+    public abstract MappingsNamespace getTargetNamespace();
+
+    public List<ZomboidJar> provide(ProvideContext context) throws Exception {
+        final List<RemappedJars> remappedJars = getRemappedJars();
+        final List<ZomboidJar> gameJars = remappedJars.stream().map(RemappedJars::outputJar).toList();
+
+        if (remappedJars.isEmpty()) {
+            throw new IllegalStateException("No remapped jars provided");
+        }
+
+        if (shouldRefreshOutputs(context)) {
+            try {
+                remapInputs(remappedJars, context.configContext());
+                createBackupJars(gameJars);
+            } catch (Throwable t) {
+                cleanOutputs(remappedJars);
+
+                throw new RuntimeException("Failed to remap zomboid", t);
+            }
+        }
+
+        if (context.applyDependencies()) {
+            final List<ZomboidJar.Type> dependencyTargets = getDependencyTypes();
+
+            if (!dependencyTargets.isEmpty()) {
+                ZomboidSourceSets.get(getProject())
+                    .applyDependencies((configuration, type) -> getProject().getDependencies()
+                        .add(configuration, getDependencyNotation(type)), dependencyTargets);
+            }
+        }
+
+        return gameJars;
+    }
+
+    protected void configureRemapper(RemappedJars remappedJars, TinyRemapper.Builder tinyRemapperBuilder) {
+    }
+
+    protected void createBackupJars(List<ZomboidJar> minecraftJars) throws IOException {
+        if (!requiresBackupJars()) {
+            return;
+        }
+
+        for (ZomboidJar minecraftJar : minecraftJars) {
+            Files.copy(minecraftJar.getPath(), getBackupJarPath(minecraftJar), StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    protected String getDependencyNotation(ZomboidJar.Type type) {
+        return "com.theindiestone:%s:%s".formatted(getName(type), getVersion());
+    }
+
+    protected String getName(ZomboidJar.Type type) {
+        var sj = new StringJoiner("-");
+        sj.add("zomboid");
+        sj.add(type.toString());
+
+        if (!extension.disableObfuscation()) {
+            // Include the intermediate mapping name if it's not the default intermediary
+            final String intermediateName = extension.getIntermediateMappingsProvider().getName();
+
+            if (!intermediateName.equals(IntermediaryMappingsProvider.NAME)) {
+                sj.add(intermediateName);
+            }
+        } else {
+            sj.add("deobf");
+        }
+
+        if (getTargetNamespace() != MappingsNamespace.NAMED) {
+            sj.add(getTargetNamespace().name());
+        }
+
+        return sj.toString().toLowerCase(Locale.ROOT);
+    }
+
+    protected String getVersion() {
+        if (extension.disableObfuscation()) {
+            MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
+
+            if (mappingConfiguration == null) {
+                return extension.getZomboidProvider().gameVersion();
+            }
+
+            return "%s-%s".formatted(extension.getZomboidProvider().gameVersion(),
+                mappingConfiguration.mappingsIdentifier());
+        }
+
+        return "%s-%s".formatted(extension.getZomboidProvider().gameVersion(),
+            extension.getMappingConfiguration().mappingsIdentifier());
+    }
+
+    protected void remapJar(RemappedJars remappedJars, ConfigContext configContext) throws IOException {
+        if (extension.disableObfuscation()) {
+            Files.createDirectories(remappedJars.outputJarPath().getParent());
+            Files.copy(remappedJars.inputJar(), remappedJars.outputJarPath(), StandardCopyOption.REPLACE_EXISTING);
+
+            MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
+
+            if (mappingConfiguration != null) {
+                AnnotationsData annotationsData = AnnotationsData.getRemappedAnnotations(MappingsNamespace.OFFICIAL,
+                    mappingConfiguration, getProject(), configContext.serviceFactory(),
+                    MappingsNamespace.OFFICIAL.toString());
+
+                if (annotationsData != null) {
+                    applyAnnotations(remappedJars.outputJarPath(), annotationsData);
+                }
+            }
+
+            getMavenHelper(remappedJars.type()).savePom();
+            return;
+        }
+
+        final RemapMappingConfiguration mappingConfiguration = extension.getMappingConfiguration();
+        final String fromM = remappedJars.sourceNamespace().toString();
+        final String toM = getTargetNamespace().toString();
+
+        Files.deleteIfExists(remappedJars.outputJarPath());
+
+        final AnnotationsData remappedAnnotations = AnnotationsData.getRemappedAnnotations(getTargetNamespace(),
+            mappingConfiguration, getProject(), configContext.serviceFactory(), toM);
+        final Map<String,
+            String> remappedSignatures = SignatureFixerApplyVisitor.getRemappedSignatures(
+                getTargetNamespace() == MappingsNamespace.INTERMEDIARY, mappingConfiguration, getProject(),
+                configContext.serviceFactory(), toM);
+        final int javaVersion = gameProvider.getVersionInfo().javaVersion();
+        final boolean fixRecords = javaVersion >= 16;
+
+        TinyRemapper remapper = TinyRemapperHelper.getTinyRemapper(getProject(), configContext.serviceFactory(), fromM,
+            toM, fixRecords, (builder) -> {
+                if (remappedAnnotations != null) {
+                    builder.extraPostApplyVisitor(new AnnotationsApplyVisitor(remappedAnnotations));
+                }
+
+                builder.extraPostApplyVisitor(new SignatureFixerApplyVisitor(remappedSignatures));
+                configureRemapper(remappedJars, builder);
+            });
+
+        try (OutputConsumerPath outputConsumer = new OutputConsumerPath.Builder(remappedJars.outputJarPath()).build()) {
+            outputConsumer.addNonClassFiles(remappedJars.inputJar());
+
+            for (Path path : remappedJars.remapClasspath()) {
+                remapper.readClassPath(path);
+            }
+
+            remapper.readInputs(remappedJars.inputJar());
+            remapper.apply(outputConsumer);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to remap JAR " + remappedJars.inputJar() + " with mappings from "
+                + mappingConfiguration.tinyMappings, e);
+        } finally {
+            remapper.finish();
+        }
+
+        getMavenHelper(remappedJars.type()).savePom();
+    }
+
+    protected boolean requiresBackupJars() {
+        return true;
+    }
+
+    protected boolean shouldRefreshOutputs(ProvideContext context) {
+        if (context.refreshOutputs()) {
+            LOGGER.info("Refreshing outputs for mapped jar, as refresh outputs was requested");
+            return true;
+        }
+
+        final List<? extends OutputJar> outputJars = getOutputJars();
+
+        if (outputJars.isEmpty()) {
+            throw new IllegalStateException("No output jars provided");
+        }
+
+        for (OutputJar outputJar : outputJars) {
+            if (!getMavenHelper(outputJar.type()).exists(null)) {
+                LOGGER.info("Refreshing outputs for mapped jar, as {} does not exist", outputJar.outputJar());
+                return true;
+            }
+        }
+
+        if (requiresBackupJars()) {
+            for (OutputJar outputJar : outputJars) {
+                if (!Files.exists(getBackupJarPath(outputJar.outputJar()))) {
+                    LOGGER.info("Refreshing outputs for mapped jar, as backup jar does not exist for {}",
+                        outputJar.outputJar());
+                    return true;
+                }
+            }
+        }
+
+        LOGGER.debug("All outputs are up to date");
+        return false;
+    }
+
+    private void cleanOutputs(List<RemappedJars> remappedJars) throws IOException {
+        for (RemappedJars remappedJar : remappedJars) {
+            Files.deleteIfExists(remappedJar.outputJarPath());
+            Files.deleteIfExists(getBackupJarPath(remappedJar.outputJar()));
+        }
+    }
+
+    private void remapInputs(List<RemappedJars> remappedJars, ConfigContext configContext) throws IOException {
+        cleanOutputs(remappedJars);
+
+        for (RemappedJars remappedJar : remappedJars) {
+            remapJar(remappedJar, configContext);
+        }
+    }
+
+    public enum MavenScope {
+        // Output files will be stored globally
+        GLOBAL(LoomFiles::getGlobalZomboidRepo),
+        // Output files will be stored per project
+        LOCAL(LoomFiles::getLocalZomboidRepo);
+
+        private final Function<LoomFiles, File> fileFunction;
+
+        MavenScope(Function<LoomFiles, File> fileFunction) {
+            this.fileFunction = fileFunction;
+        }
+
+        public Path getRoot(LoomGradleExtension extension) {
+            return fileFunction.apply(extension.getFiles()).toPath();
+        }
+    }
+
+    public sealed interface OutputJar permits RemappedJars, SimpleOutputJar {
+        ZomboidJar outputJar();
+
+        default ZomboidJar.Type type() {
+            return outputJar().getType();
+        }
+    }
+
+    public record ProvideContext(boolean applyDependencies, boolean refreshOutputs, ConfigContext configContext) {
+        ProvideContext withApplyDependencies(boolean applyDependencies) {
+            return new ProvideContext(applyDependencies, refreshOutputs(), configContext());
+        }
+    }
+
+    public record RemappedJars(
+        Path inputJar,
+        ZomboidJar outputJar,
+        MappingsNamespace sourceNamespace,
+        Path... remapClasspath
+    ) implements OutputJar
+    {
+        public Path outputJarPath() {
+            return outputJar().getPath();
+        }
+
+        public String name() {
+            return outputJar().getName();
+        }
+    }
+
+    public record SimpleOutputJar(ZomboidJar outputJar) implements OutputJar {}
 }

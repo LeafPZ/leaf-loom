@@ -68,49 +68,51 @@ import dev.aoqia.leaf.loom.build.nesting.JarNester;
  * Do NOT turn me into a record!
  */
 public abstract class NestJarsAction implements Action<Task>, Serializable {
-	@InputFiles
-	public abstract ConfigurableFileCollection getJars();
+    public static void addToTask(Jar task, FileCollection jars) {
+        NestJarsAction nestJarsAction = task.getProject().getObjects().newInstance(NestJarsAction.class);
+        nestJarsAction.getJars().from(jars);
+        // I don't think @InputFiles works, so to be sure add the jars to the task input anyway.
+        task.getInputs().files(nestJarsAction.getJars());
+        task.doLast(nestJarsAction);
+    }
 
-	@Inject
-	protected abstract WorkerExecutor getWorkerExecutor();
+    @Override
+    public void execute(Task t) {
+        final Jar jarTask = (Jar) t;
 
-	public static void addToTask(Jar task, FileCollection jars) {
-		NestJarsAction nestJarsAction = task.getProject().getObjects().newInstance(NestJarsAction.class);
-		nestJarsAction.getJars().from(jars);
-		task.getInputs().files(nestJarsAction.getJars()); // I don't think @InputFiles works, so to be sure add the jars to the task input anyway.
-		task.doLast(nestJarsAction);
-	}
+        final WorkQueue workQueue = getWorkerExecutor().noIsolation();
 
-	@Override
-	public void execute(Task t) {
-		final Jar jarTask = (Jar) t;
+        workQueue.submit(NestAction.class, p -> {
+            p.getArchiveFile().set(jarTask.getArchiveFile());
+            p.getJars().setFrom(getJars());
+        });
+    }
 
-		final WorkQueue workQueue = getWorkerExecutor().noIsolation();
+    @InputFiles
+    public abstract ConfigurableFileCollection getJars();
 
-		workQueue.submit(NestAction.class, p -> {
-			p.getArchiveFile().set(jarTask.getArchiveFile());
-			p.getJars().setFrom(getJars());
-		});
-	}
+    @Inject
+    protected abstract WorkerExecutor getWorkerExecutor();
 
-	public interface NestJarsParameters extends WorkParameters {
-		RegularFileProperty getArchiveFile();
-		ConfigurableFileCollection getJars();
-	}
+    public abstract static class NestAction implements WorkAction<NestJarsParameters> {
+        private static final Logger LOGGER = LoggerFactory.getLogger(NestJarsAction.class);
 
-	public abstract static class NestAction implements WorkAction<NestJarsParameters> {
-		private static final Logger LOGGER = LoggerFactory.getLogger(NestJarsAction.class);
+        @Override
+        public void execute() {
+            final File jarFile = getParameters().getArchiveFile().get().getAsFile();
+            final Set<File> jars = getParameters().getJars().getFiles();
 
-		@Override
-		public void execute() {
-			final File jarFile = getParameters().getArchiveFile().get().getAsFile();
-			final Set<File> jars = getParameters().getJars().getFiles();
+            // Nest all collected jars
+            if (!jars.isEmpty()) {
+                JarNester.nestJars(jars, jarFile);
+                LOGGER.info("Nested {} jar(s) into {}", jars.size(), jarFile.getName());
+            }
+        }
+    }
 
-			// Nest all collected jars
-			if (!jars.isEmpty()) {
-				JarNester.nestJars(jars, jarFile);
-				LOGGER.info("Nested {} jar(s) into {}", jars.size(), jarFile.getName());
-			}
-		}
-	}
+    public interface NestJarsParameters extends WorkParameters {
+        RegularFileProperty getArchiveFile();
+
+        ConfigurableFileCollection getJars();
+    }
 }

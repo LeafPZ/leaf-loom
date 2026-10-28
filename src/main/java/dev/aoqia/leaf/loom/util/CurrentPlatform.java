@@ -51,108 +51,112 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 final class CurrentPlatform implements Platform {
-	static final Platform INSTANCE = new CurrentPlatform();
+    static final Platform INSTANCE = new CurrentPlatform();
 
-	private final OperatingSystem operatingSystem;
-	private final Architecture architecture;
-	private final boolean supportsUnixDomainSockets;
-	private final boolean isRaspberryPi;
+    private final Architecture architecture;
 
-	private CurrentPlatform() {
-		this.operatingSystem = getCurrentOperatingSystem();
-		this.architecture = getCurrentArchitecture();
-		this.supportsUnixDomainSockets = isUnixDomainSocketsSupported();
-		this.isRaspberryPi = getIsRaspberryPi(operatingSystem, architecture);
-	}
+    private final boolean isRaspberryPi;
 
-	private static OperatingSystem getCurrentOperatingSystem() {
-		final String osName = System.getProperty("os.name").toLowerCase();
+    private final OperatingSystem operatingSystem;
 
-		if (osName.contains("win")) {
-			return OperatingSystem.WINDOWS;
-		} else if (osName.contains("mac")) {
-			return OperatingSystem.MAC_OS;
-		} else {
-			// Or unknown
-			return OperatingSystem.LINUX;
-		}
-	}
+    private final boolean supportsUnixDomainSockets;
 
-	private static Architecture getCurrentArchitecture() {
-		final String arch = System.getProperty("os.arch");
-		final boolean is64Bit = arch.contains("64") || arch.startsWith("armv8");
-		final boolean isArm = arch.startsWith("arm") || arch.startsWith("aarch64");
-		final boolean isRiscV = arch.startsWith("riscv");
+    private CurrentPlatform() {
+        this.operatingSystem = getCurrentOperatingSystem();
+        this.architecture = getCurrentArchitecture();
+        this.supportsUnixDomainSockets = isUnixDomainSocketsSupported();
+        this.isRaspberryPi = getIsRaspberryPi(operatingSystem, architecture);
+    }
 
-		return new Architecture() {
-			@Override
-			public boolean is64Bit() {
-				return is64Bit;
-			}
+    private static Architecture getCurrentArchitecture() {
+        final String arch = System.getProperty("os.arch");
+        final boolean is64Bit = arch.contains("64") || arch.startsWith("armv8");
+        final boolean isArm = arch.startsWith("arm") || arch.startsWith("aarch64");
+        final boolean isRiscV = arch.startsWith("riscv");
 
-			@Override
-			public boolean isArm() {
-				return isArm;
-			}
+        return new Architecture() {
+            @Override
+            public boolean is64Bit() {
+                return is64Bit;
+            }
 
-			@Override
-			public boolean isRiscV() {
-				return isRiscV;
-			}
-		};
-	}
+            @Override
+            public boolean isArm() {
+                return isArm;
+            }
 
-	// Requires Unix, or Windows 10 17063 or later. See: https://devblogs.microsoft.com/commandline/af_unix-comes-to-windows/
-	private static boolean isUnixDomainSocketsSupported() {
-		try (ServerSocketChannel serverChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
-			return true;
-		} catch (UnsupportedOperationException e) {
-			return false;
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
-	}
+            @Override
+            public boolean isRiscV() {
+                return isRiscV;
+            }
+        };
+    }
 
-	/**
-	 * Returns true if the current system is a Raspberry Pi running Debian 12 (Bookworm).
-	 */
-	private static boolean getIsRaspberryPi(OperatingSystem operatingSystem, Architecture architecture) {
-		if (operatingSystem != OperatingSystem.LINUX || !architecture.isArm()) {
-			return false;
-		}
+    private static OperatingSystem getCurrentOperatingSystem() {
+        final String osName = System.getProperty("os.name").toLowerCase();
 
-		try {
-			final Path releasePath = Paths.get("/etc/os-release");
-			final String release = Files.readString(releasePath, StandardCharsets.UTF_8);
-			final boolean isDebianBookworm = release.contains("VERSION_CODENAME=bookworm");
+        if (osName.contains("win")) {
+            return OperatingSystem.WINDOWS;
+        } else if (osName.contains("mac")) {
+            return OperatingSystem.MAC_OS;
+        } else {
+            // Or unknown
+            return OperatingSystem.LINUX;
+        }
+    }
 
-			final Path modelPath = Paths.get("/sys/firmware/devicetree/base/model");
-			final String model = Files.readString(modelPath, StandardCharsets.UTF_8);
-			final boolean isRaspberryPi = model.startsWith("Raspberry Pi");
+    /**
+     * Returns true if the current system is a Raspberry Pi running Debian 12 (Bookworm).
+     */
+    private static boolean getIsRaspberryPi(OperatingSystem operatingSystem, Architecture architecture) {
+        if (operatingSystem != OperatingSystem.LINUX || !architecture.isArm()) {
+            return false;
+        }
 
-			return isDebianBookworm && isRaspberryPi;
-		} catch (IOException e) {
-			return false;
-		}
-	}
+        try {
+            final Path releasePath = Paths.get("/etc/os-release");
+            final String release = Files.readString(releasePath, StandardCharsets.UTF_8);
+            final boolean isDebianBookworm = release.contains("VERSION_CODENAME=bookworm");
 
-	@Override
-	public OperatingSystem getOperatingSystem() {
-		return operatingSystem;
-	}
+            final Path modelPath = Paths.get("/sys/firmware/devicetree/base/model");
+            final String model = Files.readString(modelPath, StandardCharsets.UTF_8);
+            final boolean isRaspberryPi = model.startsWith("Raspberry Pi");
 
-	@Override
-	public Architecture getArchitecture() {
-		return architecture;
-	}
+            return isDebianBookworm && isRaspberryPi;
+        } catch (IOException e) {
+            return false;
+        }
+    }
 
-	@Override
-	public boolean supportsUnixDomainSockets() {
-		return supportsUnixDomainSockets;
-	}
+    // Requires Unix, or Windows 10 17063 or later. See:
+    // https://devblogs.microsoft.com/commandline/af_unix-comes-to-windows/
+    private static boolean isUnixDomainSocketsSupported() {
+        try (ServerSocketChannel serverChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
+            return true;
+        } catch (UnsupportedOperationException e) {
+            return false;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
-	@Override
-	public boolean isRaspberryPi() {
-		return isRaspberryPi;
-	}
+    @Override
+    public Architecture getArchitecture() {
+        return architecture;
+    }
+
+    @Override
+    public OperatingSystem getOperatingSystem() {
+        return operatingSystem;
+    }
+
+    @Override
+    public boolean isRaspberryPi() {
+        return isRaspberryPi;
+    }
+
+    @Override
+    public boolean supportsUnixDomainSockets() {
+        return supportsUnixDomainSockets;
+    }
 }

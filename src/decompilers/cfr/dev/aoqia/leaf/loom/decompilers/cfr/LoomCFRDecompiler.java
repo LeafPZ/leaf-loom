@@ -66,90 +66,89 @@ import dev.aoqia.leaf.loom.api.decompilers.JavadocStyle;
 import dev.aoqia.leaf.loom.decompilers.LoomInternalDecompiler;
 
 public final class LoomCFRDecompiler implements LoomInternalDecompiler {
-	private static final Map<String, String> DECOMPILE_OPTIONS = Map.of(
-			"renameillegalidents", "true",
-			"trackbytecodeloc", "true",
-			"comments", "false"
-	);
+    private static final Map<String, String> DECOMPILE_OPTIONS = Map.of("renameillegalidents", "true",
+        "trackbytecodeloc", "true", "comments", "false");
 
-	@Override
-	public void decompile(LoomInternalDecompiler.Context context) {
-		if (context.javadocStyle() == JavadocStyle.MARKDOWN) {
-			throw new UnsupportedOperationException("CFR does not support Markdown Javadocs");
-		}
+    @Override
+    public void decompile(LoomInternalDecompiler.Context context) {
+        if (context.javadocStyle() == JavadocStyle.MARKDOWN) {
+            throw new UnsupportedOperationException("CFR does not support Markdown Javadocs");
+        }
 
-		Path compiledJar = context.compiledJar();
+        Path compiledJar = context.compiledJar();
 
-		final String path = compiledJar.toAbsolutePath().toString();
-		final Map<String, String> allOptions = new HashMap<>(DECOMPILE_OPTIONS);
-		allOptions.putAll(context.options());
+        final String path = compiledJar.toAbsolutePath().toString();
+        final Map<String, String> allOptions = new HashMap<>(DECOMPILE_OPTIONS);
+        allOptions.putAll(context.options());
 
-		final Options options = OptionsImpl.getFactory().create(allOptions);
+        final Options options = OptionsImpl.getFactory().create(allOptions);
 
-		ClassFileSourceImpl classFileSource = new ClassFileSourceImpl(options);
+        ClassFileSourceImpl classFileSource = new ClassFileSourceImpl(options);
 
-		for (Path library : context.libraries()) {
-			classFileSource.addJarContent(library.toAbsolutePath().toString(), AnalysisType.JAR);
-		}
+        for (Path library : context.libraries()) {
+            classFileSource.addJarContent(library.toAbsolutePath().toString(), AnalysisType.JAR);
+        }
 
-		classFileSource.informAnalysisRelativePathDetail(null, null);
+        classFileSource.informAnalysisRelativePathDetail(null, null);
 
-		DCCommonState state = new DCCommonState(options, classFileSource);
+        DCCommonState state = new DCCommonState(options, classFileSource);
 
-		if (context.javaDocs() != null) {
-			state = new DCCommonState(state, new CFRObfuscationMapping(context.javaDocs(), context.runtimeNamespace()));
-		}
+        if (context.javaDocs() != null) {
+            state = new DCCommonState(state, new CFRObfuscationMapping(context.javaDocs(), context.runtimeNamespace()));
+        }
 
-		final Manifest manifest = new Manifest();
-		manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+        final Manifest manifest = new Manifest();
+        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
 
-		Map<String, Map<Integer, Integer>> lineMap;
+        Map<String, Map<Integer, Integer>> lineMap;
 
-		try (JarOutputStream outputStream = new JarOutputStream(Files.newOutputStream(context.sourcesDestination()), manifest)) {
-			CFRSinkFactory cfrSinkFactory = new CFRSinkFactory(outputStream, context.logger());
-			SinkDumperFactory dumperFactory = new SinkDumperFactory(cfrSinkFactory, options);
+        try (JarOutputStream outputStream = new JarOutputStream(Files.newOutputStream(context.sourcesDestination()),
+            manifest))
+        {
+            CFRSinkFactory cfrSinkFactory = new CFRSinkFactory(outputStream, context.logger());
+            SinkDumperFactory dumperFactory = new SinkDumperFactory(cfrSinkFactory, options);
 
-			Driver.doJar(state, path, AnalysisType.JAR, dumperFactory);
+            Driver.doJar(state, path, AnalysisType.JAR, dumperFactory);
 
-			lineMap = cfrSinkFactory.getLineMap();
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to decompile", e);
-		}
+            lineMap = cfrSinkFactory.getLineMap();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to decompile", e);
+        }
 
-		writeLineMap(context.linemapDestination(), lineMap);
-	}
+        writeLineMap(context.linemapDestination(), lineMap);
+    }
 
-	private void writeLineMap(Path output, Map<String, Map<Integer, Integer>> lineMap) {
-		if (lineMap.isEmpty()) {
-			return;
-		}
+    private void writeLineMap(Path output, Map<String, Map<Integer, Integer>> lineMap) {
+        if (lineMap.isEmpty()) {
+            return;
+        }
 
-		try (Writer writer = Files.newBufferedWriter(output, StandardCharsets.UTF_8)) {
-			for (Map.Entry<String, Map<Integer, Integer>> classEntry : lineMap.entrySet()) {
-				final String name = classEntry.getKey().replace(".", "/");
+        try (Writer writer = Files.newBufferedWriter(output, StandardCharsets.UTF_8)) {
+            for (Map.Entry<String, Map<Integer, Integer>> classEntry : lineMap.entrySet()) {
+                final String name = classEntry.getKey().replace(".", "/");
 
-				final Map<Integer, Integer> mapping = classEntry.getValue();
+                final Map<Integer, Integer> mapping = classEntry.getValue();
 
-				int maxLine = 0;
-				int maxLineDest = 0;
-				StringBuilder builder = new StringBuilder();
+                int maxLine = 0;
+                int maxLineDest = 0;
+                StringBuilder builder = new StringBuilder();
 
-				for (Map.Entry<Integer, Integer> mappingEntry : mapping.entrySet()) {
-					final int src = mappingEntry.getKey();
-					final int dst = mappingEntry.getValue();
+                for (Map.Entry<Integer, Integer> mappingEntry : mapping.entrySet()) {
+                    final int src = mappingEntry.getKey();
+                    final int dst = mappingEntry.getValue();
 
-					maxLine = Math.max(maxLine, src);
-					maxLineDest = Math.max(maxLineDest, dst);
+                    maxLine = Math.max(maxLine, src);
+                    maxLineDest = Math.max(maxLineDest, dst);
 
-					builder.append("\t").append(src).append("\t").append(dst).append("\n");
-				}
+                    builder.append("\t").append(src).append("\t").append(dst).append("\n");
+                }
 
-				writer.write(String.format(Locale.ENGLISH, "%s\t%d\t%d\n", name, maxLine, maxLineDest));
-				writer.write(builder.toString());
-				writer.write("\n");
-			}
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to write line map", e);
-		}
-	}
+                writer.write(String.format(Locale.ENGLISH, "%s\t%d\t%d\n", name, maxLine, maxLineDest));
+                writer.write(builder.toString());
+                writer.write("\n");
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write line map", e);
+        }
+    }
 }

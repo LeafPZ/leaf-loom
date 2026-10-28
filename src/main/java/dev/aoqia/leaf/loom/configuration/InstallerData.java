@@ -126,12 +126,15 @@ public record InstallerData(String version, JsonObject installerJson) {
                 File loaderJar = null;
                 final var cfg = project.getConfigurations().getByName("modImplementation");
                 if (!cfg.isCanBeResolved()) {
-                    throw new RuntimeException("Skipping configuration %s because it can't be resolved"
-                        .formatted(cfg.getName()));
+                    throw new RuntimeException(
+                        "Skipping configuration %s because it can't be resolved".formatted(cfg.getName()));
                 }
-                var result = cfg.getIncoming().getArtifacts().getArtifacts().stream().filter(
-                    a -> a.getId().getComponentIdentifier().toString().startsWith("dev.aoqia.leaf:loader")
-                ).toList();
+                var result = cfg.getIncoming()
+                    .getArtifacts()
+                    .getArtifacts()
+                    .stream()
+                    .filter(a -> a.getId().getComponentIdentifier().toString().startsWith("dev.aoqia.leaf:loader"))
+                    .toList();
 
                 if (!result.isEmpty()) {
                     loaderJar = result.getFirst().getFile();
@@ -144,8 +147,9 @@ public record InstallerData(String version, JsonObject installerJson) {
                 if (!FileSystemUtil.isFileLocked(loaderJar)) {
                     final String walkPath = "/META-INF/jars";
                     try (var fs = FileSystemUtil.getJarFileSystem(loaderJar, false);
-                        var walk = Files.walk(fs.getPath(walkPath), 1)) {
-                        for (var iter = walk.iterator(); iter.hasNext(); ) {
+                         var walk = Files.walk(fs.getPath(walkPath), 1))
+                    {
+                        for (var iter = walk.iterator(); iter.hasNext();) {
                             Path entry = iter.next();
 
                             // Files.walk includes the start path too, skip it.
@@ -155,7 +159,9 @@ public record InstallerData(String version, JsonObject installerJson) {
 
                             Path src = fs.getPath("/").resolve(entry);
                             Path srcFile = src.getFileName();
-                            Path dest = extension.getFiles().getProjectBuildCache().toPath()
+                            Path dest = extension.getFiles()
+                                .getProjectBuildCache()
+                                .toPath()
                                 .resolve(FileSystem.getCurrent().normalizeSeparators(srcFile.toString()));
 
                             if (!dest.toFile().exists()) {
@@ -176,7 +182,8 @@ public record InstallerData(String version, JsonObject installerJson) {
                 hasAppliedJij = true;
             } else {
                 ExternalModuleDependency modDep = (ExternalModuleDependency) project.getDependencies().create(name);
-                modDep.setTransitive(false); // Match the launcher in not being transitive
+                // Match the launcher in not being transitive
+                modDep.setTransitive(false);
                 addDependency(modDep, extension, annotationProcessor, loaderDepsConfig);
             }
 
@@ -196,7 +203,8 @@ public record InstallerData(String version, JsonObject installerJson) {
         }
 
         final String url = jsonObject.get("url").getAsString();
-        final boolean isPresent = project.getRepositories().stream()
+        final boolean isPresent = project.getRepositories()
+            .stream()
             .filter(artifactRepository -> artifactRepository instanceof MavenArtifactRepository)
             .map(artifactRepository -> (MavenArtifactRepository) artifactRepository)
             .anyMatch(mavenArtifactRepository -> mavenArtifactRepository.getUrl().toString().equalsIgnoreCase(url));

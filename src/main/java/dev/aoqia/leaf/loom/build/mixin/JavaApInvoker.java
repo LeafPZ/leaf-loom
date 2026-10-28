@@ -54,27 +54,25 @@ import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.extension.MixinExtension;
 
 public class JavaApInvoker extends AnnotationProcessorInvoker<JavaCompile> {
-	public JavaApInvoker(Project project) {
-		super(
-				project,
-				AnnotationProcessorInvoker.getApConfigurations(project, SourceSet::getAnnotationProcessorConfigurationName),
-				getInvokerTasks(project),
-				AnnotationProcessorInvoker.JAVA);
-	}
+    public JavaApInvoker(Project project) {
+        super(project,
+            AnnotationProcessorInvoker.getApConfigurations(project, SourceSet::getAnnotationProcessorConfigurationName),
+            getInvokerTasks(project), AnnotationProcessorInvoker.JAVA);
+    }
 
-	private static Map<SourceSet, TaskProvider<JavaCompile>> getInvokerTasks(Project project) {
-		MixinExtension mixin = LoomGradleExtension.get(project).getMixin();
-		return mixin.getInvokerTasksStream(AnnotationProcessorInvoker.JAVA, JavaCompile.class)
-				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-	}
+    private static Map<SourceSet, TaskProvider<JavaCompile>> getInvokerTasks(Project project) {
+        MixinExtension mixin = LoomGradleExtension.get(project).getMixin();
+        return mixin.getInvokerTasksStream(AnnotationProcessorInvoker.JAVA, JavaCompile.class)
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
 
-	@Override
-	protected void passArgument(JavaCompile compileTask, String key, String value) {
-		compileTask.getOptions().getCompilerArgs().add("-A" + key + "=" + value);
-	}
+    @Override
+    protected File getRefmapDestinationDir(JavaCompile task) {
+        return task.getDestinationDirectory().getAsFile().get();
+    }
 
-	@Override
-	protected File getRefmapDestinationDir(JavaCompile task) {
-		return task.getDestinationDirectory().getAsFile().get();
-	}
+    @Override
+    protected void passArgument(JavaCompile compileTask, String key, String value) {
+        compileTask.getOptions().getCompilerArgs().add("-A" + key + "=" + value);
+    }
 }

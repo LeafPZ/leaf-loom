@@ -48,58 +48,11 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.SingleJarEnvType;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 
 public interface MappedZomboidProvider {
-	default List<Path> getZomboidJarPaths() {
-		return getZomboidJars().stream().map(ZomboidJar::getPath).toList();
-	}
+    default List<Path> getZomboidJarPaths() {
+        return getZomboidJars().stream().map(ZomboidJar::getPath).toList();
+    }
 
-	List<ZomboidJar> getZomboidJars();
-
-	interface ProviderImpl extends MappedZomboidProvider {
-		Path getJar(ZomboidJar.Type type);
-	}
-
-	interface Merged extends ProviderImpl {
-		default ZomboidJar getMergedJar() {
-			return new ZomboidJar.Merged(getJar(ZomboidJar.Type.MERGED));
-		}
-
-		@Override
-		default List<ZomboidJar> getZomboidJars() {
-			return List.of(getMergedJar());
-		}
-	}
-
-	interface Split extends ProviderImpl {
-		default ZomboidJar getCommonJar() {
-			return new ZomboidJar.Common(getJar(ZomboidJar.Type.COMMON));
-		}
-
-		default ZomboidJar getClientOnlyJar() {
-			return new ZomboidJar.ClientOnly(getJar(ZomboidJar.Type.CLIENT_ONLY));
-		}
-
-		@Override
-		default List<ZomboidJar> getZomboidJars() {
-			return List.of(getCommonJar(), getClientOnlyJar());
-		}
-	}
-
-	interface SingleJar extends ProviderImpl {
-		SingleJarEnvType env();
-
-		default ZomboidJar.Type envType() {
-			return env().getType();
-		}
-
-		default ZomboidJar getEnvOnlyJar() {
-			return env().getJar().apply(getJar(env().getType()));
-		}
-
-		@Override
-		default List<ZomboidJar> getZomboidJars() {
-			return List.of(getEnvOnlyJar());
-		}
-	}
+    List<ZomboidJar> getZomboidJars();
 
     interface CompleteJar extends ProviderImpl {
         default ZomboidJar getGameJar() {
@@ -109,6 +62,53 @@ public interface MappedZomboidProvider {
         @Override
         default List<ZomboidJar> getZomboidJars() {
             return List.of(getGameJar());
+        }
+    }
+
+    interface Merged extends ProviderImpl {
+        default ZomboidJar getMergedJar() {
+            return new ZomboidJar.Merged(getJar(ZomboidJar.Type.MERGED));
+        }
+
+        @Override
+        default List<ZomboidJar> getZomboidJars() {
+            return List.of(getMergedJar());
+        }
+    }
+
+    interface ProviderImpl extends MappedZomboidProvider {
+        Path getJar(ZomboidJar.Type type);
+    }
+
+    interface SingleJar extends ProviderImpl {
+        SingleJarEnvType env();
+
+        default ZomboidJar.Type envType() {
+            return env().getType();
+        }
+
+        default ZomboidJar getEnvOnlyJar() {
+            return env().getJar().apply(getJar(env().getType()));
+        }
+
+        @Override
+        default List<ZomboidJar> getZomboidJars() {
+            return List.of(getEnvOnlyJar());
+        }
+    }
+
+    interface Split extends ProviderImpl {
+        default ZomboidJar getClientOnlyJar() {
+            return new ZomboidJar.ClientOnly(getJar(ZomboidJar.Type.CLIENT_ONLY));
+        }
+
+        default ZomboidJar getCommonJar() {
+            return new ZomboidJar.Common(getJar(ZomboidJar.Type.COMMON));
+        }
+
+        @Override
+        default List<ZomboidJar> getZomboidJars() {
+            return List.of(getCommonJar(), getClientOnlyJar());
         }
     }
 }

@@ -86,147 +86,154 @@ import dev.aoqia.leaf.loom.util.service.ServiceType;
 /// This also works in projects with disabled obfuscation
 /// where the mappings are just based on javadocs.
 public class SourceMappingsService extends Service<SourceMappingsService.Options> {
-	public static final ServiceType<Options, SourceMappingsService> TYPE = new ServiceType<>(Options.class, SourceMappingsService.class);
-	private static final Logger LOGGER = LoggerFactory.getLogger(SourceMappingsService.class);
+    public static final ServiceType<Options,
+        SourceMappingsService> TYPE = new ServiceType<>(Options.class, SourceMappingsService.class);
 
-	public interface Options extends Service.Options {
-		@InputFile
-		@PathSensitive(PathSensitivity.NONE)
-		RegularFileProperty getMappings();
+    private static final Logger LOGGER = LoggerFactory.getLogger(SourceMappingsService.class);
 
-		@Input
-		@Optional
-		Property<String> getProcessorHash(); // the hash of the processors applied to the mappings
+    public SourceMappingsService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-		@Input
-		Property<JavadocStyle> getJavadocStyle();
-	}
+    public static Provider<Options> create(Project project) {
+        final Property<String> hash = project.getObjects().property(String.class);
+        final Path mappings = getMappings(project, hash);
 
-	public static Provider<Options> create(Project project) {
-		final Property<String> hash = project.getObjects().property(String.class);
-		final Path mappings = getMappings(project, hash);
+        return TYPE.create(project, options -> {
+            options.getMappings().fileValue(project.file(mappings));
+            options.getProcessorHash().set(hash);
+            MappingConfiguration mappingConfiguration = LoomGradleExtension.get(project)
+                .getMappingConfigurationOrNull();
+            options.getJavadocStyle()
+                .set(mappingConfiguration != null ? mappingConfiguration.getJavadocStyle() : JavadocStyle.HTML);
+        });
+    }
 
-		return TYPE.create(project, options -> {
-			options.getMappings().fileValue(project.file(mappings));
-			options.getProcessorHash().set(hash);
-			MappingConfiguration mappingConfiguration = LoomGradleExtension.get(project).getMappingConfigurationOrNull();
-			options.getJavadocStyle().set(mappingConfiguration != null ? mappingConfiguration.getJavadocStyle() : JavadocStyle.HTML);
-		});
-	}
+    private static void createMappings(Project project, @Nullable ZomboidJarProcessorManager jarProcessor,
+        @Nullable MappingConfiguration mappingConfiguration, Path emptyMappings, Path outputMappings) throws IOException
+    {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
+        MemoryMappingTree mappingTree = new MemoryMappingTree();
+        String sourceNamespace = !extension.disableObfuscation() && extension.getUseIntermediateMappings().get()
+            ? MappingsNamespace.INTERMEDIARY.toString() : MappingsNamespace.OFFICIAL.toString();
 
-	private static Path getMappings(Project project, Property<String> hashProperty) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final ZomboidJarProcessorManager jarProcessor = ZomboidJarProcessorManager.create(project);
-		final Path dir = extension.getFiles().getProjectPersistentCache().toPath().resolve("source_mappings");
-		final Path emptyMappingsPath = dir.resolve("empty.tiny"); // empty base mappings for unobf
-		final boolean disableObf = extension.disableObfuscation();
-		final MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
+        if (mappingConfiguration != null) {
+            try (var serviceFactory = new ScopedServiceFactory()) {
+                mappingConfiguration.getMappingsService(project, serviceFactory)
+                    .getMappingTree()
+                    .accept(new MappingSourceNsSwitch(mappingTree, sourceNamespace));
+            }
+        } else {
+            try (Reader reader = Files.newBufferedReader(emptyMappings, StandardCharsets.UTF_8)) {
+                MappingReader.read(reader, new MappingSourceNsSwitch(mappingTree, sourceNamespace));
+            }
+        }
 
-		if (!disableObf && mappingConfiguration == null) {
-			throw new IllegalStateException("Mappings have not been configured");
-		}
+        if (jarProcessor != null) {
+            GenerateSourcesTask.MappingsProcessor mappingsProcessor = mappings -> {
+                try (var serviceFactory = new ScopedServiceFactory()) {
+                    final var configContext = new ConfigContextImpl(project, serviceFactory, extension);
+                    return jarProcessor.processMappings(mappings, new MappingProcessorContextImpl(configContext));
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            };
 
-		if (mappingConfiguration == null && (!Files.exists(emptyMappingsPath) || extension.refreshDeps())) {
-			try {
-				Files.createDirectories(dir);
-				Files.deleteIfExists(emptyMappingsPath);
-				Files.writeString(emptyMappingsPath, "tiny\t2\t0\tofficial\n", StandardCharsets.UTF_8);
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to create empty source mappings", e);
-			}
-		}
+            boolean transformed = mappingsProcessor.transform(mappingTree);
 
-		final String processorHash = jarProcessor != null ? jarProcessor.getSourceMappingsHash() : "none";
-		final String mappingsHash = mappingConfiguration != null
-				? mappingConfiguration.getMappingsHash()
-				: Checksum.of(emptyMappingsPath).sha256().hex();
-		final String hash = Checksum.of(processorHash + ":" + mappingsHash).sha1().hex();
-		hashProperty.set(hash);
+            if (!transformed) {
+                LOGGER.info("No mappings processors transformed the mappings");
+            }
+        }
 
-		if (jarProcessor == null) {
-			if (mappingConfiguration instanceof RemapMappingConfiguration remapMappingConfiguration) {
-				LOGGER.info("No jar processor found, using configured source mappings");
-				return remapMappingConfiguration.tinyMappings;
-			} else if (mappingConfiguration == null) {
-				LOGGER.info("No jar processor found, using empty source mappings");
-				return emptyMappingsPath;
-			}
-		}
+        try (Writer writer = Files.newBufferedWriter(outputMappings, StandardCharsets.UTF_8)) {
+            var tiny2Writer = new Tiny2FileWriter(writer, false);
+            mappingTree.accept(new MappingSourceNsSwitch(tiny2Writer, extension.disableObfuscation()
+                ? MappingsNamespace.OFFICIAL.toString() : MappingsNamespace.NAMED.toString()));
+        }
+    }
 
-		final Path path = dir.resolve(hash + ".tiny");
+    private static Path getMappings(Project project, Property<String> hashProperty) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final ZomboidJarProcessorManager jarProcessor = ZomboidJarProcessorManager.create(project);
+        final Path dir = extension.getFiles().getProjectPersistentCache().toPath().resolve("source_mappings");
+        final Path emptyMappingsPath = dir.resolve("empty.tiny");
+        final boolean disableObf = extension.disableObfuscation();
+        final MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
 
-		if (Files.exists(path) && !extension.refreshDeps()) {
-			LOGGER.debug("Using cached source mappings");
-			return path;
-		}
+        if (!disableObf && mappingConfiguration == null) {
+            throw new IllegalStateException("Mappings have not been configured");
+        }
 
-		LOGGER.info("Creating source mappings for hash {}", hash);
+        if (mappingConfiguration == null && (!Files.exists(emptyMappingsPath) || extension.refreshDeps())) {
+            try {
+                Files.createDirectories(dir);
+                Files.deleteIfExists(emptyMappingsPath);
+                Files.writeString(emptyMappingsPath, "tiny\t2\t0\tofficial\n", StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to create empty source mappings", e);
+            }
+        }
 
-		try {
-			Files.createDirectories(dir);
-			Files.deleteIfExists(path);
-			createMappings(project, jarProcessor, mappingConfiguration, emptyMappingsPath, path);
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to create source mappings", e);
-		}
+        final String processorHash = jarProcessor != null ? jarProcessor.getSourceMappingsHash() : "none";
+        final String mappingsHash = mappingConfiguration != null ? mappingConfiguration.getMappingsHash()
+            : Checksum.of(emptyMappingsPath).sha256().hex();
+        final String hash = Checksum.of(processorHash + ":" + mappingsHash).sha1().hex();
+        hashProperty.set(hash);
 
-		return path;
-	}
+        if (jarProcessor == null) {
+            if (mappingConfiguration instanceof RemapMappingConfiguration remapMappingConfiguration) {
+                LOGGER.info("No jar processor found, using configured source mappings");
+                return remapMappingConfiguration.tinyMappings;
+            } else if (mappingConfiguration == null) {
+                LOGGER.info("No jar processor found, using empty source mappings");
+                return emptyMappingsPath;
+            }
+        }
 
-	private static void createMappings(Project project, @Nullable ZomboidJarProcessorManager jarProcessor, @Nullable MappingConfiguration mappingConfiguration, Path emptyMappings, Path outputMappings) throws IOException {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
-		MemoryMappingTree mappingTree = new MemoryMappingTree();
-		String sourceNamespace = !extension.disableObfuscation() && extension.getUseIntermediateMappings().get()
-				? MappingsNamespace.INTERMEDIARY.toString()
-				: MappingsNamespace.OFFICIAL.toString();
+        final Path path = dir.resolve(hash + ".tiny");
 
-		if (mappingConfiguration != null) {
-			try (var serviceFactory = new ScopedServiceFactory()) {
-				mappingConfiguration.getMappingsService(project, serviceFactory).getMappingTree()
-						.accept(new MappingSourceNsSwitch(mappingTree, sourceNamespace));
-			}
-		} else {
-			try (Reader reader = Files.newBufferedReader(emptyMappings, StandardCharsets.UTF_8)) {
-				MappingReader.read(reader, new MappingSourceNsSwitch(mappingTree, sourceNamespace));
-			}
-		}
+        if (Files.exists(path) && !extension.refreshDeps()) {
+            LOGGER.debug("Using cached source mappings");
+            return path;
+        }
 
-		if (jarProcessor != null) {
-			GenerateSourcesTask.MappingsProcessor mappingsProcessor = mappings -> {
-				try (var serviceFactory = new ScopedServiceFactory()) {
-					final var configContext = new ConfigContextImpl(project, serviceFactory, extension);
-					return jarProcessor.processMappings(mappings, new MappingProcessorContextImpl(configContext));
-				} catch (IOException e) {
-					throw new UncheckedIOException(e);
-				}
-			};
+        LOGGER.info("Creating source mappings for hash {}", hash);
 
-			boolean transformed = mappingsProcessor.transform(mappingTree);
+        try {
+            Files.createDirectories(dir);
+            Files.deleteIfExists(path);
+            createMappings(project, jarProcessor, mappingConfiguration, emptyMappingsPath, path);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to create source mappings", e);
+        }
 
-			if (!transformed) {
-				LOGGER.info("No mappings processors transformed the mappings");
-			}
-		}
+        return path;
+    }
 
-		try (Writer writer = Files.newBufferedWriter(outputMappings, StandardCharsets.UTF_8)) {
-			var tiny2Writer = new Tiny2FileWriter(writer, false);
-			mappingTree.accept(new MappingSourceNsSwitch(tiny2Writer, extension.disableObfuscation() ? MappingsNamespace.OFFICIAL.toString() : MappingsNamespace.NAMED.toString()));
-		}
-	}
+    public JavadocStyle getJavadocStyle() {
+        return getOptions().getJavadocStyle().get();
+    }
 
-	public SourceMappingsService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    public Path getMappingsFile() {
+        return getOptions().getMappings().getAsFile().get().toPath();
+    }
 
-	public Path getMappingsFile() {
-		return getOptions().getMappings().getAsFile().get().toPath();
-	}
+    public @Nullable String getProcessorHash() {
+        return getOptions().getProcessorHash().getOrNull();
+    }
 
-	public @Nullable String getProcessorHash() {
-		return getOptions().getProcessorHash().getOrNull();
-	}
+    public interface Options extends Service.Options {
+        @Input
+        Property<JavadocStyle> getJavadocStyle();
 
-	public JavadocStyle getJavadocStyle() {
-		return getOptions().getJavadocStyle().get();
-	}
+        @InputFile
+        @PathSensitive(PathSensitivity.NONE)
+        RegularFileProperty getMappings();
+
+        /// The hash of the processors applied to the mappings
+        @Input
+        @Optional
+        Property<String> getProcessorHash();
+    }
 }

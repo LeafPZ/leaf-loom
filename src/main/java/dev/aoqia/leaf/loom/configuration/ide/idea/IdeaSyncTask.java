@@ -86,217 +86,222 @@ import dev.aoqia.leaf.loom.util.Constants;
 
 @DisableCachingByDefault
 public abstract class IdeaSyncTask extends AbstractLoomTask {
-	@Nested
-	protected abstract ListProperty<IntellijRunConfig> getIdeaRunConfigs();
+    @Inject
+    public IdeaSyncTask() {
+        setGroup(Constants.TaskGroup.IDE);
+        getIdeaRunConfigs().set(getProject().provider(this::getRunConfigs));
+    }
 
-	@Inject
-	public IdeaSyncTask() {
-		setGroup(Constants.TaskGroup.IDE);
-		getIdeaRunConfigs().set(getProject().provider(this::getRunConfigs));
-	}
+    @VisibleForTesting
+    public static List<IntellijRunConfig> getRunConfigs(Project project, Collection<? extends RunConfiguration> runs)
+        throws IOException
+    {
+        IsolatedProject rootProject = project.getIsolated().getRootProject();
+        String projectPath = project.getPath().equals(rootProject.getPath()) ? "" : project.getPath().replace(':', '_');
+        File runConfigsDir = new File(rootProject.getProjectDirectory().file(".idea").getAsFile(), "runConfigurations");
 
-	@TaskAction
-	public void runTask() throws IOException {
-		for (IntellijRunConfig config : getIdeaRunConfigs().get()) {
-			config.writeLaunchFile();
-		}
-	}
+        List<IntellijRunConfig> configs = new ArrayList<>();
 
-	private List<IntellijRunConfig> getRunConfigs() throws IOException {
-		return getRunConfigs(getProject(), getExtension().getRunConfigs());
-	}
+        for (RunConfiguration settings : runs) {
+            if (!settings.getGenerateRunConfig().get()) {
+                continue;
+            }
 
-	@VisibleForTesting
-	public static List<IntellijRunConfig> getRunConfigs(Project project, Collection<? extends RunConfiguration> runs) throws IOException {
-		IsolatedProject rootProject = project.getIsolated().getRootProject();
-		String projectPath = project.getPath().equals(rootProject.getPath()) ? "" : project.getPath().replace(':', '_');
-		File runConfigsDir = new File(rootProject.getProjectDirectory().file(".idea").getAsFile(), "runConfigurations");
+            RunConfiguration runConfiguration = DefaultRunConfigurationSettings.finialise(settings, project);
+            String name = RunConfigUtils.getDisplayName(runConfiguration, project).replaceAll("[^a-zA-Z0-9$_]", "_");
+            IntellijRunConfigWriter writer = createWriter(runConfiguration, project);
 
-		List<IntellijRunConfig> configs = new ArrayList<>();
+            File runConfigFile = new File(runConfigsDir, name + projectPath + ".xml");
+            String runConfigXml = writer.render();
 
-		for (RunConfiguration settings : runs) {
-			if (!settings.getGenerateRunConfig().get()) {
-				continue;
-			}
+            IntellijRunConfig irc = project.getObjects().newInstance(IntellijRunConfig.class);
+            irc.getRunConfigXml().set(runConfigXml);
+            irc.getRunConfigType().set(writer.getType());
+            irc.getLaunchFile().set(runConfigFile);
+            configs.add(irc);
 
-			RunConfiguration runConfiguration = DefaultRunConfigurationSettings.finialise(settings, project);
-			String name = RunConfigUtils.getDisplayName(runConfiguration, project).replaceAll("[^a-zA-Z0-9$_]", "_");
-			IntellijRunConfigWriter writer = createWriter(runConfiguration, project);
+            RunConfigUtils.createRunDirectory(settings);
+        }
 
-			File runConfigFile = new File(runConfigsDir, name + projectPath + ".xml");
-			String runConfigXml = writer.render();
+        return configs;
+    }
 
-			IntellijRunConfig irc = project.getObjects().newInstance(IntellijRunConfig.class);
-			irc.getRunConfigXml().set(runConfigXml);
-			irc.getRunConfigType().set(writer.getType());
-			irc.getLaunchFile().set(runConfigFile);
-			configs.add(irc);
+    @VisibleForTesting
+    public static String setClasspathModificationsInXml(String input, List<String> exclusions) throws Exception {
+        final DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+        final DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
+        final Document document = documentBuilder.parse(new InputSource(new StringReader(input)));
+        final Element root = document.getDocumentElement();
 
-			RunConfigUtils.createRunDirectory(settings);
-		}
+        final NodeList nodeList = root.getElementsByTagName("configuration");
+        assert nodeList.getLength() == 1;
 
-		return configs;
-	}
+        final Element configuration = (Element) nodeList.item(0);
+        final NodeList classpathModificationsList = configuration.getElementsByTagName("classpathModifications");
 
-	private static IntellijRunConfigWriter createWriter(RunConfiguration run, Project project) {
-		if (run.getPreferGradleTask().get()) {
-			return new GradleTaskIntellijRunConfigWriter(run, project);
-		}
+        // Remove all the existing exclusions
+        for (int i = 0; i < classpathModificationsList.getLength(); i++) {
+            configuration.removeChild(classpathModificationsList.item(i));
+        }
 
-		return new ApplicationIntellijRunConfigWriter(run, project, RuntimeLibraries.getExcludedLibraryPaths(project, run));
-	}
+        final Element classpathModifications = document.createElement("classpathModifications");
 
-	public interface IntellijRunConfig {
-		@Input
-		Property<String> getRunConfigXml();
+        for (String exclusionPath : exclusions) {
+            final Element exclusion = document.createElement("entry");
 
-		@Input
-		Property<String> getRunConfigType();
+            exclusion.setAttribute("exclude", "true");
+            exclusion.setAttribute("path", exclusionPath);
 
-		@OutputFile
-		RegularFileProperty getLaunchFile();
+            classpathModifications.appendChild(exclusion);
+        }
 
-		default void writeLaunchFile() throws IOException {
-			Path launchFile = getLaunchFile().get().getAsFile().toPath();
-			final String expectedXml = getRunConfigXml().get();
+        configuration.appendChild(classpathModifications);
 
-			if (Files.notExists(launchFile)) {
-				Files.createDirectories(launchFile.getParent());
-				Files.writeString(launchFile, expectedXml, StandardCharsets.UTF_8);
-			} else {
-				final String existingXml = Files.readString(launchFile, StandardCharsets.UTF_8);
+        final TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        final Transformer transformer = transformerFactory.newTransformer();
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
 
-				if (shouldOverwrite(existingXml)) {
-					backupLaunchFile(launchFile);
-					Files.writeString(launchFile, expectedXml, StandardCharsets.UTF_8);
-				} else if (IntellijRunConfigWriter.APPLICATION_TYPE.equals(getRunConfigType().get())) {
-					try {
-						Files.writeString(launchFile, setClasspathModificationsInXml(existingXml, expectedXml), StandardCharsets.UTF_8);
-					} catch (Exception e) {
-						throw new IOException("Failed to update IntelliJ classpath modifications", e);
-					}
-				}
-			}
-		}
+        final DOMSource source = new DOMSource(document);
 
-		private void backupLaunchFile(Path launchFile) throws IOException {
-			final Path backupDir = launchFile.getParent().resolve("backups");
-			Files.createDirectories(backupDir);
-			final Path backupFile = resolveBackupPath(backupDir, launchFile.getFileName().toString());
-			Files.copy(launchFile, backupFile, StandardCopyOption.REPLACE_EXISTING);
-		}
+        final StringWriter writer = new StringWriter();
+        transformer.transform(source, new StreamResult(writer));
 
-		private boolean shouldOverwrite(String existingXml) {
-			return !getRunConfigType().get().equals(IntellijRunConfigWriter.getType(existingXml));
-		}
-	}
+        return writer.toString().replace("\r", "");
+    }
 
-	private static Path resolveBackupPath(Path backupDir, String fileName) {
-		Path backupPath = backupDir.resolve(fileName + ".backup");
+    @VisibleForTesting
+    public static String setClasspathModificationsInXml(String input, String source) throws Exception {
+        final DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+        final DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
+        final Document inputDocument = documentBuilder.parse(new InputSource(new StringReader(input)));
+        final Document sourceDocument = documentBuilder.parse(new InputSource(new StringReader(source)));
 
-		if (Files.notExists(backupPath)) {
-			return backupPath;
-		}
+        final Element inputConfiguration = getConfigurationElement(inputDocument);
+        final Element sourceConfiguration = getConfigurationElement(sourceDocument);
+        final NodeList sourceClasspathModificationsList = sourceConfiguration
+            .getElementsByTagName("classpathModifications");
 
-		int index = 1;
+        removeClasspathModifications(inputConfiguration);
 
-		while (true) {
-			backupPath = backupDir.resolve(fileName + "." + index + ".backup");
+        if (sourceClasspathModificationsList.getLength() > 0) {
+            inputConfiguration.appendChild(inputDocument.importNode(sourceClasspathModificationsList.item(0), true));
+        }
 
-			if (Files.notExists(backupPath)) {
-				return backupPath;
-			}
+        return documentToString(inputDocument);
+    }
 
-			index++;
-		}
-	}
+    private static IntellijRunConfigWriter createWriter(RunConfiguration run, Project project) {
+        if (run.getPreferGradleTask().get()) {
+            return new GradleTaskIntellijRunConfigWriter(run, project);
+        }
 
-	@VisibleForTesting
-	public static String setClasspathModificationsInXml(String input, List<String> exclusions) throws Exception {
-		final DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-		final DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
-		final Document document = documentBuilder.parse(new InputSource(new StringReader(input)));
-		final Element root = document.getDocumentElement();
+        return new ApplicationIntellijRunConfigWriter(run, project,
+            RuntimeLibraries.getExcludedLibraryPaths(project, run));
+    }
 
-		final NodeList nodeList = root.getElementsByTagName("configuration");
-		assert nodeList.getLength() == 1;
+    private static String documentToString(Document document) throws Exception {
+        final TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        final Transformer transformer = transformerFactory.newTransformer();
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
 
-		final Element configuration = (Element) nodeList.item(0);
-		final NodeList classpathModificationsList = configuration.getElementsByTagName("classpathModifications");
+        final DOMSource source = new DOMSource(document);
+        final StringWriter writer = new StringWriter();
+        transformer.transform(source, new StreamResult(writer));
 
-		// Remove all the existing exclusions
-		for (int i = 0; i < classpathModificationsList.getLength(); i++) {
-			configuration.removeChild(classpathModificationsList.item(i));
-		}
+        return writer.toString().replace("\r", "");
+    }
 
-		final Element classpathModifications = document.createElement("classpathModifications");
+    private static Element getConfigurationElement(Document document) {
+        final NodeList nodeList = document.getDocumentElement().getElementsByTagName("configuration");
+        assert nodeList.getLength() == 1;
+        return (Element) nodeList.item(0);
+    }
 
-		for (String exclusionPath : exclusions) {
-			final Element exclusion = document.createElement("entry");
+    private static void removeClasspathModifications(Element configuration) {
+        final NodeList classpathModificationsList = configuration.getElementsByTagName("classpathModifications");
 
-			exclusion.setAttribute("exclude", "true");
-			exclusion.setAttribute("path", exclusionPath);
+        for (int i = classpathModificationsList.getLength() - 1; i >= 0; i--) {
+            configuration.removeChild(classpathModificationsList.item(i));
+        }
+    }
 
-			classpathModifications.appendChild(exclusion);
-		}
+    private static Path resolveBackupPath(Path backupDir, String fileName) {
+        Path backupPath = backupDir.resolve(fileName + ".backup");
 
-		configuration.appendChild(classpathModifications);
+        if (Files.notExists(backupPath)) {
+            return backupPath;
+        }
 
-		final TransformerFactory transformerFactory = TransformerFactory.newInstance();
-		final Transformer transformer = transformerFactory.newTransformer();
-		transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        int index = 1;
 
-		final DOMSource source = new DOMSource(document);
+        while (true) {
+            backupPath = backupDir.resolve(fileName + "." + index + ".backup");
 
-		final StringWriter writer = new StringWriter();
-		transformer.transform(source, new StreamResult(writer));
+            if (Files.notExists(backupPath)) {
+                return backupPath;
+            }
 
-		return writer.toString().replace("\r", "");
-	}
+            index++;
+        }
+    }
 
-	@VisibleForTesting
-	public static String setClasspathModificationsInXml(String input, String source) throws Exception {
-		final DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-		final DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
-		final Document inputDocument = documentBuilder.parse(new InputSource(new StringReader(input)));
-		final Document sourceDocument = documentBuilder.parse(new InputSource(new StringReader(source)));
+    @TaskAction
+    public void runTask() throws IOException {
+        for (IntellijRunConfig config : getIdeaRunConfigs().get()) {
+            config.writeLaunchFile();
+        }
+    }
 
-		final Element inputConfiguration = getConfigurationElement(inputDocument);
-		final Element sourceConfiguration = getConfigurationElement(sourceDocument);
-		final NodeList sourceClasspathModificationsList = sourceConfiguration.getElementsByTagName("classpathModifications");
+    @Nested
+    protected abstract ListProperty<IntellijRunConfig> getIdeaRunConfigs();
 
-		removeClasspathModifications(inputConfiguration);
+    private List<IntellijRunConfig> getRunConfigs() throws IOException {
+        return getRunConfigs(getProject(), getExtension().getRunConfigs());
+    }
 
-		if (sourceClasspathModificationsList.getLength() > 0) {
-			inputConfiguration.appendChild(inputDocument.importNode(sourceClasspathModificationsList.item(0), true));
-		}
+    public interface IntellijRunConfig {
+        @OutputFile
+        RegularFileProperty getLaunchFile();
 
-		return documentToString(inputDocument);
-	}
+        @Input
+        Property<String> getRunConfigType();
 
-	private static Element getConfigurationElement(Document document) {
-		final NodeList nodeList = document.getDocumentElement().getElementsByTagName("configuration");
-		assert nodeList.getLength() == 1;
-		return (Element) nodeList.item(0);
-	}
+        @Input
+        Property<String> getRunConfigXml();
 
-	private static void removeClasspathModifications(Element configuration) {
-		final NodeList classpathModificationsList = configuration.getElementsByTagName("classpathModifications");
+        default void writeLaunchFile() throws IOException {
+            Path launchFile = getLaunchFile().get().getAsFile().toPath();
+            final String expectedXml = getRunConfigXml().get();
 
-		for (int i = classpathModificationsList.getLength() - 1; i >= 0; i--) {
-			configuration.removeChild(classpathModificationsList.item(i));
-		}
-	}
+            if (Files.notExists(launchFile)) {
+                Files.createDirectories(launchFile.getParent());
+                Files.writeString(launchFile, expectedXml, StandardCharsets.UTF_8);
+            } else {
+                final String existingXml = Files.readString(launchFile, StandardCharsets.UTF_8);
 
-	private static String documentToString(Document document) throws Exception {
-		final TransformerFactory transformerFactory = TransformerFactory.newInstance();
-		final Transformer transformer = transformerFactory.newTransformer();
-		transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+                if (shouldOverwrite(existingXml)) {
+                    backupLaunchFile(launchFile);
+                    Files.writeString(launchFile, expectedXml, StandardCharsets.UTF_8);
+                } else if (IntellijRunConfigWriter.APPLICATION_TYPE.equals(getRunConfigType().get())) {
+                    try {
+                        Files.writeString(launchFile, setClasspathModificationsInXml(existingXml, expectedXml),
+                            StandardCharsets.UTF_8);
+                    } catch (Exception e) {
+                        throw new IOException("Failed to update IntelliJ classpath modifications", e);
+                    }
+                }
+            }
+        }
 
-		final DOMSource source = new DOMSource(document);
-		final StringWriter writer = new StringWriter();
-		transformer.transform(source, new StreamResult(writer));
+        private void backupLaunchFile(Path launchFile) throws IOException {
+            final Path backupDir = launchFile.getParent().resolve("backups");
+            Files.createDirectories(backupDir);
+            final Path backupFile = resolveBackupPath(backupDir, launchFile.getFileName().toString());
+            Files.copy(launchFile, backupFile, StandardCopyOption.REPLACE_EXISTING);
+        }
 
-		return writer.toString().replace("\r", "");
-	}
+        private boolean shouldOverwrite(String existingXml) {
+            return !getRunConfigType().get().equals(IntellijRunConfigWriter.getType(existingXml));
+        }
+    }
 }

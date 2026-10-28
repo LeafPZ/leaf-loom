@@ -55,27 +55,23 @@ import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.extension.MixinExtension;
 
 public class GroovyApInvoker extends AnnotationProcessorInvoker<GroovyCompile> {
-	public GroovyApInvoker(Project project) {
-		super(
-				project,
-				List.of(),
-				getInvokerTasks(project),
-				AnnotationProcessorInvoker.GROOVY);
-	}
+    public GroovyApInvoker(Project project) {
+        super(project, List.of(), getInvokerTasks(project), AnnotationProcessorInvoker.GROOVY);
+    }
 
-	private static Map<SourceSet, TaskProvider<GroovyCompile>> getInvokerTasks(Project project) {
-		MixinExtension mixin = LoomGradleExtension.get(project).getMixin();
-		return mixin.getInvokerTasksStream(AnnotationProcessorInvoker.GROOVY, GroovyCompile.class).collect(
-				Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-	}
+    private static Map<SourceSet, TaskProvider<GroovyCompile>> getInvokerTasks(Project project) {
+        MixinExtension mixin = LoomGradleExtension.get(project).getMixin();
+        return mixin.getInvokerTasksStream(AnnotationProcessorInvoker.GROOVY, GroovyCompile.class)
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
 
-	@Override
-	protected void passArgument(GroovyCompile compileTask, String key, String value) {
-		compileTask.getOptions().getCompilerArgs().add("-A" + key + "=" + value);
-	}
+    @Override
+    protected File getRefmapDestinationDir(GroovyCompile task) {
+        return task.getDestinationDirectory().getAsFile().get();
+    }
 
-	@Override
-	protected File getRefmapDestinationDir(GroovyCompile task) {
-		return task.getDestinationDirectory().getAsFile().get();
-	}
+    @Override
+    protected void passArgument(GroovyCompile compileTask, String key, String value) {
+        compileTask.getOptions().getCompilerArgs().add("-A" + key + "=" + value);
+    }
 }

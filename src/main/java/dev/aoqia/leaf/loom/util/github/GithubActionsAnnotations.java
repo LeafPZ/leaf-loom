@@ -51,120 +51,121 @@ import org.jspecify.annotations.Nullable;
 import dev.aoqia.leaf.loom.util.problem.Problem;
 
 public final class GithubActionsAnnotations {
-	// See https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#setting-a-notice-message
-	private static final String ERROR_COMMAND = "error";
-	private static final String WARNING_COMMAND = "warning";
-	private static final String NOTICE_COMMAND = "notice";
+    // See https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#setting-a-notice-message
+    private static final String ERROR_COMMAND = "error";
 
-	private GithubActionsAnnotations() {
-	}
+    private static final String NOTICE_COMMAND = "notice";
+    private static final String WARNING_COMMAND = "warning";
 
-	public static Builder error(String message) {
-		return new Builder(ERROR_COMMAND, message);
-	}
+    private GithubActionsAnnotations() {
+    }
 
-	public static Builder warning(String message) {
-		return new Builder(WARNING_COMMAND, message);
-	}
+    public static Builder error(String message) {
+        return new Builder(ERROR_COMMAND, message);
+    }
 
-	public static Builder notice(String message) {
-		return new Builder(NOTICE_COMMAND, message);
-	}
+    public static Builder notice(String message) {
+        return new Builder(NOTICE_COMMAND, message);
+    }
 
-	public static final class Builder {
-		private final String command;
-		private final String message;
-		private @Nullable String file;
-		private @Nullable String title;
-		private int startLine = 1;
-		private int endLine;
-		private int startColumn;
-		private int endColumn;
+    public static Builder warning(String message) {
+        return new Builder(WARNING_COMMAND, message);
+    }
 
-		private Builder(String command, String message) {
-			this.command = command;
-			this.message = message;
-		}
+    public static final class Builder {
+        private final String command;
+        private int endColumn;
+        private int endLine;
+        private @Nullable String file;
+        private final String message;
+        private int startColumn;
+        private int startLine = 1;
+        private @Nullable String title;
 
-		public Builder file(String file) {
-			this.file = file;
-			return this;
-		}
+        private Builder(String command, String message) {
+            this.command = command;
+            this.message = message;
+        }
 
-		public Builder file(File file) {
-			return file(file.getAbsolutePath());
-		}
+        public GithubActionsCommand build() {
+            Map<String, @Nullable Object> properties = new LinkedHashMap<>();
 
-		public Builder file(Path file) {
-			return file(file.toAbsolutePath().toString());
-		}
+            if (file != null) {
+                properties.put("file", file);
+                properties.put("line", startLine);
 
-		public Builder file(Problem.FileLocation fileLocation) {
-			file(fileLocation.file());
+                if (endLine != 0) {
+                    properties.put("endLine", endLine);
+                }
 
-			if (fileLocation.startLine() > 0) {
-				line(fileLocation.startLine(), fileLocation.endLine());
-			}
+                if (startColumn != 0) {
+                    properties.put("col", startColumn);
+                }
 
-			if (fileLocation.startColumn() > 0) {
-				column(fileLocation.startColumn(), fileLocation.endColumn());
-			}
+                if (endColumn != 0) {
+                    properties.put("endColumn", endColumn);
+                }
+            }
 
-			return this;
-		}
+            if (title != null) {
+                properties.put("title", title);
+            }
 
-		public Builder title(String title) {
-			this.title = title;
-			return this;
-		}
+            return new GithubActionsCommand(command, message, properties);
+        }
 
-		public Builder line(int line) {
-			this.startLine = line;
-			return this;
-		}
+        public Builder column(int column) {
+            this.startColumn = column;
+            return this;
+        }
 
-		public Builder line(int start, int end) {
-			this.startLine = start;
-			this.endLine = end;
-			return this;
-		}
+        public Builder column(int start, int end) {
+            this.startColumn = start;
+            this.endColumn = end;
+            return this;
+        }
 
-		public Builder column(int column) {
-			this.startColumn = column;
-			return this;
-		}
+        public Builder file(File file) {
+            return file(file.getAbsolutePath());
+        }
 
-		public Builder column(int start, int end) {
-			this.startColumn = start;
-			this.endColumn = end;
-			return this;
-		}
+        public Builder file(Path file) {
+            return file(file.toAbsolutePath().toString());
+        }
 
-		public GithubActionsCommand build() {
-			Map<String, @Nullable Object> properties = new LinkedHashMap<>();
+        public Builder file(Problem.FileLocation fileLocation) {
+            file(fileLocation.file());
 
-			if (file != null) {
-				properties.put("file", file);
-				properties.put("line", startLine);
+            if (fileLocation.startLine() > 0) {
+                line(fileLocation.startLine(), fileLocation.endLine());
+            }
 
-				if (endLine != 0) {
-					properties.put("endLine", endLine);
-				}
+            if (fileLocation.startColumn() > 0) {
+                column(fileLocation.startColumn(), fileLocation.endColumn());
+            }
 
-				if (startColumn != 0) {
-					properties.put("col", startColumn);
-				}
+            return this;
+        }
 
-				if (endColumn != 0) {
-					properties.put("endColumn", endColumn);
-				}
-			}
+        public Builder file(String file) {
+            this.file = file;
+            return this;
+        }
 
-			if (title != null) {
-				properties.put("title", title);
-			}
+        public Builder line(int line) {
+            this.startLine = line;
+            return this;
+        }
 
-			return new GithubActionsCommand(command, message, properties);
-		}
-	}
+        public Builder line(int start, int end) {
+            this.startLine = start;
+            this.endLine = end;
+            return this;
+        }
+
+        public Builder title(String title) {
+            this.title = title;
+            return this;
+        }
+    }
 }

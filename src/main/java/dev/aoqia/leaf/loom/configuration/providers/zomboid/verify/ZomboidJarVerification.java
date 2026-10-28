@@ -53,49 +53,51 @@ import org.slf4j.LoggerFactory;
 import dev.aoqia.leaf.loom.util.Checksum;
 
 public abstract class ZomboidJarVerification {
-	private static final Logger LOGGER = LoggerFactory.getLogger(ZomboidJarVerification.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ZomboidJarVerification.class);
 
-	private final String gameVersion;
+    private final String gameVersion;
 
-	@Inject
-	protected abstract Project getProject();
+    @Inject
+    public ZomboidJarVerification(String gameVersion) {
+        this.gameVersion = gameVersion;
+    }
 
-	@Inject
-	public ZomboidJarVerification(String gameVersion) {
-		this.gameVersion = gameVersion;
-	}
+    @Inject
+    protected abstract Project getProject();
 
-	private boolean isValidKnownVersion(Path path, String version, KnownJarType type) throws SignatureVerificationFailure {
-		Map<String, String> knownVersions = type.getKnownVersions();
-		String expectedHash = knownVersions.get(version);
+    private boolean isValidKnownVersion(Path path, String version, KnownJarType type)
+        throws SignatureVerificationFailure
+    {
+        Map<String, String> knownVersions = type.getKnownVersions();
+        String expectedHash = knownVersions.get(version);
 
-		if (expectedHash == null) {
-			return false;
-		}
+        if (expectedHash == null) {
+            return false;
+        }
 
-		LOGGER.info("Found executed hash ({}) for known version: {}", expectedHash, version);
-		Checksum.Result hash = Checksum.of(path).sha256();
+        LOGGER.info("Found executed hash ({}) for known version: {}", expectedHash, version);
+        Checksum.Result hash = Checksum.of(path).sha256();
 
-		if (hash.matchesStr(expectedHash)) {
-			LOGGER.info("Game {} hash matches known version", path.getFileName());
-			return true;
-		}
+        if (hash.matchesStr(expectedHash)) {
+            LOGGER.info("Game {} hash matches known version", path.getFileName());
+            return true;
+        }
 
-		throw new SignatureVerificationFailure("Hash mismatch for known game version " + version + ": expected " + expectedHash + ", got " + hash);
-	}
+        throw new SignatureVerificationFailure(
+            "Hash mismatch for known game version " + version + ": expected " + expectedHash + ", got " + hash);
+    }
 
-	private enum KnownJarType {
-		CLIENT(KnownVersions::client),
-		SERVER(KnownVersions::server),;
+    private enum KnownJarType {
+        CLIENT(KnownVersions::client), SERVER(KnownVersions::server),;
 
-		private final Function<KnownVersions, Map<String, String>> knownVersions;
+        private final Function<KnownVersions, Map<String, String>> knownVersions;
 
-		KnownJarType(Function<KnownVersions, Map<String, String>> knownVersions) {
-			this.knownVersions = knownVersions;
-		}
+        KnownJarType(Function<KnownVersions, Map<String, String>> knownVersions) {
+            this.knownVersions = knownVersions;
+        }
 
-		private Map<String, String> getKnownVersions() {
-			return knownVersions.apply(KnownVersions.INSTANCE.get());
-		}
-	}
+        private Map<String, String> getKnownVersions() {
+            return knownVersions.apply(KnownVersions.INSTANCE.get());
+        }
+    }
 }

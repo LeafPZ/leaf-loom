@@ -51,100 +51,109 @@ import org.jspecify.annotations.Nullable;
  * Problem details. This type is converted into Gradle {@link org.gradle.api.problems.Problem} instances,
  * exceptions and GitHub Actions annotations.
  *
- * @param id              the Gradle problem ID
- * @param message         the exception message for this problem
- * @param details         a detailed description, can be null
- * @param severity        the severity level
+ * @param id the Gradle problem ID
+ * @param message the exception message for this problem
+ * @param details a detailed description, can be null
+ * @param severity the severity level
  * @param contextualLabel the contextual label used as a subsection title in the problem report, can be null
- * @param solution        a user-facing solution message, can be null
- * @param fileLocation    the file where this error originated, can be null
- * @param cause           a throwable cause, can be null
+ * @param solution a user-facing solution message, can be null
+ * @param fileLocation the file where this error originated, can be null
+ * @param cause a throwable cause, can be null
  */
-public record Problem(ProblemId id, String message, @Nullable String details, Severity severity, @Nullable String contextualLabel, @Nullable String solution, @Nullable FileLocation fileLocation, @Nullable Throwable cause) {
-	public static Builder builder(ProblemId problemId) {
-		return new Builder(problemId);
-	}
+public record Problem(
+    ProblemId id,
+    String message,
+    @Nullable String details,
+    Severity severity,
+    @Nullable String contextualLabel,
+    @Nullable String solution,
+    @Nullable FileLocation fileLocation,
+    @Nullable Throwable cause
+)
+{
+    public static Builder builder(ProblemId problemId) {
+        return new Builder(problemId);
+    }
 
-	public static final class Builder {
-		private final ProblemId problemId;
-		private @Nullable String message;
-		private @Nullable String details;
-		private Severity severity = Severity.ERROR;
-		private @Nullable String contextualLabel;
-		private @Nullable String solution;
-		private @Nullable FileLocation fileLocation;
-		private @Nullable Throwable cause;
+    public static final class Builder {
+        private @Nullable Throwable cause;
+        private @Nullable String contextualLabel;
+        private @Nullable String details;
+        private @Nullable FileLocation fileLocation;
+        private @Nullable String message;
+        private final ProblemId problemId;
+        private Severity severity = Severity.ERROR;
+        private @Nullable String solution;
 
-		public Builder(ProblemId problemId) {
-			this.problemId = problemId;
-		}
+        public Builder(ProblemId problemId) {
+            this.problemId = problemId;
+        }
 
-		public Builder message(String message) {
-			this.message = message;
-			return this;
-		}
+        public Problem build() {
+            final String message;
 
-		public Builder details(String details) {
-			this.details = details;
-			return this;
-		}
+            if (this.message != null) {
+                message = this.message;
+            } else if (details != null) {
+                message = details;
+            } else {
+                message = problemId.getDisplayName();
+            }
 
-		public Builder severity(Severity severity) {
-			this.severity = severity;
-			return this;
-		}
+            return new Problem(problemId, message, details, severity, contextualLabel, solution, fileLocation, cause);
+        }
 
-		public Builder contextualLabel(String contextualLabel) {
-			this.contextualLabel = contextualLabel;
-			return this;
-		}
+        public Builder cause(@Nullable Throwable cause) {
+            this.cause = cause;
+            return this;
+        }
 
-		public Builder solution(String solution) {
-			this.solution = solution;
-			return this;
-		}
+        public Builder contextualLabel(String contextualLabel) {
+            this.contextualLabel = contextualLabel;
+            return this;
+        }
 
-		public Builder fileLocation(Path file) {
-			this.fileLocation = new FileLocation(file, 0, 0, 0, 0);
-			return this;
-		}
+        public Builder details(String details) {
+            this.details = details;
+            return this;
+        }
 
-		public Builder fileLocation(Path file, int line) {
-			this.fileLocation = new FileLocation(file, line, 0, 0, 0);
-			return this;
-		}
+        public Builder fileLocation(Path file) {
+            this.fileLocation = new FileLocation(file, 0, 0, 0, 0);
+            return this;
+        }
 
-		public Builder fileLocation(Path file, int line, int column) {
-			this.fileLocation = new FileLocation(file, line, 0, column, 0);
-			return this;
-		}
+        public Builder fileLocation(Path file, int line) {
+            this.fileLocation = new FileLocation(file, line, 0, 0, 0);
+            return this;
+        }
 
-		public Builder fileLocation(Path file, int startLine, int endLine, int startColumn, int endColumn) {
-			this.fileLocation = new FileLocation(file, startLine, endLine, startColumn, endColumn);
-			return this;
-		}
+        public Builder fileLocation(Path file, int line, int column) {
+            this.fileLocation = new FileLocation(file, line, 0, column, 0);
+            return this;
+        }
 
-		public Builder cause(@Nullable Throwable cause) {
-			this.cause = cause;
-			return this;
-		}
+        public Builder fileLocation(Path file, int startLine, int endLine, int startColumn, int endColumn) {
+            this.fileLocation = new FileLocation(file, startLine, endLine, startColumn, endColumn);
+            return this;
+        }
 
-		public Problem build() {
-			final String message;
+        public Builder message(String message) {
+            this.message = message;
+            return this;
+        }
 
-			if (this.message != null) {
-				message = this.message;
-			} else if (details != null) {
-				message = details;
-			} else {
-				message = problemId.getDisplayName();
-			}
+        public Builder severity(Severity severity) {
+            this.severity = severity;
+            return this;
+        }
 
-			return new Problem(problemId, message, details, severity, contextualLabel, solution, fileLocation, cause);
-		}
-	}
+        public Builder solution(String solution) {
+            this.solution = solution;
+            return this;
+        }
+    }
 
-	// Lines and columns are missing if they're less than or equal to 0
-	public record FileLocation(Path file, int startLine, int endLine, int startColumn, int endColumn) {
-	}
+    // Lines and columns are missing if they're less than or equal to 0
+    public record FileLocation(Path file, int startLine, int endLine, int startColumn, int endColumn) {}
 }

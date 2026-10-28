@@ -48,83 +48,91 @@ import org.gradle.api.Project;
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 
 public abstract class LoomFilesBaseImpl implements LoomFiles {
-	protected abstract File getGradleUserHomeDir();
-	protected abstract File getRootDir();
-	protected abstract File getBuildDir();
-	protected abstract File getProjectCacheDir();
-	protected abstract String getProjectPath();
+    public LoomFilesBaseImpl() {
+    }
 
-	public LoomFilesBaseImpl() { }
+    private static File createFile(File parent, String child) {
+        File file = new File(parent, child);
+        file.mkdirs();
+        return file;
+    }
 
-	private static File createFile(File parent, String child) {
-		File file = new File(parent, child);
-		file.mkdirs();
-		return file;
-	}
+    @Override
+    public File getDecompileCache(String version) {
+        return new File(getUserCache(), "decompile/" + version + ".zip");
+    }
 
-	@Override
-	public File getUserCache() {
-		return createFile(getGradleUserHomeDir(), "caches" + File.separator + "leaf-loom");
-	}
+    @Override
+    public File getDefaultLog4jConfigFile() {
+        return new File(getProjectPersistentCache(), "log4j.xml");
+    }
 
-	@Override
-	public File getRootProjectPersistentCache() {
-		return createFile(getProjectCacheDir(), "loom-cache");
-	}
+    @Override
+    public File getDevLauncherConfig() {
+        return new File(getProjectPersistentCache(), "launch.cfg");
+    }
 
-	@Override
-	public File getProjectPersistentCache() {
-		var normalizedPath = getProjectPath().replace(":", File.separator).substring(1); // Replace ":" with file separator and remove leading ":"
+    @Override
+    public File getGlobalZomboidRepo() {
+        return new File(getUserCache(), "zomboidMaven");
+    }
 
-		if (normalizedPath.isEmpty()) {
-			return getRootProjectPersistentCache();
-		}
+    @Override
+    public File getLocalZomboidRepo() {
+        return new File(getRootProjectPersistentCache(), "zomboidMaven");
+    }
 
-		return createFile(getProjectCacheDir(), "loom-cache" + File.separator + "projects" + File.separator + normalizedPath);
-	}
+    @Override
+    public File getNativesDirectory(Project project) {
+        return createFile(getRootProjectPersistentCache(),
+            "natives/" + LoomGradleExtension.get(project).getZomboidProvider().gameVersion());
+    }
 
-	@Override
-	public File getProjectBuildCache() {
-		return createFile(getBuildDir(), "loom-cache");
-	}
+    @Override
+    public File getProjectBuildCache() {
+        return createFile(getBuildDir(), "loom-cache");
+    }
 
-	@Override
-	public File getRemappedModCache() {
-		return createFile(getRootProjectPersistentCache(), "remapped_mods");
-	}
+    @Override
+    public File getProjectPersistentCache() {
+        // Replace ":" with file separator and remove leading ":"
+        var normalizedPath = getProjectPath().replace(":", File.separator).substring(1);
 
-	@Override
-	public File getNativesDirectory(Project project) {
-		return createFile(getRootProjectPersistentCache(), "natives/" + LoomGradleExtension.get(project).getZomboidProvider().gameVersion());
-	}
+        if (normalizedPath.isEmpty()) {
+            return getRootProjectPersistentCache();
+        }
 
-	@Override
-	public File getDefaultLog4jConfigFile() {
-		return new File(getProjectPersistentCache(), "log4j.xml");
-	}
+        return createFile(getProjectCacheDir(),
+            "loom-cache" + File.separator + "projects" + File.separator + normalizedPath);
+    }
 
-	@Override
-	public File getDevLauncherConfig() {
-		return new File(getProjectPersistentCache(), "launch.cfg");
-	}
+    @Override
+    public File getRemapClasspathFile() {
+        return new File(getProjectPersistentCache(), "remapClasspath.txt");
+    }
 
-	@Override
-	public File getRemapClasspathFile() {
-		return new File(getProjectPersistentCache(), "remapClasspath.txt");
-	}
+    @Override
+    public File getRemappedModCache() {
+        return createFile(getRootProjectPersistentCache(), "remapped_mods");
+    }
 
-	@Override
-	public File getGlobalZomboidRepo() {
-		return new File(getUserCache(), "zomboidMaven");
-	}
+    @Override
+    public File getRootProjectPersistentCache() {
+        return createFile(getProjectCacheDir(), "loom-cache");
+    }
 
-	@Override
-	public File getLocalZomboidRepo() {
-		return new File(getRootProjectPersistentCache(), "zomboidMaven");
-	}
+    @Override
+    public File getUserCache() {
+        return createFile(getGradleUserHomeDir(), "caches" + File.separator + "leaf-loom");
+    }
 
-	@Override
-	public File getDecompileCache(String version) {
-		return new File(getUserCache(), "decompile/" + version + ".zip");
-	}
+    protected abstract File getBuildDir();
+
+    protected abstract File getGradleUserHomeDir();
+
+    protected abstract File getProjectCacheDir();
+
+    protected abstract String getProjectPath();
+
+    protected abstract File getRootDir();
 }

@@ -56,51 +56,51 @@ import dev.aoqia.leaf.loom.api.RemapConfigurationSettings;
 import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
 
 public interface RemappedProjectView extends ProjectView {
-	Function<RemapConfigurationSettings, Stream<Path>> resolveArtifacts(ArtifactUsage artifactUsage);
+    List<RemapConfigurationSettings> getCompileRemapConfigurations();
 
-	NamedDomainObjectList<RemapConfigurationSettings> getRemapConfigurations();
+    MappingsNamespace getProductionNamespace();
 
-	List<RemapConfigurationSettings> getCompileRemapConfigurations();
+    NamedDomainObjectList<RemapConfigurationSettings> getRemapConfigurations();
 
-	List<RemapConfigurationSettings> getRuntimeRemapConfigurations();
+    List<RemapConfigurationSettings> getRuntimeRemapConfigurations();
 
-	MappingsNamespace getProductionNamespace();
+    Function<RemapConfigurationSettings, Stream<Path>> resolveArtifacts(ArtifactUsage artifactUsage);
 
-	class Impl extends AbstractProjectView implements RemappedProjectView {
-		public Impl(Project project) {
-			super(project);
-		}
+    class Impl extends AbstractProjectView implements RemappedProjectView {
+        public Impl(Project project) {
+            super(project);
+        }
 
-		@Override
-		public Function<RemapConfigurationSettings, Stream<Path>> resolveArtifacts(ArtifactUsage artifactUsage) {
-			final Usage usage = project.getObjects().named(Usage.class, artifactUsage.getGradleUsage());
+        @Override
+        public List<RemapConfigurationSettings> getCompileRemapConfigurations() {
+            return extension.getCompileRemapConfigurations();
+        }
 
-			return settings -> {
-				final Configuration configuration = settings.getSourceConfiguration().get().copyRecursive();
-				configuration.setCanBeConsumed(false);
-				configuration.attributes(attributes -> attributes.attribute(Usage.USAGE_ATTRIBUTE, usage));
-				return configuration.resolve().stream().map(File::toPath);
-			};
-		}
+        @Override
+        public MappingsNamespace getProductionNamespace() {
+            return extension.getProductionNamespaceEnum().get();
+        }
 
-		@Override
-		public NamedDomainObjectList<RemapConfigurationSettings> getRemapConfigurations() {
-			return extension.getRemapConfigurations();
-		}
+        @Override
+        public NamedDomainObjectList<RemapConfigurationSettings> getRemapConfigurations() {
+            return extension.getRemapConfigurations();
+        }
 
-		@Override
-		public List<RemapConfigurationSettings> getCompileRemapConfigurations() {
-			return extension.getCompileRemapConfigurations();
-		}
+        @Override
+        public List<RemapConfigurationSettings> getRuntimeRemapConfigurations() {
+            return extension.getRuntimeRemapConfigurations();
+        }
 
-		@Override
-		public List<RemapConfigurationSettings> getRuntimeRemapConfigurations() {
-			return extension.getRuntimeRemapConfigurations();
-		}
+        @Override
+        public Function<RemapConfigurationSettings, Stream<Path>> resolveArtifacts(ArtifactUsage artifactUsage) {
+            final Usage usage = project.getObjects().named(Usage.class, artifactUsage.getGradleUsage());
 
-		@Override
-		public MappingsNamespace getProductionNamespace() {
-			return extension.getProductionNamespaceEnum().get();
-		}
-	}
+            return settings -> {
+                final Configuration configuration = settings.getSourceConfiguration().get().copyRecursive();
+                configuration.setCanBeConsumed(false);
+                configuration.attributes(attributes -> attributes.attribute(Usage.USAGE_ATTRIBUTE, usage));
+                return configuration.resolve().stream().map(File::toPath);
+            };
+        }
+    }
 }

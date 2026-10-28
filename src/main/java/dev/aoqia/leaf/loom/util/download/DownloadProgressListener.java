@@ -42,23 +42,23 @@
 package dev.aoqia.leaf.loom.util.download;
 
 public interface DownloadProgressListener {
-	void onStart();
+    DownloadProgressListener NONE = new DownloadProgressListener() {
+        @Override
+        public void onEnd() {
+        }
 
-	void onProgress(long bytesTransferred, long contentLength);
+        @Override
+        public void onProgress(long bytesTransferred, long contentLength) {
+        }
 
-	void onEnd();
+        @Override
+        public void onStart() {
+        }
+    };
 
-	DownloadProgressListener NONE = new DownloadProgressListener() {
-		@Override
-		public void onStart() {
-		}
+    void onEnd();
 
-		@Override
-		public void onProgress(long bytesTransferred, long contentLength) {
-		}
+    void onProgress(long bytesTransferred, long contentLength);
 
-		@Override
-		public void onEnd() {
-		}
-	};
+    void onStart();
 }

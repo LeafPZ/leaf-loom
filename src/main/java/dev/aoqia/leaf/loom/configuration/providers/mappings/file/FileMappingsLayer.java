@@ -68,106 +68,110 @@ import dev.aoqia.leaf.loom.util.FileSystemUtil;
 import dev.aoqia.leaf.loom.util.ZipUtils;
 
 public record FileMappingsLayer(
-		Path path, String mappingPath,
-		String fallbackSourceNamespace, String fallbackTargetNamespace,
-		boolean enigma, // Enigma cannot be automatically detected since it's stored in a directory.
-		boolean unpick,
-		boolean annotations,
-		String mergeNamespace,
-		String fallbackUnpickConstants
-) implements MappingLayer, UnpickLayer, AnnotationsLayer {
-	@Override
-	public void visit(MappingVisitor mappingVisitor) throws IOException {
-		// Bare file
-		if (!ZipUtils.isZip(path)) {
-			visit(path, mappingVisitor);
-		} else {
-			try (FileSystemUtil.Delegate fileSystem = FileSystemUtil.getJarFileSystem(path)) {
-				visit(fileSystem.get().getPath(mappingPath), mappingVisitor);
-			}
-		}
-	}
+    Path path,
+    String mappingPath,
+    String fallbackSourceNamespace,
+    String fallbackTargetNamespace,
+    // Enigma cannot be automatically detected since it's stored in a directory.
+    boolean enigma,
+    boolean unpick,
+    boolean annotations,
+    String mergeNamespace,
+    String fallbackUnpickConstants
+) implements MappingLayer, UnpickLayer, AnnotationsLayer
+{
+    @Override
+    public void visit(MappingVisitor mappingVisitor) throws IOException {
+        // Bare file
+        if (!ZipUtils.isZip(path)) {
+            visit(path, mappingVisitor);
+        } else {
+            try (FileSystemUtil.Delegate fileSystem = FileSystemUtil.getJarFileSystem(path)) {
+                visit(fileSystem.get().getPath(mappingPath), mappingVisitor);
+            }
+        }
+    }
 
-	private void visit(Path path, MappingVisitor mappingVisitor) throws IOException {
-		MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(mappingVisitor, mergeNamespace);
+    @Override
+    public MappingsNamespace getSourceNamespace() {
+        return MappingsNamespace.of(mergeNamespace);
+    }
 
-		// Replace the default fallback namespaces with
-		// our fallback namespaces if potentially needed.
-		Map<String, String> fallbackNamespaceReplacements = Map.of(
-				MappingUtil.NS_SOURCE_FALLBACK, fallbackSourceNamespace,
-				MappingUtil.NS_TARGET_FALLBACK, fallbackTargetNamespace
-		);
-		MappingNsRenamer renamer = new MappingNsRenamer(nsSwitch, fallbackNamespaceReplacements);
+    @Override
+    public List<Class<? extends MappingLayer>> dependsOn() {
+        if (mergeNamespace.equals(MappingsNamespace.INTERMEDIARY.toString())
+            || fallbackSourceNamespace.equals(MappingsNamespace.INTERMEDIARY.toString()))
+        {
+            return List.of(IntermediaryMappingLayer.class);
+        }
 
-		MappingReader.read(path, enigma ? MappingFormat.ENIGMA_DIR : null, renamer);
-	}
+        return List.of();
+    }
 
-	@Override
-	public MappingsNamespace getSourceNamespace() {
-		return MappingsNamespace.of(mergeNamespace);
-	}
+    private void visit(Path path, MappingVisitor mappingVisitor) throws IOException {
+        MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(mappingVisitor, mergeNamespace);
 
-	@Override
-	public List<Class<? extends MappingLayer>> dependsOn() {
-		if (mergeNamespace.equals(MappingsNamespace.INTERMEDIARY.toString()) || fallbackSourceNamespace.equals(MappingsNamespace.INTERMEDIARY.toString())) {
-			return List.of(IntermediaryMappingLayer.class);
-		}
+        // Replace the default fallback namespaces with
+        // our fallback namespaces if potentially needed.
+        Map<String, String> fallbackNamespaceReplacements = Map.of(MappingUtil.NS_SOURCE_FALLBACK,
+            fallbackSourceNamespace, MappingUtil.NS_TARGET_FALLBACK, fallbackTargetNamespace);
+        MappingNsRenamer renamer = new MappingNsRenamer(nsSwitch, fallbackNamespaceReplacements);
 
-		return List.of();
-	}
+        MappingReader.read(path, enigma ? MappingFormat.ENIGMA_DIR : null, renamer);
+    }
 
-	@Override
-	public @Nullable UnpickData getUnpickData() throws IOException {
-		if (!unpick) {
-			return null;
-		}
+    @Override
+    public @Nullable UnpickData getUnpickData() throws IOException {
+        if (!unpick) {
+            return null;
+        }
 
-		if (!ZipUtils.isZip(path)) {
-			throw new UnsupportedOperationException("Unpick is only supported for zip file mapping layers.");
-		}
+        if (!ZipUtils.isZip(path)) {
+            throw new UnsupportedOperationException("Unpick is only supported for zip file mapping layers.");
+        }
 
-		try (FileSystemUtil.Delegate fileSystem = FileSystemUtil.getJarFileSystem(path)) {
-			final Path unpickMetadata = fileSystem.get().getPath(UnpickMetadata.UNPICK_METADATA_PATH);
-			final Path unpickDefinitions = fileSystem.get().getPath(UnpickMetadata.UNPICK_DEFINITIONS_PATH);
+        try (FileSystemUtil.Delegate fileSystem = FileSystemUtil.getJarFileSystem(path)) {
+            final Path unpickMetadata = fileSystem.get().getPath(UnpickMetadata.UNPICK_METADATA_PATH);
+            final Path unpickDefinitions = fileSystem.get().getPath(UnpickMetadata.UNPICK_DEFINITIONS_PATH);
 
-			if (!Files.exists(unpickMetadata)) {
-				// No unpick in this zip
-				return null;
-			}
+            if (!Files.exists(unpickMetadata)) {
+                // No unpick in this zip
+                return null;
+            }
 
-			return UnpickData.read(unpickMetadata, unpickDefinitions);
-		}
-	}
+            return UnpickData.read(unpickMetadata, unpickDefinitions);
+        }
+    }
 
-	@Override
-	public @Nullable String getFallbackConstants() {
-		if (!unpick) {
-			return null;
-		}
+    @Override
+    public @Nullable String getFallbackConstants() {
+        if (!unpick) {
+            return null;
+        }
 
-		return fallbackUnpickConstants;
-	}
+        return fallbackUnpickConstants;
+    }
 
-	@Override
-	public @Nullable AnnotationsData getAnnotationsData() throws IOException {
-		if (!annotations) {
-			return null;
-		}
+    @Override
+    public @Nullable AnnotationsData getAnnotationsData() throws IOException {
+        if (!annotations) {
+            return null;
+        }
 
-		if (!ZipUtils.isZip(path)) {
-			throw new UnsupportedOperationException("Annotations data is only supported for zip file mapping layers.");
-		}
+        if (!ZipUtils.isZip(path)) {
+            throw new UnsupportedOperationException("Annotations data is only supported for zip file mapping layers.");
+        }
 
-		try (FileSystemUtil.Delegate fileSystem = FileSystemUtil.getJarFileSystem(path)) {
-			final Path annotations = fileSystem.get().getPath(AnnotationsLayer.ANNOTATIONS_PATH);
+        try (FileSystemUtil.Delegate fileSystem = FileSystemUtil.getJarFileSystem(path)) {
+            final Path annotations = fileSystem.get().getPath(AnnotationsLayer.ANNOTATIONS_PATH);
 
-			if (!Files.exists(annotations)) {
-				return null;
-			}
+            if (!Files.exists(annotations)) {
+                return null;
+            }
 
-			try (BufferedReader reader = Files.newBufferedReader(annotations)) {
-				return AnnotationsData.read(reader);
-			}
-		}
-	}
+            try (BufferedReader reader = Files.newBufferedReader(annotations)) {
+                return AnnotationsData.read(reader);
+            }
+        }
+    }
 }

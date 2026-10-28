@@ -51,36 +51,36 @@ import org.slf4j.LoggerFactory;
 
 import dev.aoqia.leaf.loom.util.fmj.mixin.MixinRefmap;
 
-public record MixinReferenceRemapperImpl(Map<String, MixinRefmap.ReferenceMappingData> data) implements MixinReferenceRemapper {
-	private static final Logger LOGGER = LoggerFactory.getLogger(MixinReferenceRemapperImpl.class);
+public record MixinReferenceRemapperImpl(Map<String, MixinRefmap.ReferenceMappingData> data)
+    implements MixinReferenceRemapper
+{
+    private static final Logger LOGGER = LoggerFactory.getLogger(MixinReferenceRemapperImpl.class);
 
-	public static MixinReferenceRemapper createFromRefmaps(String from, String to, Stream<MixinRefmap> refmaps) {
-		MixinRefmap.NamespacePair namespaces = new MixinRefmap.NamespacePair(from, to);
+    public static MixinReferenceRemapper createFromRefmaps(String from, String to, Stream<MixinRefmap> refmaps) {
+        MixinRefmap.NamespacePair namespaces = new MixinRefmap.NamespacePair(from, to);
 
-		Map<String, MixinRefmap.ReferenceMappingData> data = refmaps
-				.map(refmap -> refmap.getData(namespaces))
-				.filter(Objects::nonNull)
-				.map(MixinRefmap.MixinMappingData::data)
-				.flatMap(map -> map.entrySet().stream())
-				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
-						(existing, replacement) -> {
-							// TODO we could merge this, but it should never happen in practice
-							LOGGER.warn("Duplicate mixin reference mapping for {} in refmaps, using the first one", existing);
-							return existing;
-						}
-				));
+        Map<String,
+            MixinRefmap.ReferenceMappingData> data = refmaps.map(refmap -> refmap.getData(namespaces))
+                .filter(Objects::nonNull)
+                .map(MixinRefmap.MixinMappingData::data)
+                .flatMap(map -> map.entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (existing, replacement) -> {
+                    // TODO we could merge this, but it should never happen in practice
+                    LOGGER.warn("Duplicate mixin reference mapping for {} in refmaps, using the first one", existing);
+                    return existing;
+                }));
 
-		return new MixinReferenceRemapperImpl(data);
-	}
+        return new MixinReferenceRemapperImpl(data);
+    }
 
-	@Override
-	public String remapReference(String mixinClassName, String reference) {
-		final MixinRefmap.ReferenceMappingData data = data().get(mixinClassName);
+    @Override
+    public String remapReference(String mixinClassName, String reference) {
+        final MixinRefmap.ReferenceMappingData data = data().get(mixinClassName);
 
-		if (data != null) {
-			return data.remap(reference);
-		}
+        if (data != null) {
+            return data.remap(reference);
+        }
 
-		return reference;
-	}
+        return reference;
+    }
 }

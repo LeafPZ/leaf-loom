@@ -54,24 +54,23 @@ import dev.aoqia.leaf.loom.api.mappings.layered.spec.FileSpec;
 import dev.aoqia.leaf.loom.util.download.DownloadException;
 
 public record URLFileSpec(String url) implements FileSpec {
-	private static final Logger LOGGER = LoggerFactory.getLogger(URLFileSpec.class);
-	@Override
-	public Path get(MappingContext context) {
-		try {
-			Path output = context.workingDirectory(String.format(Locale.ENGLISH, "%d.URLFileSpec", Objects.hash(url)));
-			LOGGER.info("Downloading {} to {}", url, output);
-			context.download(url)
-					.defaultCache()
-					.downloadPath(output);
-			return output;
-		} catch (DownloadException e) {
-			throw new UncheckedIOException("Failed to download: " + url, e);
-		}
-	}
+    private static final Logger LOGGER = LoggerFactory.getLogger(URLFileSpec.class);
 
-	@Override
-	public int hashCode() {
-		// URL performs DNS requests if you .hashCode it (:
-		return Objects.hash(url);
-	}
+    @Override
+    public Path get(MappingContext context) {
+        try {
+            Path output = context.workingDirectory(String.format(Locale.ENGLISH, "%d.URLFileSpec", Objects.hash(url)));
+            LOGGER.info("Downloading {} to {}", url, output);
+            context.download(url).defaultCache().downloadPath(output);
+            return output;
+        } catch (DownloadException e) {
+            throw new UncheckedIOException("Failed to download: " + url, e);
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        // URL performs DNS requests if you .hashCode it (:
+        return Objects.hash(url);
+    }
 }

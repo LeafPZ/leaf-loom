@@ -74,97 +74,105 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public final class IntermediateMappingsService extends Service<IntermediateMappingsService.Options> {
-	public static final ServiceType<Options, IntermediateMappingsService> TYPE = new ServiceType<>(Options.class, IntermediateMappingsService.class);
-	private static final Logger LOGGER = LoggerFactory.getLogger(IntermediateMappingsService.class);
+    public static final ServiceType<Options,
+        IntermediateMappingsService> TYPE = new ServiceType<>(Options.class, IntermediateMappingsService.class);
 
-	public interface Options extends Service.Options {
-		@InputFile
-		RegularFileProperty getIntermediaryTiny();
-		@Input
-		Property<String> getExpectedSrcNs();
-		@Input
-		Property<String> getMinecraftVersion();
-	}
+    private static final Logger LOGGER = LoggerFactory.getLogger(IntermediateMappingsService.class);
 
-	private final Supplier<MemoryMappingTree> memoryMappingTree = Lazy.of(this::createMemoryMappingTree);
+    private final Supplier<MemoryMappingTree> memoryMappingTree = Lazy.of(this::createMemoryMappingTree);
 
-	public IntermediateMappingsService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    public IntermediateMappingsService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	public static Provider<Options> createOptions(Project project, ZomboidProvider minecraftProvider) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
+    @VisibleForTesting
+    public static MemoryMappingTree createMemoryMappingTree(Path mappingFile, String expectedSrcNs) {
+        final MemoryMappingTree tree = new MemoryMappingTree();
 
-		if (!extension.getUseIntermediateMappings().get()) {
-			throw new IllegalStateException("Intermediary mappings is disabled");
-		}
+        try {
+            MappingNsCompleter nsCompleter = new MappingNsCompleter(tree,
+                Collections.singletonMap(MappingsNamespace.NAMED.toString(), MappingsNamespace.INTERMEDIARY.toString()),
+                true);
 
-		final IntermediateMappingsProvider intermediateProvider = extension.getIntermediateMappingsProvider();
-		final Path intermediaryTiny = minecraftProvider.file(intermediateProvider.getName() + ".tiny").toPath();
+            try (BufferedReader reader = Files.newBufferedReader(mappingFile, StandardCharsets.UTF_8)) {
+                Tiny2FileReader.read(reader, nsCompleter);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read intermediary mappings", e);
+        }
 
-		try {
-			if (intermediateProvider instanceof IntermediateMappingsProviderInternal internal) {
-				internal.provide(intermediaryTiny, project);
-			} else {
-				intermediateProvider.provide(intermediaryTiny);
-			}
-		} catch (IOException e) {
-			try {
-				Files.deleteIfExists(intermediaryTiny);
-			} catch (IOException ex) {
-				LOGGER.warn("Failed to delete intermediary mappings file", ex);
-			}
+        if (!expectedSrcNs.equals(tree.getSrcNamespace())) {
+            throw new RuntimeException("Invalid intermediate mappings: expected source namespace '" + expectedSrcNs
+                + "' but found '" + tree.getSrcNamespace() + "'");
+        }
 
-			throw new UncheckedIOException("Failed to provide intermediate mappings", e);
-		}
+        return tree;
+    }
 
-		return createOptions(project, minecraftProvider, intermediaryTiny);
-	}
+    public static Provider<Options> createOptions(Project project, ZomboidProvider minecraftProvider) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-	private static Provider<Options> createOptions(Project project, ZomboidProvider provider, Path intermediaryTiny) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final IntermediateMappingsProvider intermediateProvider = extension.getIntermediateMappingsProvider();
-		// When merging legacy versions there will be multiple named namespaces, so use intermediary as the common src ns
-		// Newer versions will use intermediary as the src ns
-		final String expectedSrcNs = MappingsNamespace.OFFICIAL.toString();
+        if (!extension.getUseIntermediateMappings().get()) {
+            throw new IllegalStateException("Intermediary mappings is disabled");
+        }
 
-		return TYPE.create(project, options -> {
-			options.getIntermediaryTiny().set(intermediaryTiny.toFile());
-			options.getExpectedSrcNs().set(expectedSrcNs);
-			options.getMinecraftVersion().set(intermediateProvider.getGameVersion());
-		});
-	}
+        final IntermediateMappingsProvider intermediateProvider = extension.getIntermediateMappingsProvider();
+        final Path intermediaryTiny = minecraftProvider.file(intermediateProvider.getName() + ".tiny").toPath();
 
-	private MemoryMappingTree createMemoryMappingTree() {
-		return createMemoryMappingTree(getIntermediaryTiny(), getOptions().getExpectedSrcNs().get());
-	}
+        try {
+            if (intermediateProvider instanceof IntermediateMappingsProviderInternal internal) {
+                internal.provide(intermediaryTiny, project);
+            } else {
+                intermediateProvider.provide(intermediaryTiny);
+            }
+        } catch (IOException e) {
+            try {
+                Files.deleteIfExists(intermediaryTiny);
+            } catch (IOException ex) {
+                LOGGER.warn("Failed to delete intermediary mappings file", ex);
+            }
 
-	@VisibleForTesting
-	public static MemoryMappingTree createMemoryMappingTree(Path mappingFile, String expectedSrcNs) {
-		final MemoryMappingTree tree = new MemoryMappingTree();
+            throw new UncheckedIOException("Failed to provide intermediate mappings", e);
+        }
 
-		try {
-			MappingNsCompleter nsCompleter = new MappingNsCompleter(tree, Collections.singletonMap(MappingsNamespace.NAMED.toString(), MappingsNamespace.INTERMEDIARY.toString()), true);
+        return createOptions(project, minecraftProvider, intermediaryTiny);
+    }
 
-			try (BufferedReader reader = Files.newBufferedReader(mappingFile, StandardCharsets.UTF_8)) {
-				Tiny2FileReader.read(reader, nsCompleter);
-			}
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read intermediary mappings", e);
-		}
+    private static Provider<Options> createOptions(Project project, ZomboidProvider provider, Path intermediaryTiny) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final IntermediateMappingsProvider intermediateProvider = extension.getIntermediateMappingsProvider();
+        // When merging legacy versions there will be multiple named namespaces, so use intermediary as the common
+        // src ns
+        // Newer versions will use intermediary as the src ns
+        final String expectedSrcNs = MappingsNamespace.OFFICIAL.toString();
 
-		if (!expectedSrcNs.equals(tree.getSrcNamespace())) {
-			throw new RuntimeException("Invalid intermediate mappings: expected source namespace '" + expectedSrcNs + "' but found '" + tree.getSrcNamespace() + "\'");
-		}
+        return TYPE.create(project, options -> {
+            options.getIntermediaryTiny().set(intermediaryTiny.toFile());
+            options.getExpectedSrcNs().set(expectedSrcNs);
+            options.getMinecraftVersion().set(intermediateProvider.getGameVersion());
+        });
+    }
 
-		return tree;
-	}
+    public Path getIntermediaryTiny() {
+        return getOptions().getIntermediaryTiny().get().getAsFile().toPath();
+    }
 
-	public MemoryMappingTree getMemoryMappingTree() {
-		return memoryMappingTree.get();
-	}
+    public MemoryMappingTree getMemoryMappingTree() {
+        return memoryMappingTree.get();
+    }
 
-	public Path getIntermediaryTiny() {
-		return getOptions().getIntermediaryTiny().get().getAsFile().toPath();
-	}
+    private MemoryMappingTree createMemoryMappingTree() {
+        return createMemoryMappingTree(getIntermediaryTiny(), getOptions().getExpectedSrcNs().get());
+    }
+
+    public interface Options extends Service.Options {
+        @Input
+        Property<String> getExpectedSrcNs();
+
+        @InputFile
+        RegularFileProperty getIntermediaryTiny();
+
+        @Input
+        Property<String> getMinecraftVersion();
+    }
 }

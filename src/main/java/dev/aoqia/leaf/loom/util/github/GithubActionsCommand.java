@@ -48,38 +48,37 @@ import java.util.StringJoiner;
 import org.jspecify.annotations.Nullable;
 
 public record GithubActionsCommand(String command, String message, Map<String, @Nullable Object> properties) {
-	public String toCommandString() {
-		var sb = new StringBuilder("::").append(command);
+    public String toCommandString() {
+        var sb = new StringBuilder("::").append(command);
 
-		if (!properties.isEmpty()) {
-			var propertiesJoiner = new StringJoiner(",");
-			properties.forEach((key, value) -> propertiesJoiner.add(key + '=' + escapeProperty(Objects.toString(value))));
-			sb.append(' ').append(propertiesJoiner);
-		}
+        if (!properties.isEmpty()) {
+            var propertiesJoiner = new StringJoiner(",");
+            properties
+                .forEach((key, value) -> propertiesJoiner.add(key + '=' + escapeProperty(Objects.toString(value))));
+            sb.append(' ').append(propertiesJoiner);
+        }
 
-		sb.append("::").append(escapeMessage(message));
-		return sb.toString();
-	}
+        sb.append("::").append(escapeMessage(message));
+        return sb.toString();
+    }
 
-	public void printToStdout() {
-		System.out.println(toCommandString());
-	}
+    public void printToStdout() {
+        System.out.println(toCommandString());
+    }
 
-	private static String escapeProperty(String value) {
-		// See https://github.com/actions/toolkit/blob/0786132e6a1a4451c2d392bbbf481c2b172d4312/packages/core/src/command.ts#L110
-		return value
-				.replace("%", "%25")
-				.replace("\r", "%0D")
-				.replace("\n", "%0A")
-				.replace(":", "%3A")
-				.replace(",", "%2C");
-	}
+    private static String escapeProperty(String value) {
+        // See
+        // https://github.com/actions/toolkit/blob/0786132e6a1a4451c2d392bbbf481c2b172d4312/packages/core/src/command.ts#L110
+        return value.replace("%", "%25")
+            .replace("\r", "%0D")
+            .replace("\n", "%0A")
+            .replace(":", "%3A")
+            .replace(",", "%2C");
+    }
 
-	private static String escapeMessage(String value) {
-		// See https://github.com/actions/toolkit/blob/0786132e6a1a4451c2d392bbbf481c2b172d4312/packages/core/src/command.ts#L103
-		return value
-				.replace("%", "%25")
-				.replace("\r", "%0D")
-				.replace("\n", "%0A");
-	}
+    private static String escapeMessage(String value) {
+        // See
+        // https://github.com/actions/toolkit/blob/0786132e6a1a4451c2d392bbbf481c2b172d4312/packages/core/src/command.ts#L103
+        return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A");
+    }
 }

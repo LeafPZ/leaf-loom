@@ -67,82 +67,87 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public class MixinRefmapService extends Service<MixinRefmapService.Options> {
-	public static final ServiceType<Options, MixinRefmapService> TYPE = new ServiceType<>(Options.class, MixinRefmapService.class);
+    public static final ServiceType<Options,
+        MixinRefmapService> TYPE = new ServiceType<>(Options.class, MixinRefmapService.class);
 
-	public interface Options extends Service.Options {
-		@Input
-		ListProperty<String> getMixinConfigs();
-		@Input
-		Property<String> getRefmapName();
-	}
+    public MixinRefmapService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	public static Provider<List<Options>> createOptions(RemapJarTask task) {
-		final Project project = task.getProject();
-		return project.provider(() -> {
-			final LoomGradleExtension extension = LoomGradleExtension.get(project);
+    public static Provider<List<Options>> createOptions(RemapJarTask task) {
+        final Project project = task.getProject();
+        return project.provider(() -> {
+            final LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-			if (!extension.getMixin().getUseLegacyMixinAp().get()) {
-				return List.of();
-			}
+            if (!extension.getMixin().getUseLegacyMixinAp().get()) {
+                return List.of();
+            }
 
-			final MixinExtension mixinExtension = extension.getMixin();
+            final MixinExtension mixinExtension = extension.getMixin();
 
-			List<Provider<Options>> options = new ArrayList<>();
+            List<Provider<Options>> options = new ArrayList<>();
 
-			for (SourceSet sourceSet : mixinExtension.getMixinSourceSets()) {
-				MixinExtension.MixinInformationContainer container = Objects.requireNonNull(
-						MixinExtension.getMixinInformationContainer(sourceSet)
-				);
+            for (SourceSet sourceSet : mixinExtension.getMixinSourceSets()) {
+                MixinExtension.MixinInformationContainer container = Objects
+                    .requireNonNull(MixinExtension.getMixinInformationContainer(sourceSet));
 
-				final List<String> rootPaths = ClientEntriesService.getRootPaths(sourceSet.getResources().getSrcDirs());
+                final List<String> rootPaths = ClientEntriesService.getRootPaths(sourceSet.getResources().getSrcDirs());
 
-				final String refmapName = container.refmapNameProvider().get();
-				final List<String> mixinConfigs = container.sourceSet().getResources()
-						.matching(container.mixinConfigPattern())
-						.getFiles()
-						.stream()
-						.map(ClientEntriesService.relativePath(rootPaths))
-						.toList();
+                final String refmapName = container.refmapNameProvider().get();
+                final List<String> mixinConfigs = container.sourceSet()
+                    .getResources()
+                    .matching(container.mixinConfigPattern())
+                    .getFiles()
+                    .stream()
+                    .map(ClientEntriesService.relativePath(rootPaths))
+                    .toList();
 
-				options.add(createOptions(project, mixinConfigs, refmapName));
-			}
+                options.add(createOptions(project, mixinConfigs, refmapName));
+            }
 
-			return options.stream().map(Provider::get).toList();
-		});
-	}
+            return options.stream().map(Provider::get).toList();
+        });
+    }
 
-	private static Provider<Options> createOptions(Project project, List<String> mixinConfigs, String refmapName) {
-		return TYPE.create(project, o -> {
-			o.getMixinConfigs().set(mixinConfigs);
-			o.getRefmapName().set(refmapName);
-		});
-	}
+    private static Provider<Options> createOptions(Project project, List<String> mixinConfigs, String refmapName) {
+        return TYPE.create(project, o -> {
+            o.getMixinConfigs().set(mixinConfigs);
+            o.getRefmapName().set(refmapName);
+        });
+    }
 
-	public MixinRefmapService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    public void applyToJar(Path path) throws IOException {
+        final LeafModJson fabricModJson = LeafModJsonFactory.createFromZipNullable(path);
 
-	public void applyToJar(Path path) throws IOException {
-		final LeafModJson fabricModJson = LeafModJsonFactory.createFromZipNullable(path);
+        if (fabricModJson == null) {
+            return;
+        }
 
-		if (fabricModJson == null) {
-			return;
-		}
+        final List<String> allMixinConfigs = fabricModJson.getMixinConfigurations();
+        final List<String> mixinConfigs = getOptions().getMixinConfigs()
+            .get()
+            .stream()
+            .filter(allMixinConfigs::contains)
+            .toList();
+        final String refmapName = getOptions().getRefmapName().get();
 
-		final List<String> allMixinConfigs = fabricModJson.getMixinConfigurations();
-		final List<String> mixinConfigs = getOptions().getMixinConfigs().get().stream()
-				.filter(allMixinConfigs::contains)
-				.toList();
-		final String refmapName = getOptions().getRefmapName().get();
+        if (ZipUtils.contains(path, refmapName)) {
+            int transformed = ZipUtils.transformJson(JsonObject.class, path,
+                mixinConfigs.stream().collect(Collectors.toMap(s -> s, s -> json -> {
+                    if (!json.has("refmap")) {
+                        json.addProperty("refmap", refmapName);
+                    }
 
-		if (ZipUtils.contains(path, refmapName)) {
-			int transformed = ZipUtils.transformJson(JsonObject.class, path, mixinConfigs.stream().collect(Collectors.toMap(s -> s, s -> json -> {
-				if (!json.has("refmap")) {
-					json.addProperty("refmap", refmapName);
-				}
+                    return json;
+                })));
+        }
+    }
 
-				return json;
-			})));
-		}
-	}
+    public interface Options extends Service.Options {
+        @Input
+        ListProperty<String> getMixinConfigs();
+
+        @Input
+        Property<String> getRefmapName();
+    }
 }

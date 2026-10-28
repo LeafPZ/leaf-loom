@@ -48,34 +48,34 @@ import java.util.logging.LogRecord;
 import org.slf4j.Logger;
 
 public class SLF4JAdapterHandler extends Handler {
-	private final Logger logger;
-	private final boolean suppressWarnings;
+    private final Logger logger;
+    private final boolean suppressWarnings;
 
-	public SLF4JAdapterHandler(Logger logger, boolean suppressWarnings) {
-		this.logger = logger;
-		this.suppressWarnings = suppressWarnings;
-	}
+    public SLF4JAdapterHandler(Logger logger, boolean suppressWarnings) {
+        this.logger = logger;
+        this.suppressWarnings = suppressWarnings;
+    }
 
-	@Override
-	public void publish(LogRecord record) {
-		if (record.getLevel().intValue() >= Level.SEVERE.intValue()) {
-			logger.error(record.getMessage(), record.getThrown());
-		} else if (record.getLevel().intValue() >= Level.WARNING.intValue() && !suppressWarnings) {
-			logger.warn(record.getMessage(), record.getThrown());
-		} else if (record.getLevel().intValue() >= Level.INFO.intValue()) {
-			logger.info(record.getMessage(), record.getThrown());
-		} else if (record.getLevel().intValue() >= Level.FINER.intValue()) {
-			logger.debug(record.getMessage(), record.getThrown());
-		} else {
-			logger.trace(record.getMessage(), record.getThrown());
-		}
-	}
+    @Override
+    public void close() throws SecurityException {
+    }
 
-	@Override
-	public void flush() {
-	}
+    @Override
+    public void flush() {
+    }
 
-	@Override
-	public void close() throws SecurityException {
-	}
+    @Override
+    public void publish(LogRecord record) {
+        if (record.getLevel().intValue() >= Level.SEVERE.intValue()) {
+            logger.error(record.getMessage(), record.getThrown());
+        } else if (record.getLevel().intValue() >= Level.WARNING.intValue() && !suppressWarnings) {
+            logger.warn(record.getMessage(), record.getThrown());
+        } else if (record.getLevel().intValue() >= Level.INFO.intValue()) {
+            logger.info(record.getMessage(), record.getThrown());
+        } else if (record.getLevel().intValue() >= Level.FINER.intValue()) {
+            logger.debug(record.getMessage(), record.getThrown());
+        } else {
+            logger.trace(record.getMessage(), record.getThrown());
+        }
+    }
 }

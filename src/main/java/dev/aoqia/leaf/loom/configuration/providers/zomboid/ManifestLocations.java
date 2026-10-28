@@ -52,49 +52,50 @@ import dev.aoqia.leaf.loom.api.manifest.VersionsManifestsAPI;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ManifestLocations.ManifestLocation;
 
 public class ManifestLocations implements VersionsManifestsAPI, Iterable<ManifestLocation> {
-	private final Queue<ManifestLocation> locations = new PriorityQueue<>();
-	private final Set<String> manifestNames = new HashSet<>();
+    private final Queue<ManifestLocation> locations = new PriorityQueue<>();
 
-	@Override
-	public void add(String name, String url, int priority) {
-		if (manifestNames.add(name)) {
-			locations.add(new ManifestLocation(name, url, priority));
-		} else {
-			throw new IllegalStateException("cannot add multiple versions manifests with the same name!");
-		}
-	}
+    private final Set<String> manifestNames = new HashSet<>();
 
-	@Override
-	public Iterator<ManifestLocation> iterator() {
-		return locations.iterator();
-	}
+    @Override
+    public void add(String name, String url, int priority) {
+        if (manifestNames.add(name)) {
+            locations.add(new ManifestLocation(name, url, priority));
+        } else {
+            throw new IllegalStateException("cannot add multiple versions manifests with the same name!");
+        }
+    }
 
-	public class ManifestLocation implements Comparable<ManifestLocation> {
-		private final String name;
-		private final String url;
-		private final int priority;
+    @Override
+    public Iterator<ManifestLocation> iterator() {
+        return locations.iterator();
+    }
 
-		private ManifestLocation(String name, String url, int priority) {
-			this.name = name;
-			this.url = url;
-			this.priority = priority;
-		}
+    public class ManifestLocation implements Comparable<ManifestLocation> {
+        private final String name;
+        private final int priority;
+        private final String url;
 
-		public String name() {
-			return name;
-		}
+        private ManifestLocation(String name, String url, int priority) {
+            this.name = name;
+            this.url = url;
+            this.priority = priority;
+        }
 
-		public String url() {
-			return url;
-		}
+        public Path cacheFile(Path dir) {
+            return dir.resolve(name + "_versions_manifest.json");
+        }
 
-		public Path cacheFile(Path dir) {
-			return dir.resolve(name + "_versions_manifest.json");
-		}
+        @Override
+        public int compareTo(ManifestLocation o) {
+            return Integer.compare(priority, o.priority);
+        }
 
-		@Override
-		public int compareTo(ManifestLocation o) {
-			return Integer.compare(priority, o.priority);
-		}
-	}
+        public String name() {
+            return name;
+        }
+
+        public String url() {
+            return url;
+        }
+    }
 }

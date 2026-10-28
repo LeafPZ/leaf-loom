@@ -47,28 +47,28 @@ import org.slf4j.LoggerFactory;
 import net.fabricmc.tinyremapper.api.TrLogger;
 
 public final class TinyRemapperLoggerAdapter implements TrLogger {
-	public static final TinyRemapperLoggerAdapter INSTANCE = new TinyRemapperLoggerAdapter();
+    public static final TinyRemapperLoggerAdapter INSTANCE = new TinyRemapperLoggerAdapter();
 
-	private static final Logger LOGGER = LoggerFactory.getLogger("TinyRemapper");
+    private static final Logger LOGGER = LoggerFactory.getLogger("TinyRemapper");
 
-	private TinyRemapperLoggerAdapter() {
-	}
+    private TinyRemapperLoggerAdapter() {
+    }
 
-	@Override
-	public void log(Level level, String message) {
-		switch (level) {
-		case ERROR:
-			LOGGER.error(message);
-			break;
-		case WARN:
-			LOGGER.warn(message);
-			break;
-		case INFO:
-			LOGGER.info(message);
-			break;
-		case DEBUG:
-			LOGGER.debug(message);
-			break;
-		}
-	}
+    @Override
+    public void log(Level level, String message) {
+        switch (level) {
+            case ERROR:
+                LOGGER.error(message);
+                break;
+            case WARN:
+                LOGGER.warn(message);
+                break;
+            case INFO:
+                LOGGER.info(message);
+                break;
+            case DEBUG:
+                LOGGER.debug(message);
+                break;
+        }
+    }
 }

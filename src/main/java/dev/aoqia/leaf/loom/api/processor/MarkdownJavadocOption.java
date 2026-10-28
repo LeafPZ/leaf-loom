@@ -46,10 +46,10 @@ import org.jetbrains.annotations.ApiStatus;
 /// The state of Markdown javadoc support in the current project configuration.
 @ApiStatus.Experimental
 public enum MarkdownJavadocOption {
-	/// Markdown javadoc is not supported with this project setup.
-	UNSUPPORTED,
-	/// Markdown javadoc is supported, but not required, with this project setup.
-	SUPPORTED, // currently unused in Loom
-	/// Markdown javadoc is required with this project setup.
-	REQUIRED
+    /// Markdown javadoc is required with this project setup.
+    REQUIRED,
+    /// Markdown javadoc is supported, but not required, with this project setup.
+    SUPPORTED,
+    /// Markdown javadoc is not supported with this project setup.
+    UNSUPPORTED
 }

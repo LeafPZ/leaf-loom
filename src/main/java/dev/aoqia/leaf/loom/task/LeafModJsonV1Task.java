@@ -68,66 +68,66 @@ import dev.aoqia.leaf.loom.util.fmj.gen.LeafModJsonV1Generator;
  */
 @DisableCachingByDefault
 public abstract class LeafModJsonV1Task extends AbstractLoomTask {
-	/**
-	 * The fabric.mod.json spec.
-	 */
-	@Nested
-	public abstract Property<LeafModJsonV1Spec> getJson();
+    public LeafModJsonV1Task() {
+        getJson().set(getObjectFactory().newInstance(LeafModJsonV1Spec.class));
+    }
 
-	/**
-	 * The output file to write the generated fabric.mod.json to.
-	 */
-	@OutputFile
-	public abstract RegularFileProperty getOutputFile();
+    /**
+     * The fabric.mod.json spec.
+     */
+    @Nested
+    public abstract Property<LeafModJsonV1Spec> getJson();
 
-	@Inject
-	protected abstract WorkerExecutor getWorkerExecutor();
+    /**
+     * The output file to write the generated fabric.mod.json to.
+     */
+    @OutputFile
+    public abstract RegularFileProperty getOutputFile();
 
-	@Inject
-	protected abstract ObjectFactory getObjectFactory();
+    /**
+     * Configure the fabric.mod.json spec.
+     *
+     * @param action A {@link Action} that configures the spec.
+     */
+    public void json(Action<LeafModJsonV1Spec> action) {
+        action.execute(getJson().get());
+    }
 
-	public LeafModJsonV1Task() {
-		getJson().set(getObjectFactory().newInstance(LeafModJsonV1Spec.class));
-	}
+    @TaskAction
+    public void run() {
+        final WorkQueue workQueue = getWorkerExecutor().noIsolation();
 
-	/**
-	 * Configure the fabric.mod.json spec.
-	 *
-	 * @param action A {@link Action} that configures the spec.
-	 */
-	public void json(Action<LeafModJsonV1Spec> action) {
-		action.execute(getJson().get());
-	}
+        workQueue.submit(FabricModJsonV1WorkAction.class, params -> {
+            params.getSpec().set(getJson());
+            params.getOutputFile().set(getOutputFile());
+        });
+    }
 
-	@TaskAction
-	public void run() {
-		final WorkQueue workQueue = getWorkerExecutor().noIsolation();
+    @Inject
+    protected abstract ObjectFactory getObjectFactory();
 
-		workQueue.submit(FabricModJsonV1WorkAction.class, params -> {
-			params.getSpec().set(getJson());
-			params.getOutputFile().set(getOutputFile());
-		});
-	}
+    @Inject
+    protected abstract WorkerExecutor getWorkerExecutor();
 
-	public interface FabricModJsonV1WorkParameters extends WorkParameters {
-		Property<LeafModJsonV1Spec> getSpec();
+    public abstract static class FabricModJsonV1WorkAction implements WorkAction<FabricModJsonV1WorkParameters> {
+        @Override
+        public void execute() {
+            LeafModJsonV1Spec spec = getParameters().getSpec().get();
+            Path outputPath = getParameters().getOutputFile().get().getAsFile().toPath();
 
-		RegularFileProperty getOutputFile();
-	}
+            String json = LeafModJsonV1Generator.INSTANCE.generate(spec);
 
-	public abstract static class FabricModJsonV1WorkAction implements WorkAction<FabricModJsonV1WorkParameters> {
-		@Override
-		public void execute() {
-			LeafModJsonV1Spec spec = getParameters().getSpec().get();
-			Path outputPath = getParameters().getOutputFile().get().getAsFile().toPath();
+            try {
+                Files.writeString(outputPath, json);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to write leaf.mod.json", e);
+            }
+        }
+    }
 
-			String json = LeafModJsonV1Generator.INSTANCE.generate(spec);
+    public interface FabricModJsonV1WorkParameters extends WorkParameters {
+        RegularFileProperty getOutputFile();
 
-			try {
-				Files.writeString(outputPath, json);
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to write leaf.mod.json", e);
-			}
-		}
-	}
+        Property<LeafModJsonV1Spec> getSpec();
+    }
 }

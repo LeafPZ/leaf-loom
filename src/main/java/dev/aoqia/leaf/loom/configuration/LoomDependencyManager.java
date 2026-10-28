@@ -49,30 +49,31 @@ import dev.aoqia.leaf.loom.util.SourceRemapper;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 public record LoomDependencyManager(Project project, ServiceFactory serviceFactory, LoomGradleExtension extension) {
-	public void handleDependencies() {
-		if (extension.disableObfuscation()) {
-			handleNonRemapDependencies();
-		} else {
-			handleRemapDependencies();
-		}
-	}
+    public void handleDependencies() {
+        if (extension.disableObfuscation()) {
+            handleNonRemapDependencies();
+        } else {
+            handleRemapDependencies();
+        }
+    }
 
-	private void handleRemapDependencies() {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
+    private void handleRemapDependencies() {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-		SourceRemapper sourceRemapper = new SourceRemapper(project, serviceFactory, true);
-		String mappingsIdentifier = extension.getMappingConfiguration().mappingsIdentifier();
+        SourceRemapper sourceRemapper = new SourceRemapper(project, serviceFactory, true);
+        String mappingsIdentifier = extension.getMappingConfiguration().mappingsIdentifier();
 
-		ModConfigurationRemapper.supplyModConfigurations(project, serviceFactory, mappingsIdentifier, extension, sourceRemapper);
+        ModConfigurationRemapper.supplyModConfigurations(project, serviceFactory, mappingsIdentifier, extension,
+            sourceRemapper);
 
-		sourceRemapper.remapAll();
+        sourceRemapper.remapAll();
 
-		if (extension.getInstallerData() == null) {
-			project.getLogger().info("leaf-installer.json not found in dependencies");
-		}
-	}
+        if (extension.getInstallerData() == null) {
+            project.getLogger().info("leaf-installer.json not found in dependencies");
+        }
+    }
 
-	private void handleNonRemapDependencies() {
-		DebofInstallerData.findAndApply(project);
-	}
+    private void handleNonRemapDependencies() {
+        DebofInstallerData.findAndApply(project);
+    }
 }

@@ -71,53 +71,58 @@ import dev.aoqia.leaf.loom.util.TinyRemapperLoggerAdapter;
 
 @DisableCachingByDefault
 public abstract class ValidateAccessWidenerTask extends DefaultTask {
-	@SkipWhenEmpty
-	@InputFile
-	@PathSensitive(PathSensitivity.NONE)
-	public abstract RegularFileProperty getAccessWidener();
+    @Inject
+    public ValidateAccessWidenerTask() {
+        final LoomGradleExtension extension = LoomGradleExtension.get(getProject());
 
-	@Classpath
-	public abstract ConfigurableFileCollection getTargetJars();
+        getAccessWidener().convention(extension.getAccessWidenerPath()).finalizeValueOnRead();
+        getTargetJars().from(extension.getZomboidJarsCollection(MappingsNamespace.NAMED));
 
-	@Inject
-	public ValidateAccessWidenerTask() {
-		final LoomGradleExtension extension = LoomGradleExtension.get(getProject());
+        // Ignore outputs for up-to-date checks as there aren't any (so only inputs are checked)
+        getOutputs().upToDateWhen(task -> true);
+    }
 
-		getAccessWidener().convention(extension.getAccessWidenerPath()).finalizeValueOnRead();
-		getTargetJars().from(extension.getZomboidJarsCollection(MappingsNamespace.NAMED));
+    @SkipWhenEmpty
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    public abstract RegularFileProperty getAccessWidener();
 
-		// Ignore outputs for up-to-date checks as there aren't any (so only inputs are checked)
-		getOutputs().upToDateWhen(task -> true);
-	}
+    @Classpath
+    public abstract ConfigurableFileCollection getTargetJars();
 
-	@TaskAction
-	public void run() {
-		final TinyRemapper tinyRemapper = TinyRemapper.newRemapper(TinyRemapperLoggerAdapter.INSTANCE).build();
+    @TaskAction
+    public void run() {
+        final TinyRemapper tinyRemapper = TinyRemapper.newRemapper(TinyRemapperLoggerAdapter.INSTANCE).build();
 
-		for (File file : getTargetJars().getFiles()) {
-			tinyRemapper.readClassPath(file.toPath());
-		}
+        for (File file : getTargetJars().getFiles()) {
+            tinyRemapper.readClassPath(file.toPath());
+        }
 
-		AtomicBoolean hasProblem = new AtomicBoolean(false);
+        AtomicBoolean hasProblem = new AtomicBoolean(false);
 
-		final ClassTweakerValidatingVisitor validator = new ClassTweakerValidatingVisitor(tinyRemapper.getEnvironment(), (lineNumber, message) -> {
-			hasProblem.set(true);
-			getLogger().error("{} on line {}", message, lineNumber);
-		});
+        final ClassTweakerValidatingVisitor validator = new ClassTweakerValidatingVisitor(tinyRemapper.getEnvironment(),
+            (lineNumber, message) -> {
+                hasProblem.set(true);
+                getLogger().error("{} on line {}", message, lineNumber);
+            });
 
-		final ClassTweakerReader accessWidenerReader = ClassTweakerReader.create(validator);
+        final ClassTweakerReader accessWidenerReader = ClassTweakerReader.create(validator);
 
-		try (BufferedReader reader = Files.newBufferedReader(getAccessWidener().get().getAsFile().toPath(), StandardCharsets.UTF_8)) {
-			accessWidenerReader.read(reader);
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read access widener", e);
-		} finally {
-			tinyRemapper.finish();
-		}
+        try (BufferedReader reader = Files.newBufferedReader(getAccessWidener().get().getAsFile().toPath(),
+            StandardCharsets.UTF_8))
+        {
+            accessWidenerReader.read(reader);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read access widener", e);
+        } finally {
+            tinyRemapper.finish();
+        }
 
-		if (hasProblem.get()) {
-			getLogger().error("access-widener validation failed for {}", getAccessWidener().get().getAsFile().getName());
-			throw new RuntimeException("access-widener validation failed for %s".formatted(getAccessWidener().get().getAsFile().getName()));
-		}
-	}
+        if (hasProblem.get()) {
+            getLogger().error("access-widener validation failed for {}",
+                getAccessWidener().get().getAsFile().getName());
+            throw new RuntimeException(
+                "access-widener validation failed for %s".formatted(getAccessWidener().get().getAsFile().getName()));
+        }
+    }
 }

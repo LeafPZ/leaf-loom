@@ -47,36 +47,37 @@ import org.jspecify.annotations.Nullable;
 
 // Can be replaced by Lazy Constants (https://openjdk.org/jeps/526) once available.
 public final class Lazy {
-	private Lazy() {
-	}
+    private Lazy() {
+    }
 
-	public static <T> Supplier<T> of(Supplier<T> supplier) {
-		return new Impl<>(supplier);
-	}
+    public static <T> Supplier<T> of(Supplier<T> supplier) {
+        return new Impl<>(supplier);
+    }
 
-	private static final class Impl<T> implements Supplier<T> {
-		final Supplier<T> supplier;
+    private static final class Impl<T> implements Supplier<T> {
+        volatile boolean initialized = false;
 
-		volatile boolean initialized = false;
-		@Nullable T value = null;
+        final Supplier<T> supplier;
+        @Nullable
+        T value = null;
 
-		private Impl(Supplier<T> supplier) {
-			this.supplier = supplier;
-		}
+        private Impl(Supplier<T> supplier) {
+            this.supplier = supplier;
+        }
 
-		@Override
-		public T get() {
-			// Classic double-checked locking pattern
-			if (!initialized) {
-				synchronized (this) {
-					if (!initialized) {
-						value = supplier.get();
-						initialized = true;
-					}
-				}
-			}
+        @Override
+        public T get() {
+            // Classic double-checked locking pattern
+            if (!initialized) {
+                synchronized (this) {
+                    if (!initialized) {
+                        value = supplier.get();
+                        initialized = true;
+                    }
+                }
+            }
 
-			return value;
-		}
-	}
+            return value;
+        }
+    }
 }

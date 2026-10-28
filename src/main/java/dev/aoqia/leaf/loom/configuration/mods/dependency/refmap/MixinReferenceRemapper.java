@@ -42,5 +42,5 @@
 package dev.aoqia.leaf.loom.configuration.mods.dependency.refmap;
 
 public interface MixinReferenceRemapper {
-	String remapReference(String mixinClassName, String reference);
+    String remapReference(String mixinClassName, String reference);
 }

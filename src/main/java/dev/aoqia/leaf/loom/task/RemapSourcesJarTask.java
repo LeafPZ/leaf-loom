@@ -60,56 +60,59 @@ import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 
 @CacheableTask
 public abstract class RemapSourcesJarTask extends AbstractRemapJarTask {
-	@Nested
-	abstract Property<SourceRemapperService.Options> getSourcesRemapperServiceOptions();
+    @Inject
+    public RemapSourcesJarTask() {
+        super();
+        getClasspath().from(getProject().getConfigurations().named(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME));
+        getJarType().set("sources");
 
-	@Inject
-	public RemapSourcesJarTask() {
-		super();
-		getClasspath().from(getProject().getConfigurations().named(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME));
-		getJarType().set("sources");
+        getSourcesRemapperServiceOptions().set(SourceRemapperService.createOptions(this));
+    }
 
-		getSourcesRemapperServiceOptions().set(SourceRemapperService.createOptions(this));
-	}
+    @Override
+    protected void copy() {
+        super.copy();
 
-	@Override
-	protected void copy() {
-		super.copy();
+        submitWork(RemapSourcesAction.class, params -> {
+            if (!params.namespacesMatch()) {
+                params.getSourcesRemapperServiceOptions().set(getSourcesRemapperServiceOptions());
+            }
+        });
+    }
 
-		submitWork(RemapSourcesAction.class, params -> {
-			if (!params.namespacesMatch()) {
-				params.getSourcesRemapperServiceOptions().set(getSourcesRemapperServiceOptions());
-			}
-		});
-	}
+    @Override
+    protected Provider<? extends ClientEntriesService.Options>
+        getClientOnlyEntriesOptionsProvider(SourceSet clientSourceSet)
+    {
+        return ClientEntriesService.Source.createOptions(getProject(), clientSourceSet);
+    }
 
-	@Override
-	protected Provider<? extends ClientEntriesService.Options> getClientOnlyEntriesOptionsProvider(SourceSet clientSourceSet) {
-		return ClientEntriesService.Source.createOptions(getProject(), clientSourceSet);
-	}
+    @Nested
+    abstract Property<SourceRemapperService.Options> getSourcesRemapperServiceOptions();
 
-	public interface RemapSourcesParams extends AbstractRemapParams {
-		Property<SourceRemapperService.Options> getSourcesRemapperServiceOptions();
-	}
+    public abstract static class RemapSourcesAction extends AbstractRemapAction<RemapSourcesParams> {
+        public RemapSourcesAction() {
+            super();
+        }
 
-	public abstract static class RemapSourcesAction extends AbstractRemapAction<RemapSourcesParams> {
-		public RemapSourcesAction() {
-			super();
-		}
+        @Override
+        protected void execute(Path inputFile) throws IOException {
+            if (!getParameters().namespacesMatch()) {
+                try (var serviceFactory = new ScopedServiceFactory()) {
+                    SourceRemapperService sourceRemapperService = serviceFactory
+                        .get(getParameters().getSourcesRemapperServiceOptions());
+                    sourceRemapperService.remapSourcesJar(inputFile, outputFile);
+                }
+            } else {
+                Files.copy(inputFile, outputFile, StandardCopyOption.REPLACE_EXISTING);
+            }
 
-		@Override
-		protected void execute(Path inputFile) throws IOException {
-			if (!getParameters().namespacesMatch()) {
-				try (var serviceFactory = new ScopedServiceFactory()) {
-					SourceRemapperService sourceRemapperService = serviceFactory.get(getParameters().getSourcesRemapperServiceOptions());
-					sourceRemapperService.remapSourcesJar(inputFile, outputFile);
-				}
-			} else {
-				Files.copy(inputFile, outputFile, StandardCopyOption.REPLACE_EXISTING);
-			}
+            modifyJarManifest();
+            rewriteJar();
+        }
+    }
 
-			modifyJarManifest();
-			rewriteJar();
-		}
-	}
+    public interface RemapSourcesParams extends AbstractRemapParams {
+        Property<SourceRemapperService.Options> getSourcesRemapperServiceOptions();
+    }
 }

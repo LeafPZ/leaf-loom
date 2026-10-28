@@ -57,86 +57,94 @@ import dev.aoqia.leaf.loom.util.gradle.GradleTypeAdapter;
  * When the factory is closed, all services created by it are closed and discarded.
  */
 public class ScopedServiceFactory implements ServiceFactory, Closeable {
-	private final Map<Service.Options, Service<?>> servicesIdentityMap = new IdentityHashMap<>();
-	private final Map<String, Service<?>> servicesJsonMap = new HashMap<>();
+    private final Map<Service.Options, Service<?>> servicesIdentityMap = new IdentityHashMap<>();
 
-	@Override
-	public <O extends Service.Options, S extends Service<O>> S get(O options) {
-		// First check if the service is already created, using the identity map saving the need to serialize the options
-		//noinspection unchecked
-		S service = (S) servicesIdentityMap.get(options);
+    private final Map<String, Service<?>> servicesJsonMap = new HashMap<>();
 
-		if (service != null) {
-			return service;
-		}
+    private static <O extends Service.Options, S extends Service<O>> S createService(O options,
+        ServiceFactory serviceFactory)
+    {
+        // We need to create the service from the provided options
+        final Class<? extends S> serviceClass;
 
-		// If the service is not already created, serialize the options and check the json map as it may be an equivalent service
-		String key = getOptionsCacheKey(options);
-		//noinspection unchecked
-		service = (S) servicesJsonMap.get(key);
+        // Find the service class
+        try {
+            // noinspection unchecked
+            serviceClass = (Class<? extends S>) Class.forName(options.getServiceClass().get());
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("Failed to find service class: " + options.getServiceClass().get(), e);
+        }
 
-		if (service != null) {
-			return service;
-		}
+        try {
+            // Check there is only 1 constructor
+            if (serviceClass.getDeclaredConstructors().length != 1) {
+                throw new RuntimeException("Service class must have exactly 1 constructor");
+            }
 
-		service = createService(options, getEffectiveServiceFactory());
+            // Check the constructor takes the correct types, the options class and a ScopedServiceFactory
+            Class<?>[] parameterTypes = serviceClass.getDeclaredConstructors()[0].getParameterTypes();
 
-		servicesIdentityMap.put(options, service);
-		servicesJsonMap.put(key, service);
+            if (parameterTypes.length != 2 || !parameterTypes[0].isAssignableFrom(options.getClass())
+                || !parameterTypes[1].isAssignableFrom(ServiceFactory.class))
+            {
+                throw new RuntimeException("Service class" + serviceClass.getName()
+                    + " constructor must take the options class and a ScopedServiceFactory");
+            }
 
-		return service;
-	}
+            // noinspection unchecked
+            return (S) serviceClass.getDeclaredConstructors()[0].newInstance(options, serviceFactory);
+        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+            throw new RuntimeException("Failed to create service instance", e);
+        }
+    }
 
-	@VisibleForTesting
-	protected ServiceFactory getEffectiveServiceFactory() {
-		return this;
-	}
+    @Override
+    public void close() throws IOException {
+        for (Service<?> service : servicesIdentityMap.values()) {
+            if (service instanceof Closeable closeable) {
+                closeable.close();
+            }
+        }
 
-	private static <O extends Service.Options, S extends Service<O>> S createService(O options, ServiceFactory serviceFactory) {
-		// We need to create the service from the provided options
-		final Class<? extends S> serviceClass;
+        servicesIdentityMap.clear();
+        servicesJsonMap.clear();
+    }
 
-		// Find the service class
-		try {
-			//noinspection unchecked
-			serviceClass = (Class<? extends S>) Class.forName(options.getServiceClass().get());
-		} catch (ClassNotFoundException e) {
-			throw new RuntimeException("Failed to find service class: " + options.getServiceClass().get(), e);
-		}
+    @Override
+    public <O extends Service.Options, S extends Service<O>> S get(O options) {
+        // First check if the service is already created, using the identity map saving the need to serialize the
+        // options
+        // noinspection unchecked
+        S service = (S) servicesIdentityMap.get(options);
 
-		try {
-			// Check there is only 1 constructor
-			if (serviceClass.getDeclaredConstructors().length != 1) {
-				throw new RuntimeException("Service class must have exactly 1 constructor");
-			}
+        if (service != null) {
+            return service;
+        }
 
-			// Check the constructor takes the correct types, the options class and a ScopedServiceFactory
-			Class<?>[] parameterTypes = serviceClass.getDeclaredConstructors()[0].getParameterTypes();
+        // If the service is not already created, serialize the options and check the json map as it may be an
+        // equivalent service
+        String key = getOptionsCacheKey(options);
+        // noinspection unchecked
+        service = (S) servicesJsonMap.get(key);
 
-			if (parameterTypes.length != 2 || !parameterTypes[0].isAssignableFrom(options.getClass()) || !parameterTypes[1].isAssignableFrom(ServiceFactory.class)) {
-				throw new RuntimeException("Service class" + serviceClass.getName() + " constructor must take the options class and a ScopedServiceFactory");
-			}
+        if (service != null) {
+            return service;
+        }
 
-			//noinspection unchecked
-			return (S) serviceClass.getDeclaredConstructors()[0].newInstance(options, serviceFactory);
-		} catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-			throw new RuntimeException("Failed to create service instance", e);
-		}
-	}
+        service = createService(options, getEffectiveServiceFactory());
 
-	private String getOptionsCacheKey(Service.Options options) {
-		return GradleTypeAdapter.GSON.toJson(options);
-	}
+        servicesIdentityMap.put(options, service);
+        servicesJsonMap.put(key, service);
 
-	@Override
-	public void close() throws IOException {
-		for (Service<?> service : servicesIdentityMap.values()) {
-			if (service instanceof Closeable closeable) {
-				closeable.close();
-			}
-		}
+        return service;
+    }
 
-		servicesIdentityMap.clear();
-		servicesJsonMap.clear();
-	}
+    @VisibleForTesting
+    protected ServiceFactory getEffectiveServiceFactory() {
+        return this;
+    }
+
+    private String getOptionsCacheKey(Service.Options options) {
+        return GradleTypeAdapter.GSON.toJson(options);
+    }
 }

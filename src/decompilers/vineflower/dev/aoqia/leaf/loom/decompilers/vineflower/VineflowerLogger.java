@@ -48,57 +48,61 @@ import org.jetbrains.java.decompiler.main.extern.IFernflowerLogger;
 import dev.aoqia.leaf.loom.decompilers.LoomInternalDecompiler;
 
 public class VineflowerLogger extends IFernflowerLogger {
-	private final LoomInternalDecompiler.Logger logger;
+    private final LoomInternalDecompiler.Logger logger;
 
-	public VineflowerLogger(LoomInternalDecompiler.Logger logger) {
-		this.logger = logger;
-	}
+    public VineflowerLogger(LoomInternalDecompiler.Logger logger) {
+        this.logger = logger;
+    }
 
-	@Override
-	public void writeMessage(String message, Severity severity) {
-		if (severity.ordinal() < Severity.ERROR.ordinal()) return;
+    @Override
+    public void endMethod() {
+        // Nope
+    }
 
-		System.err.println(message);
-	}
+    @Override
+    public void startClass(String className) {
+        write("Decompiling " + className);
+    }
 
-	@Override
-	public void writeMessage(String message, Severity severity, Throwable t) {
-		if (severity.ordinal() < Severity.ERROR.ordinal()) return;
+    @Override
+    public void startMethod(String methodName) {
+        // Nope
+    }
 
-		writeMessage(message, severity);
-		t.printStackTrace(System.err);
-	}
+    @Override
+    public void startReadingClass(String className) {
+        write("Decompiling " + className);
+    }
 
-	private void write(String data) {
-		try {
-			logger.accept(data);
-		} catch (IOException e) {
-			throw new RuntimeException("Failed to log", e);
-		}
-	}
+    @Override
+    public void startWriteClass(String className) {
+        // Nope
+    }
 
-	@Override
-	public void startReadingClass(String className) {
-		write("Decompiling " + className);
-	}
+    @Override
+    public void writeMessage(String message, Severity severity) {
+        if (severity.ordinal() < Severity.ERROR.ordinal()) {
+            return;
+        }
 
-	@Override
-	public void startClass(String className) {
-		write("Decompiling " + className);
-	}
+        System.err.println(message);
+    }
 
-	@Override
-	public void startWriteClass(String className) {
-		// Nope
-	}
+    @Override
+    public void writeMessage(String message, Severity severity, Throwable t) {
+        if (severity.ordinal() < Severity.ERROR.ordinal()) {
+            return;
+        }
 
-	@Override
-	public void startMethod(String methodName) {
-		// Nope
-	}
+        writeMessage(message, severity);
+        t.printStackTrace(System.err);
+    }
 
-	@Override
-	public void endMethod() {
-		// Nope
-	}
+    private void write(String data) {
+        try {
+            logger.accept(data);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to log", e);
+        }
+    }
 }

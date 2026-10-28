@@ -28,13 +28,15 @@ import java.util.Locale;
 public class CopyGameFileBuilder {
     private static final Duration ONE_DAY = Duration.ofDays(1);
 
-    private final Path path;
     private String expectedHash = null;
-    private boolean forced = false;
+
     private boolean fallback = false;
+
+    private boolean forced = false;
     private Duration maxAge = Duration.ZERO;
-    private CopyGameFileProgressListener progressListener = CopyGameFileProgressListener.NONE;
     private int maxRetries = 3;
+    private final Path path;
+    private CopyGameFileProgressListener progressListener = CopyGameFileProgressListener.NONE;
 
     private CopyGameFileBuilder(Path path) {
         this.path = path;
@@ -44,8 +46,23 @@ public class CopyGameFileBuilder {
         return new CopyGameFileBuilder(path);
     }
 
-    public CopyGameFileBuilder sha1(String sha1) {
-        this.expectedHash = "sha1:" + sha1;
+    public void copyGameFileFromPath(Path path) throws IOException {
+        withRetries((copyGameFile) -> {
+            copyGameFile.copyGameFile(path);
+            return null;
+        });
+    }
+
+    public void copyGameFileFromPathAsync(Path path, CopyGameFileExecutor executor) {
+        executor.runAsync(() -> copyGameFileFromPath(path));
+    }
+
+    public CopyGameFileBuilder defaultCache() {
+        return maxAge(ONE_DAY);
+    }
+
+    public CopyGameFileBuilder fallback(boolean force) {
+        this.fallback = force;
         return this;
     }
 
@@ -54,13 +71,8 @@ public class CopyGameFileBuilder {
         return this;
     }
 
-    public CopyGameFileBuilder fallback(boolean force) {
-        this.fallback = force;
-        return this;
-    }
-
-    public CopyGameFileBuilder progress(CopyGameFileProgressListener progressListener) {
-        this.progressListener = progressListener;
+    public CopyGameFileBuilder maxAge(Duration duration) {
+        this.maxAge = duration;
         return this;
     }
 
@@ -69,24 +81,19 @@ public class CopyGameFileBuilder {
         return this;
     }
 
-    public CopyGameFileBuilder defaultCache() {
-        return maxAge(ONE_DAY);
-    }
-
-    public CopyGameFileBuilder maxAge(Duration duration) {
-        this.maxAge = duration;
+    public CopyGameFileBuilder progress(CopyGameFileProgressListener progressListener) {
+        this.progressListener = progressListener;
         return this;
     }
 
-    public void copyGameFileFromPathAsync(Path path, CopyGameFileExecutor executor) {
-        executor.runAsync(() -> copyGameFileFromPath(path));
+    public CopyGameFileBuilder sha1(String sha1) {
+        this.expectedHash = "sha1:" + sha1;
+        return this;
     }
 
-    public void copyGameFileFromPath(Path path) throws IOException {
-        withRetries((copyGameFile) -> {
-            copyGameFile.copyGameFile(path);
-            return null;
-        });
+    private CopyGameFile build(int attempt) {
+        return new CopyGameFile(this.path, this.expectedHash, this.maxAge, this.forced, this.fallback, attempt,
+            this.progressListener);
     }
 
     private <T> T withRetries(CopyGameFileFn<T> supplier) throws IOException {
@@ -95,20 +102,13 @@ public class CopyGameFileBuilder {
                 return supplier.get(build(i));
             } catch (IOException e) {
                 if (i == maxRetries) {
-                    throw new IOException(
-                        String.format(Locale.ENGLISH, "Failed copy after %d attempts", maxRetries), e
-                    );
+                    throw new IOException(String.format(Locale.ENGLISH, "Failed copy after %d attempts", maxRetries),
+                        e);
                 }
             }
         }
 
         throw new IllegalStateException();
-    }
-
-    private CopyGameFile build(int attempt) {
-        return new CopyGameFile(
-            this.path, this.expectedHash, this.maxAge, this.forced, this.fallback, attempt, this.progressListener
-        );
     }
 
     @FunctionalInterface

@@ -68,121 +68,138 @@ import dev.aoqia.leaf.loom.util.Constants;
 import dev.aoqia.leaf.loom.util.LoomVersions;
 
 /**
- * Normally javac invokes annotation processors, but when the scala or kapt plugin are installed they will want to invoke
+ * Normally javac invokes annotation processors, but when the scala or kapt plugin are installed they will want to
+ * invoke
  * the annotation processor themselves.
  * See Java and Kapt implementations for a more deep understanding of the things passed by the children.
  */
 public abstract class AnnotationProcessorInvoker<T extends Task> {
-	public static final String JAVA = "java";
-	public static final String SCALA = "scala";
-	public static final String GROOVY = "groovy";
+    public static final String GROOVY = "groovy";
+    public static final String JAVA = "java";
+    public static final String SCALA = "scala";
 
-	private static final Pattern MSG_KEY_PATTERN = Pattern.compile("^[A-Z]+[A-Z_]+$");
-	private static final Pattern MSG_VALUE_PATTERN = Pattern.compile("^(note|warning|error|disabled)$");
+    private static final Pattern MSG_KEY_PATTERN = Pattern.compile("^[A-Z]+[A-Z_]+$");
+    private static final Pattern MSG_VALUE_PATTERN = Pattern.compile("^(note|warning|error|disabled)$");
 
-	protected final Project project;
-	private final LoomGradleExtension loomExtension;
-	protected final MixinExtension mixinExtension;
-	protected final Map<SourceSet, TaskProvider<T>> invokerTasks;
-	private final String name;
-	private final Collection<Configuration> apConfigurations;
+    protected final Map<SourceSet, TaskProvider<T>> invokerTasks;
 
-	protected AnnotationProcessorInvoker(Project project,
-											Collection<Configuration> apConfigurations,
-											Map<SourceSet, TaskProvider<T>> invokerTasks, String name) {
-		this.project = project;
-		this.loomExtension = LoomGradleExtension.get(project);
-		this.mixinExtension = loomExtension.getMixin();
-		this.apConfigurations = apConfigurations;
-		this.invokerTasks = invokerTasks;
-		this.name = name;
-	}
+    protected final MixinExtension mixinExtension;
 
-	protected static Collection<Configuration> getApConfigurations(Project project, Function<SourceSet, String> getApConfigNameFunc) {
-		MixinExtension mixin = LoomGradleExtension.get(project).getMixin();
-		return mixin.getApConfigurationsStream(getApConfigNameFunc).collect(Collectors.toList());
-	}
+    protected final Project project;
 
-	protected abstract void passArgument(T compileTask, String key, String value);
+    private final Collection<Configuration> apConfigurations;
+    private final LoomGradleExtension loomExtension;
+    private final String name;
 
-	protected abstract File getRefmapDestinationDir(T task);
+    protected AnnotationProcessorInvoker(Project project, Collection<Configuration> apConfigurations,
+        Map<SourceSet, TaskProvider<T>> invokerTasks, String name)
+    {
+        this.project = project;
+        this.loomExtension = LoomGradleExtension.get(project);
+        this.mixinExtension = loomExtension.getMixin();
+        this.apConfigurations = apConfigurations;
+        this.invokerTasks = invokerTasks;
+        this.name = name;
+    }
 
-	protected final String getRefmapDestination(T task, String refmapName) throws IOException {
-		return new File(getRefmapDestinationDir(task), refmapName).getCanonicalPath();
-	}
+    public static File getMixinMappingsForSourceSet(Project project, SourceSet sourceSet) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        return new File(extension.getFiles().getProjectBuildCache(), "mixin-map-"
+            + extension.getMappingConfiguration().mappingsIdentifier() + "." + sourceSet.getName() + ".tiny");
+    }
 
-	private void passMixinArguments(T task, SourceSet sourceSet) {
-		try {
-			LoomGradleExtension loom = LoomGradleExtension.get(project);
-			String refmapName = Objects.requireNonNull(MixinExtension.getMixinInformationContainer(sourceSet)).refmapNameProvider().get();
+    protected static Collection<Configuration> getApConfigurations(Project project,
+        Function<SourceSet, String> getApConfigNameFunc)
+    {
+        MixinExtension mixin = LoomGradleExtension.get(project).getMixin();
+        return mixin.getApConfigurationsStream(getApConfigNameFunc).collect(Collectors.toList());
+    }
 
-			final File mixinMappings = getMixinMappingsForSourceSet(project, sourceSet);
+    private static void checkPattern(String input, Pattern pattern) {
+        final Matcher matcher = pattern.matcher(input);
 
-			task.getOutputs().file(mixinMappings).withPropertyName("mixin-ap-" + sourceSet.getName() + "-" + name).optional();
+        if (!matcher.find()) {
+            throw new IllegalArgumentException(
+                "Mixin argument (%s) does not match pattern (%s)".formatted(input, pattern.toString()));
+        }
+    }
 
-			String refmapTargetNamespace = loom.getMixin().getRefmapTargetNamespace().get();
-			String capitalizedTargetNamespace = refmapTargetNamespace.substring(0, 1).toUpperCase(Locale.ROOT) + refmapTargetNamespace.substring(1);
+    public void configureMixin() {
+        ConfigurationContainer configs = project.getConfigurations();
+        ZomboidSourceSets minecraftSourceSets = ZomboidSourceSets.get(project);
 
-			Map<String, String> args = new HashMap<>() {{
-					put(Constants.MixinArguments.IN_MAP_FILE_NAMED + capitalizedTargetNamespace, loom.getMappingConfiguration().tinyMappings.toFile().getCanonicalPath());
-					put(Constants.MixinArguments.OUT_MAP_FILE_NAMED + capitalizedTargetNamespace, mixinMappings.getCanonicalPath());
-					put(Constants.MixinArguments.OUT_REFMAP_FILE, getRefmapDestination(task, refmapName));
-					put(Constants.MixinArguments.DEFAULT_OBFUSCATION_ENV, "named:" + refmapTargetNamespace);
-					put(Constants.MixinArguments.QUIET, "true");
-				}};
+        if (!IdeaUtils.isIdeaSync()) {
+            for (Configuration processorConfig : apConfigurations) {
+                project.getLogger().info("Adding mixin to classpath of AP config: " + processorConfig.getName());
+                // Pass named MC classpath to mixin AP classpath
+                processorConfig.extendsFrom(configs.named(Constants.Configurations.LOADER_DEPENDENCIES),
+                    configs.named(Constants.Configurations.MAPPINGS_FINAL));
 
-			if (mixinExtension.getShowMessageTypes().get()) {
-				args.put(Constants.MixinArguments.SHOW_MESSAGE_TYPES, "true");
-			}
+                // Add Mixin and mixin extensions (fabric-mixin-compile-extensions pulls mixin itself too)
+                project.getDependencies()
+                    .add(processorConfig.getName(), LoomVersions.MIXIN_COMPILE_EXTENSIONS.mavenNotation());
+            }
+        }
 
-			mixinExtension.getMessages().get().forEach((key, value) -> {
-				checkPattern(key, MSG_KEY_PATTERN);
-				checkPattern(value, MSG_VALUE_PATTERN);
+        for (Map.Entry<SourceSet, TaskProvider<T>> entry : invokerTasks.entrySet()) {
+            entry.getValue().configure(t -> passMixinArguments(t, entry.getKey()));
+        }
+    }
 
-				args.put("MSG_" + key, value);
-			});
+    protected final String getRefmapDestination(T task, String refmapName) throws IOException {
+        return new File(getRefmapDestinationDir(task), refmapName).getCanonicalPath();
+    }
 
-			project.getLogger().debug("Outputting refmap to dir: " + getRefmapDestinationDir(task) + " for compile task: " + task);
-			args.forEach((k, v) -> passArgument(task, k, v));
-		} catch (IOException e) {
-			project.getLogger().error("Could not configure mixin annotation processors", e);
-		}
-	}
+    protected abstract File getRefmapDestinationDir(T task);
 
-	public void configureMixin() {
-		ConfigurationContainer configs = project.getConfigurations();
-		ZomboidSourceSets minecraftSourceSets = ZomboidSourceSets.get(project);
+    protected abstract void passArgument(T compileTask, String key, String value);
 
-		if (!IdeaUtils.isIdeaSync()) {
-			for (Configuration processorConfig : apConfigurations) {
-				project.getLogger().info("Adding mixin to classpath of AP config: " + processorConfig.getName());
-				// Pass named MC classpath to mixin AP classpath
-				processorConfig.extendsFrom(
-						configs.named(Constants.Configurations.LOADER_DEPENDENCIES),
-						configs.named(Constants.Configurations.MAPPINGS_FINAL)
-				);
+    private void passMixinArguments(T task, SourceSet sourceSet) {
+        try {
+            LoomGradleExtension loom = LoomGradleExtension.get(project);
+            String refmapName = Objects.requireNonNull(MixinExtension.getMixinInformationContainer(sourceSet))
+                .refmapNameProvider()
+                .get();
 
-				// Add Mixin and mixin extensions (fabric-mixin-compile-extensions pulls mixin itself too)
-				project.getDependencies().add(processorConfig.getName(),
-						LoomVersions.MIXIN_COMPILE_EXTENSIONS.mavenNotation());
-			}
-		}
+            final File mixinMappings = getMixinMappingsForSourceSet(project, sourceSet);
 
-		for (Map.Entry<SourceSet, TaskProvider<T>> entry : invokerTasks.entrySet()) {
-			entry.getValue().configure(t -> passMixinArguments(t, entry.getKey()));
-		}
-	}
+            task.getOutputs()
+                .file(mixinMappings)
+                .withPropertyName("mixin-ap-" + sourceSet.getName() + "-" + name)
+                .optional();
 
-	private static void checkPattern(String input, Pattern pattern) {
-		final Matcher matcher = pattern.matcher(input);
+            String refmapTargetNamespace = loom.getMixin().getRefmapTargetNamespace().get();
+            String capitalizedTargetNamespace = refmapTargetNamespace.substring(0, 1).toUpperCase(Locale.ROOT)
+                + refmapTargetNamespace.substring(1);
 
-		if (!matcher.find()) {
-			throw new IllegalArgumentException("Mixin argument (%s) does not match pattern (%s)".formatted(input, pattern.toString()));
-		}
-	}
+            Map<String, String> args = new HashMap<>() {
+                {
+                    put(Constants.MixinArguments.IN_MAP_FILE_NAMED + capitalizedTargetNamespace,
+                        loom.getMappingConfiguration().tinyMappings.toFile().getCanonicalPath());
+                    put(Constants.MixinArguments.OUT_MAP_FILE_NAMED + capitalizedTargetNamespace,
+                        mixinMappings.getCanonicalPath());
+                    put(Constants.MixinArguments.OUT_REFMAP_FILE, getRefmapDestination(task, refmapName));
+                    put(Constants.MixinArguments.DEFAULT_OBFUSCATION_ENV, "named:" + refmapTargetNamespace);
+                    put(Constants.MixinArguments.QUIET, "true");
+                }
+            };
 
-	public static File getMixinMappingsForSourceSet(Project project, SourceSet sourceSet) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		return new File(extension.getFiles().getProjectBuildCache(), "mixin-map-" + extension.getMappingConfiguration().mappingsIdentifier() + "." + sourceSet.getName() + ".tiny");
-	}
+            if (mixinExtension.getShowMessageTypes().get()) {
+                args.put(Constants.MixinArguments.SHOW_MESSAGE_TYPES, "true");
+            }
+
+            mixinExtension.getMessages().get().forEach((key, value) -> {
+                checkPattern(key, MSG_KEY_PATTERN);
+                checkPattern(value, MSG_VALUE_PATTERN);
+
+                args.put("MSG_" + key, value);
+            });
+
+            project.getLogger()
+                .debug("Outputting refmap to dir: " + getRefmapDestinationDir(task) + " for compile task: " + task);
+            args.forEach((k, v) -> passArgument(task, k, v));
+        } catch (IOException e) {
+            project.getLogger().error("Could not configure mixin annotation processors", e);
+        }
+    }
 }

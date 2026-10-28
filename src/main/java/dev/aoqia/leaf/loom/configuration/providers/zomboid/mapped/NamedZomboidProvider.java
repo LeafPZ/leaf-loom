@@ -50,19 +50,19 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 
 public abstract class NamedZomboidProvider<M extends ZomboidProvider> extends AbstractMappedZomboidProvider<M> {
-	public NamedZomboidProvider(Project project, M provider) {
-		super(project, provider);
-	}
+    public NamedZomboidProvider(Project project, M provider) {
+        super(project, provider);
+    }
 
-	@Override
-	public final MappingsNamespace getTargetNamespace() {
-		return MappingsNamespace.NAMED;
-	}
+    @Override
+    public MavenScope getMavenScope() {
+        return MavenScope.GLOBAL;
+    }
 
-	@Override
-	public MavenScope getMavenScope() {
-		return MavenScope.GLOBAL;
-	}
+    @Override
+    public final MappingsNamespace getTargetNamespace() {
+        return MappingsNamespace.NAMED;
+    }
 
     public static final class CompleteJarImpl extends NamedZomboidProvider<ZomboidProvider> implements CompleteJar {
         public CompleteJarImpl(Project project, ZomboidProvider provider) {
@@ -70,15 +70,14 @@ public abstract class NamedZomboidProvider<M extends ZomboidProvider> extends Ab
         }
 
         @Override
-        public List<RemappedJars> getRemappedJars() {
-            return List.of(
-                new RemappedJars(gameProvider.getGameJar().toPath(), getGameJar(), gameProvider.getOfficialNamespace())
-            );
+        public List<ZomboidJar.Type> getDependencyTypes() {
+            return List.of(ZomboidJar.Type.COMPLETE);
         }
 
         @Override
-        public List<ZomboidJar.Type> getDependencyTypes() {
-            return List.of(ZomboidJar.Type.COMPLETE);
+        public List<RemappedJars> getRemappedJars() {
+            return List.of(new RemappedJars(gameProvider.getGameJar().toPath(), getGameJar(),
+                gameProvider.getOfficialNamespace()));
         }
     }
 }

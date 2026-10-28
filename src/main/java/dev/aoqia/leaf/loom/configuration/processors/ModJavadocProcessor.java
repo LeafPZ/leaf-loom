@@ -83,198 +83,218 @@ import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
 import dev.aoqia.leaf.loom.util.fmj.LeafModJsonSource;
 
 public abstract class ModJavadocProcessor implements ZomboidJarProcessor<ModJavadocProcessor.Spec> {
-	private static final Logger LOGGER = LoggerFactory.getLogger(ModJavadocProcessor.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModJavadocProcessor.class);
 
-	private final String name;
+    private final String name;
 
-	@Inject
-	public ModJavadocProcessor(String name) {
-		this.name = name;
-	}
+    @Inject
+    public ModJavadocProcessor(String name) {
+        this.name = name;
+    }
 
-	@Override
-	public String getName() {
-		return name;
-	}
+    @Override
+    public ModJavadocProcessor.@Nullable Spec buildSpec(SpecContext context) {
+        List<ModJavadoc> javadocs = new ArrayList<>();
 
-	@Override
-	public ModJavadocProcessor.@Nullable Spec buildSpec(SpecContext context) {
-		List<ModJavadoc> javadocs = new ArrayList<>();
+        for (LeafModJson leafModJson : context.modDependenciesCompileRuntime()) {
+            ModJavadoc javadoc = ModJavadoc.create(leafModJson, context.productionNamespace(),
+                context.markdownJavadocOption());
 
-		for (LeafModJson leafModJson : context.modDependenciesCompileRuntime()) {
-			ModJavadoc javadoc = ModJavadoc.create(leafModJson, context.productionNamespace(), context.markdownJavadocOption());
+            if (javadoc != null) {
+                javadocs.add(javadoc);
+            }
+        }
 
-			if (javadoc != null) {
-				javadocs.add(javadoc);
-			}
-		}
+        if (javadocs.isEmpty()) {
+            return null;
+        }
 
-		if (javadocs.isEmpty()) {
-			return null;
-		}
+        javadocs.sort(Comparator.comparing(ModJavadoc::modId));
+        return new Spec(Collections.unmodifiableList(javadocs));
+    }
 
-		javadocs.sort(Comparator.comparing(ModJavadoc::modId));
-		return new Spec(Collections.unmodifiableList(javadocs));
-	}
+    @Override
+    public String getName() {
+        return name;
+    }
 
-	public record Spec(List<ModJavadoc> javadocs) implements ZomboidJarProcessor.Spec {
-	}
+    @Override
+    public void processJar(Path jar, Spec spec, ProcessorContext context) {
+        // Nothing to do for the jar
+    }
 
-	@Override
-	public void processJar(Path jar, Spec spec, ProcessorContext context) {
-		// Nothing to do for the jar
-	}
+    @Override
+    public @Nullable MappingsProcessor<Spec> processMappings() {
+        return (mappings, spec, context) -> {
+            for (ModJavadoc javadoc : spec.javadocs()) {
+                javadoc.apply(mappings, context.disableObfuscation());
+            }
 
-	@Override
-	public @Nullable MappingsProcessor<Spec> processMappings() {
-		return (mappings, spec, context) -> {
-			for (ModJavadoc javadoc : spec.javadocs()) {
-				javadoc.apply(mappings, context.disableObfuscation());
-			}
+            return true;
+        };
+    }
 
-			return true;
-		};
-	}
+    public record ModJavadoc(String modId, MemoryMappingTree mappingTree, String mappingsHash) {
+        @Nullable
+        public static ModJavadoc create(LeafModJson leafModJson, MappingsNamespace productionNamespace,
+            MarkdownJavadocOption markdownJavadocOption)
+        {
+            final String modId = leafModJson.getId();
+            final boolean remoteMod = leafModJson.getSource() instanceof LeafModJsonSource.ZipSource;
+            final JsonElement customElement = leafModJson.getCustom(Constants.CustomModJsonKeys.PROVIDED_JAVADOC);
 
-	public record ModJavadoc(String modId, MemoryMappingTree mappingTree, String mappingsHash) {
-		@Nullable public static ModJavadoc create(LeafModJson leafModJson, MappingsNamespace productionNamespace, MarkdownJavadocOption markdownJavadocOption) {
-			final String modId = leafModJson.getId();
-			final boolean remoteMod = leafModJson.getSource() instanceof LeafModJsonSource.ZipSource;
-			final JsonElement customElement = leafModJson.getCustom(Constants.CustomModJsonKeys.PROVIDED_JAVADOC);
+            if (customElement == null) {
+                return null;
+            }
 
-			if (customElement == null) {
-				return null;
-			}
+            final String javaDocPath = customElement.getAsString();
+            final MemoryMappingTree mappings = new MemoryMappingTree();
+            final String mappingsHash;
 
-			final String javaDocPath = customElement.getAsString();
-			final MemoryMappingTree mappings = new MemoryMappingTree();
-			final String mappingsHash;
+            try {
+                final byte[] data = leafModJson.getSource().read(javaDocPath);
+                mappingsHash = Checksum.of(data).sha1().hex();
 
-			try {
-				final byte[] data = leafModJson.getSource().read(javaDocPath);
-				mappingsHash = Checksum.of(data).sha1().hex();
+                try (Reader reader = new InputStreamReader(new ByteArrayInputStream(data))) {
+                    // Replace the default fallback namespaces with intermediary and named
+                    // if the format doesn't have them (this includes the Enigma format, which we want to
+                    // support since it's produced by ModEnigmaTask).
+                    final Map<String,
+                        String> fallbackNamespaceReplacements = Map.of(MappingUtil.NS_SOURCE_FALLBACK,
+                            productionNamespace.toString(), MappingUtil.NS_TARGET_FALLBACK,
+                            MappingsNamespace.NAMED.toString());
+                    final MappingNsRenamer renamer = new MappingNsRenamer(mappings, fallbackNamespaceReplacements);
+                    final DstNameCheckingVisitor checker = new DstNameCheckingVisitor(modId, renamer);
+                    MappingReader.read(reader, checker);
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to read javadoc from mod: " + modId, e);
+            }
 
-				try (Reader reader = new InputStreamReader(new ByteArrayInputStream(data))) {
-					// Replace the default fallback namespaces with intermediary and named
-					// if the format doesn't have them (this includes the Enigma format, which we want to
-					// support since it's produced by ModEnigmaTask).
-					final Map<String, String> fallbackNamespaceReplacements = Map.of(
-							MappingUtil.NS_SOURCE_FALLBACK, productionNamespace.toString(),
-							MappingUtil.NS_TARGET_FALLBACK, MappingsNamespace.NAMED.toString()
-					);
-					final MappingNsRenamer renamer = new MappingNsRenamer(mappings, fallbackNamespaceReplacements);
-					final DstNameCheckingVisitor checker = new DstNameCheckingVisitor(modId, renamer);
-					MappingReader.read(reader, checker);
-				}
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to read javadoc from mod: " + modId, e);
-			}
+            if (!mappings.getSrcNamespace().equals(productionNamespace.toString())) {
+                throw new IllegalStateException("Javadoc provided by mod (%s) must have an %s source namespace"
+                    .formatted(modId, productionNamespace.toString()));
+            }
 
-			if (!mappings.getSrcNamespace().equals(productionNamespace.toString())) {
-				throw new IllegalStateException("Javadoc provided by mod (%s) must have an %s source namespace".formatted(modId, productionNamespace.toString()));
-			}
+            switch (markdownJavadocOption) {
+                case REQUIRED -> {
+                    if (mappings.getMetadata(MappingConfiguration.MARKDOWN_METADATA_KEY).isEmpty()) {
+                        LOGGER.atLevel(remoteMod ? Level.INFO : Level.WARN)
+                            .log("Mod-provided javadoc from mod {} should have the "
+                                + MappingConfiguration.MARKDOWN_METADATA_KEY + " metadata entry", modId);
+                    }
+                }
 
-			switch (markdownJavadocOption) {
-			case REQUIRED -> {
-				if (mappings.getMetadata(MappingConfiguration.MARKDOWN_METADATA_KEY).isEmpty()) {
-					LOGGER.atLevel(remoteMod ? Level.INFO : Level.WARN).log("Mod-provided javadoc from mod {} should have the " + MappingConfiguration.MARKDOWN_METADATA_KEY + " metadata entry", modId);
-				}
-			}
+                case UNSUPPORTED -> {
+                    if (!mappings.getMetadata(MappingConfiguration.MARKDOWN_METADATA_KEY).isEmpty()) {
+                        LOGGER.atLevel(remoteMod ? Level.INFO : Level.WARN)
+                            .log(
+                                "Mod-provided javadoc from mod {} has the " + MappingConfiguration.MARKDOWN_METADATA_KEY
+                                    + " metadata entry, but it is not supported with this project configuration",
+                                modId);
+                    }
+                }
+            }
 
-			case UNSUPPORTED -> {
-				if (!mappings.getMetadata(MappingConfiguration.MARKDOWN_METADATA_KEY).isEmpty()) {
-					LOGGER.atLevel(remoteMod ? Level.INFO : Level.WARN).log("Mod-provided javadoc from mod {} has the " + MappingConfiguration.MARKDOWN_METADATA_KEY + " metadata entry, but it is not supported with this project configuration", modId);
-				}
-			}
-			}
+            return new ModJavadoc(modId, mappings, mappingsHash);
+        }
 
-			return new ModJavadoc(modId, mappings, mappingsHash);
-		}
+        public void apply(MemoryMappingTree target, boolean disableObfuscation) {
+            int targetNamespaceId = target.getNamespaceId(mappingTree.getSrcNamespace());
 
-		public void apply(MemoryMappingTree target, boolean disableObfuscation) {
-			int targetNamespaceId = target.getNamespaceId(mappingTree.getSrcNamespace());
+            if (targetNamespaceId == MappingTreeView.NULL_NAMESPACE_ID) {
+                throw new IllegalStateException(
+                    "Mapping tree must have namespace %s".formatted(mappingTree.getSrcNamespace()));
+            }
 
-			if (targetNamespaceId == MappingTreeView.NULL_NAMESPACE_ID) {
-				throw new IllegalStateException("Mapping tree must have namespace %s".formatted(mappingTree.getSrcNamespace()));
-			}
+            for (MappingTree.ClassMapping sourceClass : mappingTree.getClasses()) {
+                final MappingTree.ClassMapping targetClass = MappingProcessing.getOrCreateClassMapping(target,
+                    sourceClass.getSrcName(), targetNamespaceId, disableObfuscation);
 
-			for (MappingTree.ClassMapping sourceClass : mappingTree.getClasses()) {
-				final MappingTree.ClassMapping targetClass = MappingProcessing.getOrCreateClassMapping(target, sourceClass.getSrcName(), targetNamespaceId, disableObfuscation);
+                if (targetClass == null) {
+                    LOGGER.warn("Could not find provided javadoc target class {} from mod {}", sourceClass.getSrcName(),
+                        modId);
+                    continue;
+                }
 
-				if (targetClass == null) {
-					LOGGER.warn("Could not find provided javadoc target class {} from mod {}", sourceClass.getSrcName(), modId);
-					continue;
-				}
+                applyComment(sourceClass, targetClass);
 
-				applyComment(sourceClass, targetClass);
+                for (MappingTree.FieldMapping sourceField : sourceClass.getFields()) {
+                    final MappingTree.FieldMapping targetField = MappingProcessing.getOrCreateFieldMapping(target,
+                        targetClass, sourceField.getSrcName(), sourceField.getSrcDesc(), targetNamespaceId,
+                        disableObfuscation);
 
-				for (MappingTree.FieldMapping sourceField : sourceClass.getFields()) {
-					final MappingTree.FieldMapping targetField = MappingProcessing.getOrCreateFieldMapping(target, targetClass, sourceField.getSrcName(), sourceField.getSrcDesc(), targetNamespaceId, disableObfuscation);
+                    if (targetField == null) {
+                        LOGGER.warn("Could not find provided javadoc target field {}{} from mod {}",
+                            sourceField.getSrcName(), sourceField.getSrcDesc(), modId);
+                        continue;
+                    }
 
-					if (targetField == null) {
-						LOGGER.warn("Could not find provided javadoc target field {}{} from mod {}", sourceField.getSrcName(), sourceField.getSrcDesc(), modId);
-						continue;
-					}
+                    applyComment(sourceField, targetField);
+                }
 
-					applyComment(sourceField, targetField);
-				}
+                for (MappingTree.MethodMapping sourceMethod : sourceClass.getMethods()) {
+                    final MappingTree.MethodMapping targetMethod = MappingProcessing.getOrCreateMethodMapping(target,
+                        targetClass, sourceMethod.getSrcName(), sourceMethod.getSrcDesc(), targetNamespaceId,
+                        disableObfuscation);
 
-				for (MappingTree.MethodMapping sourceMethod : sourceClass.getMethods()) {
-					final MappingTree.MethodMapping targetMethod = MappingProcessing.getOrCreateMethodMapping(target, targetClass, sourceMethod.getSrcName(), sourceMethod.getSrcDesc(), targetNamespaceId, disableObfuscation);
+                    if (targetMethod == null) {
+                        LOGGER.warn("Could not find provided javadoc target method {}{} from mod {}",
+                            sourceMethod.getSrcName(), sourceMethod.getSrcDesc(), modId);
+                        continue;
+                    }
 
-					if (targetMethod == null) {
-						LOGGER.warn("Could not find provided javadoc target method {}{} from mod {}", sourceMethod.getSrcName(), sourceMethod.getSrcDesc(), modId);
-						continue;
-					}
+                    applyComment(sourceMethod, targetMethod);
+                }
+            }
+        }
 
-					applyComment(sourceMethod, targetMethod);
-				}
-			}
-		}
+        private <T extends MappingTree.ElementMapping> void applyComment(T source, T target) {
+            String sourceComment = source.getComment();
 
-		private <T extends MappingTree.ElementMapping> void applyComment(T source, T target) {
-			String sourceComment = source.getComment();
+            if (sourceComment == null) {
+                LOGGER.warn("Mod {} provided javadoc has mapping for {}, without comment", modId, source);
+                return;
+            }
 
-			if (sourceComment == null) {
-				LOGGER.warn("Mod {} provided javadoc has mapping for {}, without comment", modId, source);
-				return;
-			}
+            String targetComment = target.getComment();
 
-			String targetComment = target.getComment();
+            if (targetComment == null) {
+                targetComment = "";
+            } else {
+                targetComment += "\n";
+            }
 
-			if (targetComment == null) {
-				targetComment = "";
-			} else {
-				targetComment += "\n";
-			}
+            targetComment += sourceComment;
+            target.setComment(targetComment);
+        }
 
-			targetComment += sourceComment;
-			target.setComment(targetComment);
-		}
+        // Must override as not to include MemoryMappingTree
+        @Override
+        public int hashCode() {
+            return Objects.hash(modId, mappingsHash);
+        }
 
-		// Must override as not to include MemoryMappingTree
-		@Override
-		public int hashCode() {
-			return Objects.hash(modId, mappingsHash);
-		}
+        @Override
+        public String toString() {
+            return "ModJavadoc{modId='%s', mappingsHash='%s'}".formatted(modId, mappingsHash);
+        }
+    }
 
-		@Override
-		public String toString() {
-			return "ModJavadoc{modId='%s', mappingsHash='%s'}".formatted(modId, mappingsHash);
-		}
-	}
+    public record Spec(List<ModJavadoc> javadocs) implements ZomboidJarProcessor.Spec {}
 
-	private static final class DstNameCheckingVisitor extends ForwardingMappingVisitor {
-		private final String modId;
+    private static final class DstNameCheckingVisitor extends ForwardingMappingVisitor {
+        private final String modId;
 
-		DstNameCheckingVisitor(String modId, MappingVisitor next) {
-			super(next);
-			this.modId = modId;
-		}
+        DstNameCheckingVisitor(String modId, MappingVisitor next) {
+            super(next);
+            this.modId = modId;
+        }
 
-		@Override
-		public void visitDstName(MappedElementKind targetKind, int namespace, String name) {
-			throw new IllegalStateException("Javadoc provided by mod (%s) must not contain any dst names".formatted(modId));
-		}
-	}
+        @Override
+        public void visitDstName(MappedElementKind targetKind, int namespace, String name) {
+            throw new IllegalStateException(
+                "Javadoc provided by mod (%s) must not contain any dst names".formatted(modId));
+        }
+    }
 }

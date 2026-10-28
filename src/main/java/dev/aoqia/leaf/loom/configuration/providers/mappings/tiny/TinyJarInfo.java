@@ -58,48 +58,48 @@ import net.fabricmc.mappingio.format.MappingFormat;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;
 
 public record TinyJarInfo(boolean v2, Optional<String> gameVersionId) {
-	public static final String MAPPINGS_PATH = "mappings/mappings.tiny";
-	private static final String MANIFEST_PATH = "META-INF/MANIFEST.MF";
-	private static final String MANIFEST_VERSION_ID_ATTRIBUTE = "Leaf-Version-Id";
+    public static final String MAPPINGS_PATH = "mappings/mappings.tiny";
+    private static final String MANIFEST_PATH = "META-INF/MANIFEST.MF";
+    private static final String MANIFEST_VERSION_ID_ATTRIBUTE = "Leaf-Version-Id";
 
-	public static TinyJarInfo get(Path jar) {
-		try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(jar)) {
-			return new TinyJarInfo(doesJarContainV2Mappings(delegate), getGameVersionId(delegate));
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read tiny jar info", e);
-		}
-	}
+    public static TinyJarInfo get(Path jar) {
+        try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(jar)) {
+            return new TinyJarInfo(doesJarContainV2Mappings(delegate), getGameVersionId(delegate));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read tiny jar info", e);
+        }
+    }
 
-	public static void extractMappings(Path jar, Path extractTo) throws IOException {
-		try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(jar)) {
-			extractMappings(delegate.fs(), extractTo);
-		}
-	}
+    public static void extractMappings(Path jar, Path extractTo) throws IOException {
+        try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(jar)) {
+            extractMappings(delegate.fs(), extractTo);
+        }
+    }
 
-	public static void extractMappings(FileSystem jar, Path extractTo) throws IOException {
-		Files.copy(jar.getPath(MAPPINGS_PATH), extractTo, StandardCopyOption.REPLACE_EXISTING);
-	}
+    public static void extractMappings(FileSystem jar, Path extractTo) throws IOException {
+        Files.copy(jar.getPath(MAPPINGS_PATH), extractTo, StandardCopyOption.REPLACE_EXISTING);
+    }
 
-	private static boolean doesJarContainV2Mappings(FileSystemUtil.Delegate fs) throws IOException {
-		try (BufferedReader reader = Files.newBufferedReader(fs.getPath("mappings", "mappings.tiny"))) {
-			return MappingReader.detectFormat(reader) == MappingFormat.TINY_2_FILE;
-		}
-	}
+    private static boolean doesJarContainV2Mappings(FileSystemUtil.Delegate fs) throws IOException {
+        try (BufferedReader reader = Files.newBufferedReader(fs.getPath("mappings", "mappings.tiny"))) {
+            return MappingReader.detectFormat(reader) == MappingFormat.TINY_2_FILE;
+        }
+    }
 
-	private static Optional<String> getGameVersionId(FileSystemUtil.Delegate fs) throws IOException {
-		final Path manifestPath = fs.getPath(MANIFEST_PATH);
+    private static Optional<String> getGameVersionId(FileSystemUtil.Delegate fs) throws IOException {
+        final Path manifestPath = fs.getPath(MANIFEST_PATH);
 
-		if (Files.exists(manifestPath)) {
-			final var manifest = new Manifest();
+        if (Files.exists(manifestPath)) {
+            final var manifest = new Manifest();
 
-			try (InputStream in = Files.newInputStream(manifestPath)) {
-				manifest.read(in);
-			}
+            try (InputStream in = Files.newInputStream(manifestPath)) {
+                manifest.read(in);
+            }
 
-			final String versionId = manifest.getMainAttributes().getValue(MANIFEST_VERSION_ID_ATTRIBUTE);
-			return Optional.ofNullable(versionId);
-		}
+            final String versionId = manifest.getMainAttributes().getValue(MANIFEST_VERSION_ID_ATTRIBUTE);
+            return Optional.ofNullable(versionId);
+        }
 
-		return Optional.empty();
-	}
+        return Optional.empty();
+    }
 }

@@ -65,109 +65,119 @@ import dev.aoqia.leaf.loom.util.gradle.SourceSetReference;
  * A {@link Named} object for setting mod-related values. The {@linkplain Named#getName() name} should match the mod id.
  */
 public abstract class ModSettings implements Named {
-	/**
-	 * List of classpath directories, or jar files used to populate the `fabric.classPathGroups` Fabric Loader system property.
-	 */
-	public abstract ConfigurableFileCollection getModFiles();
+    @Inject
+    public ModSettings() {
+        getExternalGroups().finalizeValueOnRead();
+        getModFiles().finalizeValueOnRead();
+    }
 
-	@Inject
-	public ModSettings() {
-		getExternalGroups().finalizeValueOnRead();
-		getModFiles().finalizeValueOnRead();
-	}
+    /**
+     * Add a {@link Configuration} to the mod's classpath group. Should be used to include all dependencies that are
+     * shaded into your mod.
+     */
+    public void configuration(Configuration configuration) {
+        getModFiles().from(configuration);
+    }
 
-	/**
-	 * Add {@link SourceSet}'s output directories from the current project to be grouped with the named mod.
-	 */
-	public void sourceSet(SourceSet sourceSet) {
-		Project project = getProject();
+    /**
+     * Add a number of {@link Dependency} to the mod's classpath group. Should be used to include all dependencies
+     * that are shaded into your mod.
+     *
+     * <p>
+     * Uses a detached configuration.
+     */
+    public void dependency(Dependency... dependencies) {
+        Configuration detachedConfiguration = getProject().getConfigurations().detachedConfiguration(dependencies);
+        configuration(detachedConfiguration);
+    }
 
-		if (!SourceSetHelper.isSourceSetOfProject(sourceSet, project)) {
-			getProject().getLogger().info("Computing owner project for SourceSet {} as it is not a sourceset of {}", sourceSet.getName(), project.getPath());
-			project = SourceSetHelper.getSourceSetProject(sourceSet);
+    /**
+     * List of {@link ExternalClasspathGroup} that will later be resolved to populate the classpath groups from
+     * another Gradle project.
+     */
+    @ApiStatus.Internal
+    public abstract ListProperty<ExternalClasspathGroup> getExternalGroups();
 
-			if (project == getProject()) {
-				throw new IllegalStateException("isSourceSetOfProject lied, report to loom devs.");
-			}
-		}
+    /**
+     * List of classpath directories, or jar files used to populate the `fabric.classPathGroups` Fabric Loader system
+     * property.
+     */
+    public abstract ConfigurableFileCollection getModFiles();
 
-		sourceSet(sourceSet.getName(), project.getPath());
-	}
+    // DO NOT USE THIS!!!
+    // Added back because the Minecraft dev plugin uses it.
+    @ApiStatus.Internal
+    @Deprecated(forRemoval = true)
+    public abstract ListProperty<SourceSetReference> getModSourceSets();
 
-	/**
-	 * Add {@link SourceSet}'s output directories from the supplied project to be grouped with the named mod.
-	 *
-	 * <p>If the other project is not a Loom project you must apply the `net.fabricmc.fabric-loom-companion` plugin.
-	 *
-	 * @param sourceSetName the name of the source set
-	 * @param projectPath the path of the project the source set belongs to
-	 */
-	public void sourceSet(String sourceSetName, String projectPath) {
-		if (projectPath.equals(getProject().getPath())) {
-			// Shortcut for source sets in our own project.
-			SourceSetReference ref = new SourceSetReference(SourceSetHelper.getSourceSetByName(sourceSetName, getProject()), getProject());
-			List<File> classpath = SourceSetHelper.getClasspath(ref, false);
-			getModFiles().from(classpath);
-			return;
-		}
+    @Inject
+    public abstract Project getProject();
 
-		getExternalGroups().add(new ExternalClasspathGroup(projectPath, sourceSetName));
-	}
+    /**
+     * Add {@link SourceSet}'s output directories from the current project to be grouped with the named mod.
+     */
+    public void sourceSet(SourceSet sourceSet) {
+        Project project = getProject();
 
-	/**
-	 * Add {@link SourceSet}'s output directories from the supplied project to be grouped with the named mod.
-	 *
-	 * <p>If the other project is not a Loom project you must apply the `net.fabricmc.fabric-loom-companion` plugin.
-	 *
-	 * @param sourceSetName the name of the source set
-	 * @param projectDependency the {@link ProjectDependency} the source set belongs to
-	 */
-	public void sourceSet(String sourceSetName, ProjectDependency projectDependency) {
-		sourceSet(sourceSetName, projectDependency.getPath());
-	}
+        if (!SourceSetHelper.isSourceSetOfProject(sourceSet, project)) {
+            getProject().getLogger()
+                .info("Computing owner project for SourceSet {} as it is not a sourceset of {}", sourceSet.getName(),
+                    project.getPath());
+            project = SourceSetHelper.getSourceSetProject(sourceSet);
 
-	/**
-	 * Add a number of {@link Dependency} to the mod's classpath group. Should be used to include all dependencies that are shaded into your mod.
-	 *
-	 * <p>Uses a detached configuration.
-	 */
-	public void dependency(Dependency... dependencies) {
-		Configuration detachedConfiguration = getProject().getConfigurations().detachedConfiguration(dependencies);
-		configuration(detachedConfiguration);
-	}
+            if (project == getProject()) {
+                throw new IllegalStateException("isSourceSetOfProject lied, report to loom devs.");
+            }
+        }
 
-	/**
-	 * Add a {@link Configuration} to the mod's classpath group. Should be used to include all dependencies that are shaded into your mod.
-	 */
-	public void configuration(Configuration configuration) {
-		getModFiles().from(configuration);
-	}
+        sourceSet(sourceSet.getName(), project.getPath());
+    }
 
-	/**
-	 * List of {@link ExternalClasspathGroup} that will later be resolved to populate the classpath groups from another Gradle project.
-	 */
-	@ApiStatus.Internal
-	public abstract ListProperty<ExternalClasspathGroup> getExternalGroups();
+    /**
+     * Add {@link SourceSet}'s output directories from the supplied project to be grouped with the named mod.
+     *
+     * <p>
+     * If the other project is not a Loom project you must apply the `net.fabricmc.fabric-loom-companion` plugin.
+     *
+     * @param sourceSetName the name of the source set
+     * @param projectDependency the {@link ProjectDependency} the source set belongs to
+     */
+    public void sourceSet(String sourceSetName, ProjectDependency projectDependency) {
+        sourceSet(sourceSetName, projectDependency.getPath());
+    }
 
-	@Inject
-	public abstract Project getProject();
+    /**
+     * Add {@link SourceSet}'s output directories from the supplied project to be grouped with the named mod.
+     *
+     * <p>
+     * If the other project is not a Loom project you must apply the `net.fabricmc.fabric-loom-companion` plugin.
+     *
+     * @param sourceSetName the name of the source set
+     * @param projectPath the path of the project the source set belongs to
+     */
+    public void sourceSet(String sourceSetName, String projectPath) {
+        if (projectPath.equals(getProject().getPath())) {
+            // Shortcut for source sets in our own project.
+            SourceSetReference ref = new SourceSetReference(
+                SourceSetHelper.getSourceSetByName(sourceSetName, getProject()), getProject());
+            List<File> classpath = SourceSetHelper.getClasspath(ref, false);
+            getModFiles().from(classpath);
+            return;
+        }
 
-	@Override
-	public String toString() {
-		return "ModSettings '" + getName() + "'";
-	}
+        getExternalGroups().add(new ExternalClasspathGroup(projectPath, sourceSetName));
+    }
 
-	private void ensureCompanion(Project project) {
-		if (project == getProject()) {
-			return;
-		}
+    @Override
+    public String toString() {
+        return "ModSettings '" + getName() + "'";
+    }
 
-		project.apply(Map.of("plugin", LoomCompanionGradlePlugin.NAME));
-	}
+    private void ensureCompanion(Project project) {
+        if (project == getProject()) {
+            return;
+        }
 
-	// DO NOT USE THIS!!!
-	// Added back because the Minecraft dev plugin uses it.
-	@ApiStatus.Internal
-	@Deprecated(forRemoval = true)
-	public abstract ListProperty<SourceSetReference> getModSourceSets();
+        project.apply(Map.of("plugin", LoomCompanionGradlePlugin.NAME));
+    }
 }

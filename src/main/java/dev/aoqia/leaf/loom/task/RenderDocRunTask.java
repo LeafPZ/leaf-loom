@@ -62,53 +62,53 @@ import dev.aoqia.leaf.loom.util.Platform;
 
 @DisableCachingByDefault
 public abstract class RenderDocRunTask extends RunGameTask {
-	private static final Logger LOGGER = LoggerFactory.getLogger(RenderDocRunTask.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RenderDocRunTask.class);
 
-	@InputFile
-	@PathSensitive(PathSensitivity.NONE)
-	public abstract RegularFileProperty getRenderDocExecutable();
+    @Inject
+    public RenderDocRunTask(RunConfiguration settings) {
+        super(settings);
+        setGroup(Constants.TaskGroup.LEAF);
+        dependsOn("configureClientLaunch");
+        getRenderDocArgs().addAll("capture", "--wait-for-exit");
+    }
 
-	@Input
-	public abstract ListProperty<String> getRenderDocArgs();
+    public static boolean isSupported(Platform platform) {
+        final Platform.OperatingSystem os = platform.getOperatingSystem();
+        final Platform.Architecture arch = platform.getArchitecture();
+        // RenderDoc does support 32-bit Windows, but I cannot be bothered to test/maintain it
+        return (os.isLinux() || os.isWindows()) && arch.isX64();
+    }
 
-	@Inject
-	protected abstract ExecOperations getExecOperations();
+    @Override
+    public void exec() {
+        ExecResult result = getExecOperations().exec(exec -> {
+            exec.workingDir(getInternalRunDir());
+            exec.environment(getInternalEnvironmentVars().get());
 
-	@Inject
-	public RenderDocRunTask(RunConfiguration settings) {
-		super(settings);
-		setGroup(Constants.TaskGroup.LEAF);
-		dependsOn("configureClientLaunch");
-		getRenderDocArgs().addAll("capture", "--wait-for-exit");
-	}
+            exec.commandLine(getRenderDocExecutable().get().getAsFile());
+            exec.args(getRenderDocArgs().get());
+            exec.args("--working-dir", getInternalRunDir().get().getAsFile().getAbsolutePath());
+            exec.args(getJavaLauncher().get().getExecutablePath());
+            exec.args(getAllJvmArgs());
+            exec.args("-D%s=true".formatted(Constants.Properties.RENDER_DOC));
+            exec.args(getMainClass().get());
 
-	@Override
-	public void exec() {
-		ExecResult result = getExecOperations().exec(exec -> {
-			exec.workingDir(getInternalRunDir());
-			exec.environment(getInternalEnvironmentVars().get());
+            for (CommandLineArgumentProvider provider : getArgumentProviders()) {
+                exec.args(provider.asArguments());
+            }
 
-			exec.commandLine(getRenderDocExecutable().get().getAsFile());
-			exec.args(getRenderDocArgs().get());
-			exec.args("--working-dir", getInternalRunDir().get().getAsFile().getAbsolutePath());
-			exec.args(getJavaLauncher().get().getExecutablePath());
-			exec.args(getAllJvmArgs());
-			exec.args("-D%s=true".formatted(Constants.Properties.RENDER_DOC));
-			exec.args(getMainClass().get());
+            LOGGER.info("Running command: {}", exec.getCommandLine());
+        });
+        result.assertNormalExitValue();
+    }
 
-			for (CommandLineArgumentProvider provider : getArgumentProviders()) {
-				exec.args(provider.asArguments());
-			}
+    @Input
+    public abstract ListProperty<String> getRenderDocArgs();
 
-			LOGGER.info("Running command: {}", exec.getCommandLine());
-		});
-		result.assertNormalExitValue();
-	}
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    public abstract RegularFileProperty getRenderDocExecutable();
 
-	public static boolean isSupported(Platform platform) {
-		final Platform.OperatingSystem os = platform.getOperatingSystem();
-		final Platform.Architecture arch = platform.getArchitecture();
-		// RenderDoc does support 32-bit Windows, but I cannot be bothered to test/maintain it
-		return (os.isLinux() || os.isWindows()) && arch.isX64();
-	}
+    @Inject
+    protected abstract ExecOperations getExecOperations();
 }

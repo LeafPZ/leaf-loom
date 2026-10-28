@@ -56,45 +56,47 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJarConfigurati
 import dev.aoqia.leaf.loom.util.LazyCloseable;
 
 public record ProcessorContextImpl(ConfigContext configContext, ZomboidJar minecraftJar) implements ProcessorContext {
-	@Override
-	public ZomboidJarConfiguration getJarConfiguration() {
-		return configContext.extension().getZomboidJarConfiguration().get();
-	}
+    @Override
+    public ZomboidJarConfiguration getJarConfiguration() {
+        return configContext.extension().getZomboidJarConfiguration().get();
+    }
 
-	@Override
-	public boolean isMerged() {
-		return minecraftJar.isMerged();
-	}
+    @Override
+    public boolean isMerged() {
+        return minecraftJar.isMerged();
+    }
 
-	@Override
-	public boolean includesClient() {
-		return minecraftJar.includesClient();
-	}
+    @Override
+    public boolean includesClient() {
+        return minecraftJar.includesClient();
+    }
 
-	@Override
-	public boolean includesServer() {
-		return minecraftJar.includesServer();
-	}
+    @Override
+    public boolean includesServer() {
+        return minecraftJar.includesServer();
+    }
 
-	@Override
-	public LazyCloseable<TinyRemapper> createRemapper(MappingsNamespace from, MappingsNamespace to) {
-		return ContextImplHelper.createRemapper(configContext, from, to);
-	}
+    @Override
+    public LazyCloseable<TinyRemapper> createRemapper(MappingsNamespace from, MappingsNamespace to) {
+        return ContextImplHelper.createRemapper(configContext, from, to);
+    }
 
-	@Override
-	public MemoryMappingTree getMappings() {
-		LoomGradleExtension extension = LoomGradleExtension.get(configContext().project());
-		MappingConfiguration mappingConfiguration = Objects.requireNonNull(extension.getMappingConfigurationOrNull(), "Mappings have not been configured");
-		return mappingConfiguration.getMappingsService(configContext().project(), configContext().serviceFactory()).getMappingTree();
-	}
+    @Override
+    public MemoryMappingTree getMappings() {
+        LoomGradleExtension extension = LoomGradleExtension.get(configContext().project());
+        MappingConfiguration mappingConfiguration = Objects.requireNonNull(extension.getMappingConfigurationOrNull(),
+            "Mappings have not been configured");
+        return mappingConfiguration.getMappingsService(configContext().project(), configContext().serviceFactory())
+            .getMappingTree();
+    }
 
-	@Override
-	public boolean disableObfuscation() {
-		return configContext().extension().disableObfuscation();
-	}
+    @Override
+    public boolean disableObfuscation() {
+        return configContext().extension().disableObfuscation();
+    }
 
-	@Override
-	public MappingsNamespace getProductionNamespace() {
-		return configContext().extension().getProductionNamespaceEnum().get();
-	}
+    @Override
+    public MappingsNamespace getProductionNamespace() {
+        return configContext().extension().getProductionNamespaceEnum().get();
+    }
 }

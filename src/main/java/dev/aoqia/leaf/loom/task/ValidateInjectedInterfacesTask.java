@@ -103,7 +103,8 @@ import dev.aoqia.leaf.loom.util.problem.ProblemReportingOptions;
 /**
  * Checks that injected interfaces are valid, i.e. that all their instance methods have a default implementation.
  *
- * <p>{@snippet lang=groovy :
+ * <p>
+ * {@snippet lang = groovy:
  * tasks.register('validateInjectedInterfaces', dev.aoqia.leaf.loom.task.ValidateInjectedInterfacesTask) {
  * 	// By default, this task is set up for the default mod jar - the "jar" or "remapJar" task depending
  * 	// on the project configuration - and the main source set. To modify the defaults:
@@ -114,238 +115,263 @@ import dev.aoqia.leaf.loom.util.problem.ProblemReportingOptions;
  */
 @DisableCachingByDefault
 public abstract class ValidateInjectedInterfacesTask extends DefaultTask {
-	private static final Logger LOGGER = LoggerFactory.getLogger(ValidateInjectedInterfacesTask.class);
-	private static final ProblemId ABSTRACT_METHOD_IN_INJECTED_INTERFACE = LoomProblems.problemId("abstract-method-in-injected-interface", "Abstract method in injected interface");
+    private static final ProblemId ABSTRACT_METHOD_IN_INJECTED_INTERFACE = LoomProblems
+        .problemId("abstract-method-in-injected-interface", "Abstract method in injected interface");
 
-	/**
-	 * The mod jar to check.
-	 */
-	@InputFile
-	@PathSensitive(PathSensitivity.NONE)
-	public abstract RegularFileProperty getModJar();
+    private static final Logger LOGGER = LoggerFactory.getLogger(ValidateInjectedInterfacesTask.class);
 
-	/**
-	 * A collection of source code roots where the mod jar was built from.
-	 * This is used for resolving the corresponding source code files where report details are attached.
-	 *
-	 * <p>Adding source roots is optional. If not added, the file paths simply won't show up in error reports.
-	 *
-	 * <p>Sources from source sets can be added with {@link #source}. By default, the {@code main}
-	 * and {@code client} (if using split source sets) will be present in this collection.
-	 */
-	@InputFiles
-	@PathSensitive(PathSensitivity.ABSOLUTE)
-	public abstract ConfigurableFileCollection getSourceRoots();
+    private final ProblemReportingOptions problemReportingOptions;
 
-	@Nested
-	public ProblemReportingOptions getProblemReportingOptions() {
-		return problemReportingOptions;
-	}
+    public ValidateInjectedInterfacesTask() {
+        setGroup(JavaBasePlugin.VERIFICATION_GROUP);
+        problemReportingOptions = getProject().getObjects().newInstance(ProblemReportingOptions.class);
+        configureForDefaultSetup();
 
-	@ApiStatus.Internal
-	@Inject
-	protected abstract WorkerExecutor getWorkerExecutor();
+        // Ignore outputs for up-to-date checks as there aren't any (so only inputs are checked)
+        getOutputs().upToDateWhen(task -> true);
+    }
 
-	private final ProblemReportingOptions problemReportingOptions;
+    private static void checkInjectedInterface(byte[] classBytes, FileCollection sourceRoots,
+        Consumer<Violation> violationConsumer)
+    {
+        ClassVisitor visitor = new ClassVisitor(Constants.ASM_VERSION) {
+            private @Nullable String packageName;
+            private @Nullable String simpleClassName;
+            private @Nullable String sourceFileName;
 
-	public ValidateInjectedInterfacesTask() {
-		setGroup(JavaBasePlugin.VERIFICATION_GROUP);
-		problemReportingOptions = getProject().getObjects().newInstance(ProblemReportingOptions.class);
-		configureForDefaultSetup();
+            @Override
+            public void visit(int version, int access, String name, @Nullable String signature,
+                @Nullable String superName, String @Nullable [] interfaces)
+            {
+                // Only the simple name is used in the error messages to make them more concise.
+                // The package is needed for resolving the source code file based on package + file name.
+                int slashIndex = name.lastIndexOf('/');
 
-		// Ignore outputs for up-to-date checks as there aren't any (so only inputs are checked)
-		getOutputs().upToDateWhen(task -> true);
-	}
+                if (slashIndex >= 0) {
+                    simpleClassName = name.substring(slashIndex + 1);
+                    packageName = name.substring(0, slashIndex);
+                } else {
+                    simpleClassName = name;
+                    packageName = null;
+                }
+            }
 
-	private void configureForDefaultSetup() {
-		final LoomGradleExtension extension = LoomGradleExtension.get(getProject());
+            @Override
+            public @Nullable MethodVisitor visitMethod(int access, String name, String descriptor,
+                @Nullable String signature, String @Nullable [] exceptions)
+            {
+                if (Modifier.isAbstract(access)) {
+                    final File sourceFile = resolveSourceFile(simpleClassName, packageName, sourceFileName,
+                        sourceRoots);
+                    violationConsumer.accept(new Violation(simpleClassName, name, descriptor, sourceFile));
+                }
 
-		if (extension.dontRemapOutputs()) {
-			getModJar().convention(getProject().getTasks().named(JavaPlugin.JAR_TASK_NAME, Jar.class).flatMap(Jar::getArchiveFile));
-		} else {
-			getModJar().convention(getProject().getTasks().named(RemapTaskConfiguration.REMAP_JAR_TASK_NAME, Jar.class).flatMap(Jar::getArchiveFile));
-		}
+                return null;
+            }
 
-		source(SourceSetHelper.getMainSourceSet(getProject()));
+            @Override
+            public void visitSource(@Nullable String source, @Nullable String debug) {
+                sourceFileName = source;
+            }
+        };
+        new ClassReader(classBytes).accept(visitor, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
+    }
 
-		if (extension.areEnvironmentSourceSetsSplit()) {
-			source(SourceSetHelper.getSourceSetByName(ZomboidSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME, getProject()));
-		}
-	}
+    private static void findInjectedInterfacesFromClassTweaker(byte[] ctBytes, Consumer<String> consumer) {
+        ClassTweakerVisitor visitor = new ClassTweakerVisitor() {
+            @Override
+            public void visitInjectedInterface(String owner, String iface, boolean transitive) {
+                // Strip generics in case we have a signature instead of a class name
+                int genericsIndex = iface.indexOf('<');
 
-	/**
-	 * Adds all sources from a {@link SourceSet} to the {@linkplain #getSourceRoots() source roots}
-	 * for error messages.
-	 *
-	 * @param sourceSet the source set to add
-	 */
-	public void source(SourceSet sourceSet) {
-		getSourceRoots().from(sourceSet.getAllSource().getSrcDirs());
-	}
+                if (genericsIndex >= 0) {
+                    iface = iface.substring(0, genericsIndex);
+                }
 
-	public void problemReportingOptions(Action<? super ProblemReportingOptions> action) {
-		action.execute(getProblemReportingOptions());
-	}
+                consumer.accept(iface);
+            }
+        };
 
-	@TaskAction
-	protected void check() throws IOException {
-		final WorkQueue workQueue = getWorkerExecutor().noIsolation();
+        ClassTweakerReader.create(visitor).read(ctBytes);
+    }
 
-		workQueue.submit(ValidateInjectedInterfacesAction.class, params -> {
-			params.getModJar().set(getModJar());
-			params.getSourceRoots().from(getSourceRoots());
-			params.getProblemReportingOptions().set(getProblemReportingOptions());
-		});
-	}
+    private static @Nullable File resolveSourceFile(String className, @Nullable String packageName,
+        @Nullable String sourceFileName, FileCollection sourceRoots)
+    {
+        if (sourceFileName == null) {
+            LOGGER.warn("No source file name present for injected interface {} (package {})", className, packageName);
+            return null;
+        }
 
-	private static void findInjectedInterfacesFromClassTweaker(byte[] ctBytes, Consumer<String> consumer) {
-		ClassTweakerVisitor visitor = new ClassTweakerVisitor() {
-			@Override
-			public void visitInjectedInterface(String owner, String iface, boolean transitive) {
-				// Strip generics in case we have a signature instead of a class name
-				int genericsIndex = iface.indexOf('<');
+        String relativeSourcePath = packageName != null ? packageName + File.separator + sourceFileName
+            : sourceFileName;
 
-				if (genericsIndex >= 0) {
-					iface = iface.substring(0, genericsIndex);
-				}
+        for (File sourceRoot : sourceRoots) {
+            File sourceFile = new File(sourceRoot, relativeSourcePath);
 
-				consumer.accept(iface);
-			}
-		};
+            if (sourceFile.exists()) {
+                return sourceFile;
+            }
+        }
 
-		ClassTweakerReader.create(visitor).read(ctBytes);
-	}
+        return null;
+    }
 
-	private static void checkInjectedInterface(byte[] classBytes, FileCollection sourceRoots, Consumer<Violation> violationConsumer) {
-		ClassVisitor visitor = new ClassVisitor(Constants.ASM_VERSION) {
-			private @Nullable String packageName;
-			private @Nullable String simpleClassName;
-			private @Nullable String sourceFileName;
+    /**
+     * The mod jar to check.
+     */
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    public abstract RegularFileProperty getModJar();
 
-			@Override
-			public void visit(int version, int access, String name, @Nullable String signature, @Nullable String superName, String @Nullable [] interfaces) {
-				// Only the simple name is used in the error messages to make them more concise.
-				// The package is needed for resolving the source code file based on package + file name.
-				int slashIndex = name.lastIndexOf('/');
+    @Nested
+    public ProblemReportingOptions getProblemReportingOptions() {
+        return problemReportingOptions;
+    }
 
-				if (slashIndex >= 0) {
-					simpleClassName = name.substring(slashIndex + 1);
-					packageName = name.substring(0, slashIndex);
-				} else {
-					simpleClassName = name;
-					packageName = null;
-				}
-			}
+    /**
+     * A collection of source code roots where the mod jar was built from.
+     * This is used for resolving the corresponding source code files where report details are attached.
+     *
+     * <p>
+     * Adding source roots is optional. If not added, the file paths simply won't show up in error reports.
+     *
+     * <p>
+     * Sources from source sets can be added with {@link #source}. By default, the {@code main}
+     * and {@code client} (if using split source sets) will be present in this collection.
+     */
+    @InputFiles
+    @PathSensitive(PathSensitivity.ABSOLUTE)
+    public abstract ConfigurableFileCollection getSourceRoots();
 
-			@Override
-			public void visitSource(@Nullable String source, @Nullable String debug) {
-				sourceFileName = source;
-			}
+    public void problemReportingOptions(Action<? super ProblemReportingOptions> action) {
+        action.execute(getProblemReportingOptions());
+    }
 
-			@Override
-			public @Nullable MethodVisitor visitMethod(int access, String name, String descriptor, @Nullable String signature, String @Nullable [] exceptions) {
-				if (Modifier.isAbstract(access)) {
-					final File sourceFile = resolveSourceFile(simpleClassName, packageName, sourceFileName, sourceRoots);
-					violationConsumer.accept(new Violation(simpleClassName, name, descriptor, sourceFile));
-				}
+    /**
+     * Adds all sources from a {@link SourceSet} to the {@linkplain #getSourceRoots() source roots}
+     * for error messages.
+     *
+     * @param sourceSet the source set to add
+     */
+    public void source(SourceSet sourceSet) {
+        getSourceRoots().from(sourceSet.getAllSource().getSrcDirs());
+    }
 
-				return null;
-			}
-		};
-		new ClassReader(classBytes).accept(visitor, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
-	}
+    @TaskAction
+    protected void check() throws IOException {
+        final WorkQueue workQueue = getWorkerExecutor().noIsolation();
 
-	private static @Nullable File resolveSourceFile(String className, @Nullable String packageName, @Nullable String sourceFileName, FileCollection sourceRoots) {
-		if (sourceFileName == null) {
-			LOGGER.warn("No source file name present for injected interface {} (package {})", className, packageName);
-			return null;
-		}
+        workQueue.submit(ValidateInjectedInterfacesAction.class, params -> {
+            params.getModJar().set(getModJar());
+            params.getSourceRoots().from(getSourceRoots());
+            params.getProblemReportingOptions().set(getProblemReportingOptions());
+        });
+    }
 
-		String relativeSourcePath = packageName != null ? packageName + File.separator + sourceFileName : sourceFileName;
+    @ApiStatus.Internal
+    @Inject
+    protected abstract WorkerExecutor getWorkerExecutor();
 
-		for (File sourceRoot : sourceRoots) {
-			File sourceFile = new File(sourceRoot, relativeSourcePath);
+    private void configureForDefaultSetup() {
+        final LoomGradleExtension extension = LoomGradleExtension.get(getProject());
 
-			if (sourceFile.exists()) {
-				return sourceFile;
-			}
-		}
+        if (extension.dontRemapOutputs()) {
+            getModJar().convention(
+                getProject().getTasks().named(JavaPlugin.JAR_TASK_NAME, Jar.class).flatMap(Jar::getArchiveFile));
+        } else {
+            getModJar().convention(getProject().getTasks()
+                .named(RemapTaskConfiguration.REMAP_JAR_TASK_NAME, Jar.class)
+                .flatMap(Jar::getArchiveFile));
+        }
 
-		return null;
-	}
+        source(SourceSetHelper.getMainSourceSet(getProject()));
 
-	@ApiStatus.Internal
-	public interface ValidateInjectedInterfacesParams extends WorkParameters {
-		RegularFileProperty getModJar();
-		ConfigurableFileCollection getSourceRoots();
-		Property<ProblemReportingOptions> getProblemReportingOptions();
-	}
+        if (extension.areEnvironmentSourceSetsSplit()) {
+            source(
+                SourceSetHelper.getSourceSetByName(ZomboidSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME, getProject()));
+        }
+    }
 
-	@ApiStatus.Internal
-	public abstract static class ValidateInjectedInterfacesAction implements WorkAction<ValidateInjectedInterfacesParams> {
-		@Inject
-		protected abstract Problems getProblems();
+    @ApiStatus.Internal
+    public abstract static class ValidateInjectedInterfacesAction
+        implements WorkAction<ValidateInjectedInterfacesParams>
+    {
+        @Override
+        public void execute() {
+            try {
+                check();
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
 
-		@Override
-		public void execute() {
-			try {
-				check();
-			} catch (IOException e) {
-				throw new UncheckedIOException(e);
-			}
-		}
+        @Inject
+        protected abstract Problems getProblems();
 
-		private void check() throws IOException {
-			List<Violation> violations = new ArrayList<>();
-			Path modJar = getParameters().getModJar().get().getAsFile().toPath();
-			LeafModJson modJson = LeafModJsonFactory.createFromZip(modJar);
-			Set<String> injectedInterfaces = new HashSet<>();
+        private void check() throws IOException {
+            List<Violation> violations = new ArrayList<>();
+            Path modJar = getParameters().getModJar().get().getAsFile().toPath();
+            LeafModJson modJson = LeafModJsonFactory.createFromZip(modJar);
+            Set<String> injectedInterfaces = new HashSet<>();
 
-			// Look for injected interfaces in fabric.mod.json "custom" section
-			for (InterfaceInjectionProcessor.InjectedInterface injectedInterface : InterfaceInjectionProcessor.InjectedInterface.fromMod(modJson)) {
-				injectedInterfaces.add(injectedInterface.ifaceName());
-			}
+            // Look for injected interfaces in fabric.mod.json "custom" section
+            for (var injectedInterface : InterfaceInjectionProcessor.InjectedInterface.fromMod(modJson)) {
+                injectedInterfaces.add(injectedInterface.ifaceName());
+            }
 
-			try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(modJar)) {
-				// Look for injected interfaces in class tweakers
-				for (String classTweaker : modJson.getClassTweakers().keySet()) {
-					byte[] ctBytes = Files.readAllBytes(fs.getPath(classTweaker));
-					findInjectedInterfacesFromClassTweaker(ctBytes, injectedInterfaces::add);
-				}
+            try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(modJar)) {
+                // Look for injected interfaces in class tweakers
+                for (String classTweaker : modJson.getClassTweakers().keySet()) {
+                    byte[] ctBytes = Files.readAllBytes(fs.getPath(classTweaker));
+                    findInjectedInterfacesFromClassTweaker(ctBytes, injectedInterfaces::add);
+                }
 
-				// Check injected interfaces
-				for (String itf : injectedInterfaces) {
-					Path interfacePath = fs.getPath(itf + ".class");
+                // Check injected interfaces
+                for (String itf : injectedInterfaces) {
+                    Path interfacePath = fs.getPath(itf + ".class");
 
-					if (!Files.exists(interfacePath)) {
-						LOGGER.info("Injected interface {} not found in mod jar {}, skipping validation", itf, modJar);
-						continue;
-					}
+                    if (!Files.exists(interfacePath)) {
+                        LOGGER.info("Injected interface {} not found in mod jar {}, skipping validation", itf, modJar);
+                        continue;
+                    }
 
-					byte[] classBytes = Files.readAllBytes(interfacePath);
-					checkInjectedInterface(classBytes, getParameters().getSourceRoots(), violations::add);
-				}
-			}
+                    byte[] classBytes = Files.readAllBytes(interfacePath);
+                    checkInjectedInterface(classBytes, getParameters().getSourceRoots(), violations::add);
+                }
+            }
 
-			var reporter = new LoomProblemReporter(getProblems().getReporter(), getParameters().getProblemReportingOptions().get());
+            var reporter = new LoomProblemReporter(getProblems().getReporter(),
+                getParameters().getProblemReportingOptions().get());
 
-			for (Violation violation : violations) {
-				reporter.problem(ABSTRACT_METHOD_IN_INJECTED_INTERFACE, builder -> {
-					builder.contextualLabel("%s.%s%s".formatted(violation.itf, violation.methodName, violation.methodDesc));
-					builder.message("Injected interface %s has abstract method %s%s".formatted(violation.itf, violation.methodName, violation.methodDesc));
-					builder.details("Method %s.%s%s is abstract.\nAll injected interface methods must have a default implementation.".formatted(violation.itf, violation.methodName, violation.methodDesc));
-					builder.solution("Add a default implementation to the method.");
+            for (Violation violation : violations) {
+                reporter.problem(ABSTRACT_METHOD_IN_INJECTED_INTERFACE, builder -> {
+                    builder.contextualLabel(
+                        "%s.%s%s".formatted(violation.itf, violation.methodName, violation.methodDesc));
+                    builder.message("Injected interface %s has abstract method %s%s".formatted(violation.itf,
+                        violation.methodName, violation.methodDesc));
+                    builder.details(("Method %s.%s%s is abstract.\nAll injected interface methods must have a default "
+                        + "implementation.").formatted(violation.itf, violation.methodName, violation.methodDesc));
+                    builder.solution("Add a default implementation to the method.");
 
-					if (violation.sourceFile != null) {
-						builder.fileLocation(violation.sourceFile.toPath());
-					}
-				});
-			}
+                    if (violation.sourceFile != null) {
+                        builder.fileLocation(violation.sourceFile.toPath());
+                    }
+                });
+            }
 
-			reporter.reportAndThrow(ABSTRACT_METHOD_IN_INJECTED_INTERFACE);
-		}
-	}
+            reporter.reportAndThrow(ABSTRACT_METHOD_IN_INJECTED_INTERFACE);
+        }
+    }
 
-	private record Violation(String itf, String methodName, String methodDesc, @Nullable File sourceFile) {
-	}
+    @ApiStatus.Internal
+    public interface ValidateInjectedInterfacesParams extends WorkParameters {
+        RegularFileProperty getModJar();
+
+        Property<ProblemReportingOptions> getProblemReportingOptions();
+
+        ConfigurableFileCollection getSourceRoots();
+    }
+
+    private record Violation(String itf, String methodName, String methodDesc, @Nullable File sourceFile) {}
 }

@@ -49,60 +49,62 @@ import org.jspecify.annotations.Nullable;
  * The standard namespaces used by loom.
  */
 public enum MappingsNamespace {
-	/**
-	 * Official mappings are the names that are used in the vanilla Minecraft game jars, these are usually obfuscated.
-	 */
-	OFFICIAL,
+    /**
+     * Official names for the Minecraft client jar, usually obfuscated.
+     * This namespace is used for versions below 1.3, where the client and server jars are obfuscated differently.
+     */
+    CLIENT_OFFICIAL,
 
-	/**
-	 * Official names for the Minecraft client jar, usually obfuscated.
-	 * This namespace is used for versions below 1.3, where the client and server jars are obfuscated differently.
-	 */
-	CLIENT_OFFICIAL,
+    /**
+     * Intermediary mappings have been generated to provide a stable set of names across minecraft versions.
+     *
+     * <p>
+     * Intermediary is used in a production runtime (outside a dev env) allowing mods to run across multiple
+     * versions of the game. Mods are remapped from "named" at build time.
+     *
+     * @see <a href="https://github.com/FabricMC/intermediary/">github.com/FabricMC/intermediary/</a>
+     */
+    INTERMEDIARY,
 
-	/**
-	 * Official names for the Minecraft server jar, usually obfuscated.
-	 * This namespace is used for versions below 1.3, where the client and server jars are obfuscated differently.
-	 */
-	SERVER_OFFICIAL,
+    /**
+     * Named mappings are the developer friendly names used to develop mods against.
+     */
+    NAMED,
 
-	/**
-	 * Intermediary mappings have been generated to provide a stable set of names across minecraft versions.
-	 *
-	 * <p>Intermediary is used in a production runtime (outside a dev env) allowing mods to run across multiple versions of the game. Mods are remapped from "named" at build time.
-	 *
-	 * @see <a href="https://github.com/FabricMC/intermediary/">github.com/FabricMC/intermediary/</a>
-	 */
-	INTERMEDIARY,
+    /**
+     * Official mappings are the names that are used in the vanilla Minecraft game jars, these are usually obfuscated.
+     */
+    OFFICIAL,
 
-	/**
-	 * Named mappings are the developer friendly names used to develop mods against.
-	 */
-	NAMED;
+    /**
+     * Official names for the Minecraft server jar, usually obfuscated.
+     * This namespace is used for versions below 1.3, where the client and server jars are obfuscated differently.
+     */
+    SERVER_OFFICIAL;
 
-	/**
-	 * Gets a {@code MappingsNamespace} from a namespace string.
-	 *
-	 * @param namespace the name of the namespace as a lowercase string
-	 * @return the {@code MappingsNamespace}, or null if not found
-	 */
-	public static @Nullable MappingsNamespace of(String namespace) {
-		return switch (namespace) {
-		case "official" -> OFFICIAL;
-		case "clientOfficial" -> CLIENT_OFFICIAL;
-		case "serverOfficial" -> SERVER_OFFICIAL;
-		case "intermediary" -> INTERMEDIARY;
-		case "named" -> NAMED;
-		default -> null;
-		};
-	}
+    /**
+     * Gets a {@code MappingsNamespace} from a namespace string.
+     *
+     * @param namespace the name of the namespace as a lowercase string
+     * @return the {@code MappingsNamespace}, or null if not found
+     */
+    public static @Nullable MappingsNamespace of(String namespace) {
+        return switch (namespace) {
+            case "official" -> OFFICIAL;
+            case "clientOfficial" -> CLIENT_OFFICIAL;
+            case "serverOfficial" -> SERVER_OFFICIAL;
+            case "intermediary" -> INTERMEDIARY;
+            case "named" -> NAMED;
+            default -> null;
+        };
+    }
 
-	@Override
-	public String toString() {
-		return switch (this) {
-		case CLIENT_OFFICIAL -> "clientOfficial";
-		case SERVER_OFFICIAL -> "serverOfficial";
-		default -> name().toLowerCase(Locale.ROOT);
-		};
-	}
+    @Override
+    public String toString() {
+        return switch (this) {
+            case CLIENT_OFFICIAL -> "clientOfficial";
+            case SERVER_OFFICIAL -> "serverOfficial";
+            default -> name().toLowerCase(Locale.ROOT);
+        };
+    }
 }

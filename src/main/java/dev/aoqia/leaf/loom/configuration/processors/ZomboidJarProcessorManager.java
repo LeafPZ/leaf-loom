@@ -69,140 +69,150 @@ import dev.aoqia.leaf.loom.configuration.processors.speccontext.RemappedSpecCont
 import dev.aoqia.leaf.loom.util.Checksum;
 
 public final class ZomboidJarProcessorManager {
-	private static final Logger LOGGER = LoggerFactory.getLogger(ZomboidJarProcessorManager.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ZomboidJarProcessorManager.class);
 
-	private final List<ProcessorEntry<?>> jarProcessors;
+    private final List<ProcessorEntry<?>> jarProcessors;
 
-	private ZomboidJarProcessorManager(List<ProcessorEntry<?>> jarProcessors) {
-		this.jarProcessors = Collections.unmodifiableList(jarProcessors);
-	}
+    private ZomboidJarProcessorManager(List<ProcessorEntry<?>> jarProcessors) {
+        this.jarProcessors = Collections.unmodifiableList(jarProcessors);
+    }
 
-	@Nullable public static ZomboidJarProcessorManager create(Project project) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		List<ZomboidJarProcessor<?>> processors = new ArrayList<>(extension.getZomboidJarProcessors().get());
+    @Nullable
+    public static ZomboidJarProcessorManager create(List<ZomboidJarProcessor<?>> processors, SpecContext context) {
+        List<ProcessorEntry<?>> entries = new ArrayList<>();
 
-		SpecContext specContext;
-		if (extension.disableObfuscation()) {
-			specContext = DeobfSpecContext.create(project);
-		} else {
-			specContext = RemappedSpecContext.create(project);
-		}
+        for (ZomboidJarProcessor<?> processor : processors) {
+            LOGGER.debug("Building processor spec for {}", processor.getName());
+            ZomboidJarProcessor.Spec spec = processor.buildSpec(context);
 
-		return ZomboidJarProcessorManager.create(processors, specContext);
-	}
+            if (spec != null) {
+                LOGGER.debug("Adding processor entry for {}", processor.getName());
+                entries.add(new ProcessorEntry<>(processor, spec));
+            }
+        }
 
-	@Nullable public static ZomboidJarProcessorManager create(List<ZomboidJarProcessor<?>> processors, SpecContext context) {
-		List<ProcessorEntry<?>> entries = new ArrayList<>();
+        if (entries.isEmpty()) {
+            LOGGER.debug("No processor entries");
+            return null;
+        }
 
-		for (ZomboidJarProcessor<?> processor : processors) {
-			LOGGER.debug("Building processor spec for {}", processor.getName());
-			ZomboidJarProcessor.Spec spec = processor.buildSpec(context);
+        return new ZomboidJarProcessorManager(entries);
+    }
 
-			if (spec != null) {
-				LOGGER.debug("Adding processor entry for {}", processor.getName());
-				entries.add(new ProcessorEntry<>(processor, spec));
-			}
-		}
+    @Nullable
+    public static ZomboidJarProcessorManager create(Project project) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        List<ZomboidJarProcessor<?>> processors = new ArrayList<>(extension.getZomboidJarProcessors().get());
 
-		if (entries.isEmpty()) {
-			LOGGER.debug("No processor entries");
-			return null;
-		}
+        SpecContext specContext;
+        if (extension.disableObfuscation()) {
+            specContext = DeobfSpecContext.create(project);
+        } else {
+            specContext = RemappedSpecContext.create(project);
+        }
 
-		return new ZomboidJarProcessorManager(entries);
-	}
+        return ZomboidJarProcessorManager.create(processors, specContext);
+    }
 
-	private String getCacheValue() {
-		return jarProcessors.stream()
-				.sorted(Comparator.comparing(ProcessorEntry::name))
-				.map(ProcessorEntry::cacheValue)
-				.collect(Collectors.joining("::"));
-	}
+    public String getJarHash() {
+        // fabric-loom:mod-javadoc:-1289977000
+        return Checksum.of(getCacheValue()).sha1().hex(10);
+    }
 
-	private String getDebugString() {
-		final var sj = new StringJoiner("\n");
+    public String getSourceMappingsHash() {
+        return Checksum.of(getCacheValue()).sha1().hex();
+    }
 
-		for (ProcessorEntry<?> jarProcessor : jarProcessors) {
-			sj.add(jarProcessor.name() + ":");
-			sj.add("\tHash: " + jarProcessor.hashCode());
-			sj.add("\tStr: " + jarProcessor.cacheValue());
-		}
+    public void processJar(Path jar, ProcessorContext context) throws IOException {
+        for (ProcessorEntry<?> entry : jarProcessors) {
+            try {
+                entry.processJar(jar, context);
+            } catch (IOException e) {
+                try {
+                    Files.delete(jar);
+                } catch (IOException ioe) {
+                    LOGGER.error("Failed to delete jar after failed processing: {}", jar, ioe);
+                }
 
-		return sj.toString();
-	}
+                throw new IOException(
+                    "Failed to process jar when running jar processor: %s - %s".formatted(entry.name(), e.getMessage()),
+                    e);
+            }
+        }
+    }
 
-	public String getJarHash() {
-		//fabric-loom:mod-javadoc:-1289977000
-		return Checksum.of(getCacheValue()).sha1().hex(10);
-	}
+    public boolean processMappings(MemoryMappingTree mappings, MappingProcessorContext context) {
+        boolean transformed = false;
 
-	public String getSourceMappingsHash() {
-		return Checksum.of(getCacheValue()).sha1().hex();
-	}
+        for (ProcessorEntry<?> entry : jarProcessors) {
+            if (entry.processMappings(mappings, context)) {
+                transformed = true;
+            }
+        }
 
-	public boolean requiresProcessingJar(Path jar) {
-		Objects.requireNonNull(jar);
+        return transformed;
+    }
 
-		if (Files.notExists(jar)) {
-			LOGGER.debug("{} does not exist, generating", jar);
-			return true;
-		}
+    public boolean requiresProcessingJar(Path jar) {
+        Objects.requireNonNull(jar);
 
-		return false;
-	}
+        if (Files.notExists(jar)) {
+            LOGGER.debug("{} does not exist, generating", jar);
+            return true;
+        }
 
-	public void processJar(Path jar, ProcessorContext context) throws IOException {
-		for (ProcessorEntry<?> entry : jarProcessors) {
-			try {
-				entry.processJar(jar, context);
-			} catch (IOException e) {
-				try {
-					Files.delete(jar);
-				} catch (IOException ioe) {
-					LOGGER.error("Failed to delete jar after failed processing: {}", jar, ioe);
-				}
+        return false;
+    }
 
-				throw new IOException("Failed to process jar when running jar processor: %s - %s".formatted(entry.name(), e.getMessage()), e);
-			}
-		}
-	}
+    private String getCacheValue() {
+        return jarProcessors.stream()
+            .sorted(Comparator.comparing(ProcessorEntry::name))
+            .map(ProcessorEntry::cacheValue)
+            .collect(Collectors.joining("::"));
+    }
 
-	public boolean processMappings(MemoryMappingTree mappings, MappingProcessorContext context) {
-		boolean transformed = false;
+    private String getDebugString() {
+        final var sj = new StringJoiner("\n");
 
-		for (ProcessorEntry<?> entry : jarProcessors) {
-			if (entry.processMappings(mappings, context)) {
-				transformed = true;
-			}
-		}
+        for (ProcessorEntry<?> jarProcessor : jarProcessors) {
+            sj.add(jarProcessor.name() + ":");
+            sj.add("\tHash: " + jarProcessor.hashCode());
+            sj.add("\tStr: " + jarProcessor.cacheValue());
+        }
 
-		return transformed;
-	}
+        return sj.toString();
+    }
 
-	record ProcessorEntry<S extends ZomboidJarProcessor.Spec>(S spec, ZomboidJarProcessor<S> processor, ZomboidJarProcessor.@Nullable MappingsProcessor<S> mappingsProcessor) {
-		@SuppressWarnings("unchecked")
-		ProcessorEntry(ZomboidJarProcessor<?> processor, ZomboidJarProcessor.Spec spec) {
-			this((S) Objects.requireNonNull(spec), (ZomboidJarProcessor<S>) processor, (ZomboidJarProcessor.MappingsProcessor<S>) processor.processMappings());
-		}
+    record ProcessorEntry<S extends ZomboidJarProcessor.Spec>(
+        S spec,
+        ZomboidJarProcessor<S> processor,
+        ZomboidJarProcessor.@Nullable MappingsProcessor<S> mappingsProcessor
+    )
+    {
+        @SuppressWarnings("unchecked")
+        ProcessorEntry(ZomboidJarProcessor<?> processor, ZomboidJarProcessor.Spec spec) {
+            this((S) Objects.requireNonNull(spec), (ZomboidJarProcessor<S>) processor,
+                (ZomboidJarProcessor.MappingsProcessor<S>) processor.processMappings());
+        }
 
-		private void processJar(Path jar, ProcessorContext context) throws IOException {
-			processor().processJar(jar, spec, context);
-		}
+        private void processJar(Path jar, ProcessorContext context) throws IOException {
+            processor().processJar(jar, spec, context);
+        }
 
-		private boolean processMappings(MemoryMappingTree mappings, MappingProcessorContext context) {
-			if (mappingsProcessor() == null) {
-				return false;
-			}
+        private boolean processMappings(MemoryMappingTree mappings, MappingProcessorContext context) {
+            if (mappingsProcessor() == null) {
+                return false;
+            }
 
-			return mappingsProcessor().transform(mappings, spec, context);
-		}
+            return mappingsProcessor().transform(mappings, spec, context);
+        }
 
-		private String name() {
-			return processor.getName();
-		}
+        private String name() {
+            return processor.getName();
+        }
 
-		private String cacheValue() {
-			return processor.getName() + ":" + spec.hashCode();
-		}
-	}
+        private String cacheValue() {
+            return processor.getName() + ":" + spec.hashCode();
+        }
+    }
 }

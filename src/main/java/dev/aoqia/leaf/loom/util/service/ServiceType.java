@@ -50,47 +50,54 @@ import org.gradle.api.provider.Provider;
 
 /**
  * A record to hold the options and service class for a service.
+ *
  * @param optionsClass The options class for the service.
  * @param serviceClass The service class.
  */
-public record ServiceType<O extends Service.Options, S extends Service<O>>(Class<O> optionsClass, Class<S> serviceClass) {
-	/**
-	 * Create an instance of the options class for the given service class.
-	 * @param project The {@link Project} to create the options for.
-	 * @param action An action to configure the options.
-	 * @return The created options provider.
-	 */
-	public Provider<O> create(Project project, Action<O> action) {
-		return maybeCreate(project, o -> {
-			action.execute(o);
-			return true;
-		});
-	}
+public record ServiceType<O extends Service.Options, S extends Service<O>>(
+    Class<O> optionsClass,
+    Class<S> serviceClass
+)
+{
+    /**
+     * Create an instance of the options class for the given service class.
+     *
+     * @param project The {@link Project} to create the options for.
+     * @param action An action to configure the options.
+     * @return The created options provider.
+     */
+    public Provider<O> create(Project project, Action<O> action) {
+        return maybeCreate(project, o -> {
+            action.execute(o);
+            return true;
+        });
+    }
 
-	/**
-	 * Maybe create an instance of the options class for the given service class.
-	 * @param project The {@link Project} to create the options for.
-	 * @param function A function to configure the options, returning true if the options should be created.
-	 * @return The created options provider.
-	 */
-	public Provider<O> maybeCreate(Project project, Function<O, Boolean> function) {
-		return project.provider(() -> {
-			O options = project.getObjects().newInstance(optionsClass);
+    /**
+     * Maybe create an instance of the options class for the given service class.
+     *
+     * @param project The {@link Project} to create the options for.
+     * @param function A function to configure the options, returning true if the options should be created.
+     * @return The created options provider.
+     */
+    public Provider<O> maybeCreate(Project project, Function<O, Boolean> function) {
+        return project.provider(() -> {
+            O options = project.getObjects().newInstance(optionsClass);
 
-			for (Method method : optionsClass.getDeclaredMethods()) {
-				// Gradle property values are lazily initialized, ensure that all of the values are not null
-				// Before we try to serialize the options as json
-				method.invoke(options);
-			}
+            for (Method method : optionsClass.getDeclaredMethods()) {
+                // Gradle property values are lazily initialized, ensure that all of the values are not null
+                // Before we try to serialize the options as json
+                method.invoke(options);
+            }
 
-			options.getServiceClass().set(serviceClass.getName());
-			options.getServiceClass().finalizeValue();
+            options.getServiceClass().set(serviceClass.getName());
+            options.getServiceClass().finalizeValue();
 
-			if (function.apply(options)) {
-				return options;
-			}
+            if (function.apply(options)) {
+                return options;
+            }
 
-			return null;
-		});
-	}
+            return null;
+        });
+    }
 }

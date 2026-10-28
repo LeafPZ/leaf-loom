@@ -55,25 +55,19 @@ import dev.aoqia.leaf.loom.configuration.mods.dependency.ModDependency;
  * An interface to aid with applying mod-specific remapping extensions.
  */
 public interface ModProcessorExtension {
-	List<ModProcessorExtension> EXTENSIONS = List.of(
-			MixinRemap.INSTANCE,
-			InlineRefmap.INSTANCE
-	);
+    List<ModProcessorExtension> EXTENSIONS = List.of(MixinRemap.INSTANCE, InlineRefmap.INSTANCE);
 
-	/**
-	 * Return true if the extension applies to the given mod dependency.
-	 */
-	boolean appliesTo(ModDependency modDependency);
+    /**
+     * Return true if the extension applies to the given mod dependency.
+     */
+    boolean appliesTo(ModDependency modDependency);
 
-	/**
-	 * Create a TinyRemapper extension that uses the predicate to only apply to mods that match appliesTo.
-	 */
-	TinyRemapper.Extension createExtension(Context ctx, Predicate<InputTag> applyPredicate) throws IOException;
+    /**
+     * Create a TinyRemapper extension that uses the predicate to only apply to mods that match appliesTo.
+     */
+    TinyRemapper.Extension createExtension(Context ctx, Predicate<InputTag> applyPredicate) throws IOException;
 
-	void finalise(ModDependency modDependency, Path path) throws IOException;
+    void finalise(ModDependency modDependency, Path path) throws IOException;
 
-	record Context(
-			String from,
-			String to,
-			List<ModDependency> mods) { }
+    record Context(String from, String to, List<ModDependency> mods) {}
 }

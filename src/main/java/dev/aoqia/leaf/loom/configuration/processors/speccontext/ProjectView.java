@@ -57,38 +57,36 @@ import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 // Used to abstract out the Gradle API usage to ease unit testing.
 public interface ProjectView {
-    //Returns a list of Loom Projects found in the specified Configuration
+    boolean areEnvironmentSourceSetsSplit();
+
+    boolean disableProjectDependantMods();
+
+    // Returns a list of Loom Projects found in the specified Configuration
     Stream<Project> getLoomProjectDependencies(String name);
 
     // Returns the mods defined in the current project
     List<LeafModJson> getMods();
 
-    boolean disableProjectDependantMods();
-
-    boolean areEnvironmentSourceSetsSplit();
-
-    enum ArtifactUsage {
-        RUNTIME(Usage.JAVA_RUNTIME),
-        COMPILE(Usage.JAVA_API);
-
-        private final String gradleUsage;
-
-        ArtifactUsage(String gradleUsage) {
-            this.gradleUsage = gradleUsage;
-        }
-
-        public String getGradleUsage() {
-            return gradleUsage;
-        }
-    }
-
     abstract class AbstractProjectView implements ProjectView {
-        protected final Project project;
         protected final LoomGradleExtension extension;
+        protected final Project project;
 
         protected AbstractProjectView(Project project) {
             this.project = project;
             this.extension = LoomGradleExtension.get(project);
+        }
+
+        @Override
+        public boolean areEnvironmentSourceSetsSplit() {
+            return extension.areEnvironmentSourceSetsSplit();
+        }
+
+        @Override
+        public boolean disableProjectDependantMods() {
+            final LoomGradleExtension extension = LoomGradleExtension.get(project);
+            // TODO provide a project isolated way of doing this.
+            return extension.isProjectIsolationActive()
+                || GradleUtils.getBooleanProperty(project, Constants.Properties.DISABLE_PROJECT_DEPENDENT_MODS);
         }
 
         @Override
@@ -105,18 +103,19 @@ public interface ProjectView {
         public List<LeafModJson> getMods() {
             return LeafModJsonHelpers.getModsInProject(project);
         }
+    }
 
-        @Override
-        public boolean disableProjectDependantMods() {
-            final LoomGradleExtension extension = LoomGradleExtension.get(project);
-            // TODO provide a project isolated way of doing this.
-            return extension.isProjectIsolationActive()
-                || GradleUtils.getBooleanProperty(project, Constants.Properties.DISABLE_PROJECT_DEPENDENT_MODS);
+    enum ArtifactUsage {
+        COMPILE(Usage.JAVA_API), RUNTIME(Usage.JAVA_RUNTIME);
+
+        private final String gradleUsage;
+
+        ArtifactUsage(String gradleUsage) {
+            this.gradleUsage = gradleUsage;
         }
 
-        @Override
-        public boolean areEnvironmentSourceSetsSplit() {
-            return extension.areEnvironmentSourceSetsSplit();
+        public String getGradleUsage() {
+            return gradleUsage;
         }
     }
 }

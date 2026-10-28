@@ -49,7 +49,7 @@ import dev.aoqia.leaf.loom.util.CacheKey;
  * Inputs used to process a mod dependency. The output jar is cached based on these properties.
  */
 public abstract class ModDependencyOptions extends CacheKey {
-	public abstract Property<String> getMappings();
+    public abstract Property<Boolean> getInlineRefmap();
 
-	public abstract Property<Boolean> getInlineRefmap();
+    public abstract Property<String> getMappings();
 }

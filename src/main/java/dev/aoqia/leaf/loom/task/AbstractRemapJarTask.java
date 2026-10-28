@@ -96,241 +96,259 @@ import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 
 @DisableCachingByDefault(because = "Jar task cannot be cached")
 public abstract class AbstractRemapJarTask extends Jar {
-	/**
-	 * The main input jar to remap.
-	 * Other contents can be added to this task, but this jar must always be present.
-	 *
-	 * <p>The input file's manifest will be copied into the remapped jar.
-	 */
-	@PathSensitive(PathSensitivity.NONE)
-	@InputFile
-	public abstract RegularFileProperty getInputFile();
+    private final Provider<JarManifestService> jarManifestServiceProvider;
 
-	@Classpath
-	public abstract ConfigurableFileCollection getClasspath();
+    @Inject
+    public AbstractRemapJarTask() {
+        from(getProject().zipTree(getInputFile()));
+        getSourceNamespace().convention(MappingsNamespace.NAMED.toString()).finalizeValueOnRead();
+        getTargetNamespace().convention(MappingsNamespace.INTERMEDIARY.toString()).finalizeValueOnRead();
+        getIncludesClientOnlyClasses().convention(false).finalizeValueOnRead();
+        getJarType().finalizeValueOnRead();
 
-	@Input
-	public abstract Property<String> getSourceNamespace();
+        getClientEntriesServiceOptions().set(getIncludesClientOnlyClasses().flatMap(clientOnlyEntries -> {
+            if (clientOnlyEntries) {
+                return getClientOnlyEntriesOptionsProvider(getClientSourceSet());
+            }
 
-	@Input
-	public abstract Property<String> getTargetNamespace();
+            // Empty
+            return getProject().getObjects().property(ClientEntriesService.Options.class);
+        }));
 
-	@Inject
-	protected abstract WorkerExecutor getWorkerExecutor();
+        jarManifestServiceProvider = JarManifestService.get(getProject());
+        usesService(jarManifestServiceProvider);
+    }
 
-	@Input
-	public abstract Property<Boolean> getIncludesClientOnlyClasses();
+    @Input
+    public abstract ListProperty<String> getAdditionalClientOnlyEntries();
 
-	@Input
-	public abstract ListProperty<String> getAdditionalClientOnlyEntries();
+    @Classpath
+    public abstract ConfigurableFileCollection getClasspath();
 
-	@Input
-	@Optional
-	public abstract Property<String> getClientOnlySourceSetName();
+    @Input
+    @Optional
+    public abstract Property<String> getClientOnlySourceSetName();
 
-	/**
-	 * Optionally supply a single mapping file or jar file containing mappings to be used for remapping.
-	 */
-	@ApiStatus.Experimental
-	@InputFiles
-	@PathSensitive(PathSensitivity.NONE)
-	@Optional
-	public abstract ConfigurableFileCollection getCustomMappings();
+    /**
+     * Optionally supply a single mapping file or jar file containing mappings to be used for remapping.
+     */
+    @ApiStatus.Experimental
+    @InputFiles
+    @PathSensitive(PathSensitivity.NONE)
+    @Optional
+    public abstract ConfigurableFileCollection getCustomMappings();
 
-	@Input
-	@Optional
-	@ApiStatus.Internal
-	public abstract Property<String> getJarType();
+    @Input
+    public abstract Property<Boolean> getIncludesClientOnlyClasses();
 
-	@Nested
-	@Optional
-	protected abstract Property<ClientEntriesService.Options> getClientEntriesServiceOptions();
+    /**
+     * The main input jar to remap.
+     * Other contents can be added to this task, but this jar must always be present.
+     *
+     * <p>
+     * The input file's manifest will be copied into the remapped jar.
+     */
+    @PathSensitive(PathSensitivity.NONE)
+    @InputFile
+    public abstract RegularFileProperty getInputFile();
 
-	private final Provider<JarManifestService> jarManifestServiceProvider;
+    @Input
+    @Optional
+    @ApiStatus.Internal
+    public abstract Property<String> getJarType();
 
-	@Inject
-	public AbstractRemapJarTask() {
-		from(getProject().zipTree(getInputFile()));
-		getSourceNamespace().convention(MappingsNamespace.NAMED.toString()).finalizeValueOnRead();
-		getTargetNamespace().convention(MappingsNamespace.INTERMEDIARY.toString()).finalizeValueOnRead();
-		getIncludesClientOnlyClasses().convention(false).finalizeValueOnRead();
-		getJarType().finalizeValueOnRead();
+    @Input
+    public abstract Property<String> getSourceNamespace();
 
-		getClientEntriesServiceOptions().set(getIncludesClientOnlyClasses().flatMap(clientOnlyEntries -> {
-			if (clientOnlyEntries) {
-				return getClientOnlyEntriesOptionsProvider(getClientSourceSet());
-			}
+    @Input
+    public abstract Property<String> getTargetNamespace();
 
-			// Empty
-			return getProject().getObjects().property(ClientEntriesService.Options.class);
-		}));
+    public final <P extends AbstractRemapParams> void submitWork(Class<? extends AbstractRemapAction<P>> workAction,
+        Action<P> action)
+    {
+        final WorkQueue workQueue = getWorkerExecutor().noIsolation();
 
-		jarManifestServiceProvider = JarManifestService.get(getProject());
-		usesService(jarManifestServiceProvider);
-	}
+        workQueue.submit(workAction, params -> {
+            params.getInputFile().set(getInputFile());
+            params.getArchiveFile().set(getArchiveFile());
 
-	public final <P extends AbstractRemapParams> void submitWork(Class<? extends AbstractRemapAction<P>> workAction, Action<P> action) {
-		final WorkQueue workQueue = getWorkerExecutor().noIsolation();
+            params.getSourceNamespace().set(getSourceNamespace());
+            params.getTargetNamespace().set(getTargetNamespace());
 
-		workQueue.submit(workAction, params -> {
-			params.getInputFile().set(getInputFile());
-			params.getArchiveFile().set(getArchiveFile());
+            params.getArchivePreserveFileTimestamps().set(isPreserveFileTimestamps());
+            params.getArchiveReproducibleFileOrder().set(isReproducibleFileOrder());
 
-			params.getSourceNamespace().set(getSourceNamespace());
-			params.getTargetNamespace().set(getTargetNamespace());
+            params.getJarManifestService().set(jarManifestServiceProvider);
+            params.getEntryCompression().set(getEntryCompression());
 
-			params.getArchivePreserveFileTimestamps().set(isPreserveFileTimestamps());
-			params.getArchiveReproducibleFileOrder().set(isReproducibleFileOrder());
+            if (getIncludesClientOnlyClasses().get()) {
+                final List<String> clientOnlyEntries;
 
-			params.getJarManifestService().set(jarManifestServiceProvider);
-			params.getEntryCompression().set(getEntryCompression());
+                try (var serviceFactory = new ScopedServiceFactory()) {
+                    ClientEntriesService<
+                        ClientEntriesService.Options> service = serviceFactory.get(getClientEntriesServiceOptions());
+                    clientOnlyEntries = new ArrayList<>(service.getClientOnlyEntries());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
 
-			if (getIncludesClientOnlyClasses().get()) {
-				final List<String> clientOnlyEntries;
+                clientOnlyEntries.addAll(getAdditionalClientOnlyEntries().get());
+                Collections.sort(clientOnlyEntries);
+                applyClientOnlyManifestAttributes(params, clientOnlyEntries);
+                params.getClientOnlyEntries()
+                    .set(clientOnlyEntries.stream().filter(s -> s.endsWith(".class")).toList());
+            }
 
-				try (var serviceFactory = new ScopedServiceFactory()) {
-					ClientEntriesService<ClientEntriesService.Options> service = serviceFactory.get(getClientEntriesServiceOptions());
-					clientOnlyEntries = new ArrayList<>(service.getClientOnlyEntries());
-				} catch (IOException e) {
-					throw new RuntimeException(e);
-				}
+            if (getJarType().isPresent()) {
+                params.getManifestAttributes().put(Constants.Manifest.JAR_TYPE, getJarType().get());
+            }
 
-				clientOnlyEntries.addAll(getAdditionalClientOnlyEntries().get());
-				Collections.sort(clientOnlyEntries);
-				applyClientOnlyManifestAttributes(params, clientOnlyEntries);
-				params.getClientOnlyEntries().set(clientOnlyEntries.stream().filter(s -> s.endsWith(".class")).toList());
-			}
+            action.execute(params);
+        });
+    }
 
-			if (getJarType().isPresent()) {
-				params.getManifestAttributes().put(Constants.Manifest.JAR_TYPE, getJarType().get());
-			}
+    protected void applyClientOnlyManifestAttributes(AbstractRemapParams params, List<String> entries) {
+        params.getManifestAttributes()
+            .set(Map.of(Constants.Manifest.SPLIT_ENV, "true", Constants.Manifest.CLIENT_ENTRIES,
+                String.join(";", entries)));
+    }
 
-			action.execute(params);
-		});
-	}
+    @Nested
+    @Optional
+    protected abstract Property<ClientEntriesService.Options> getClientEntriesServiceOptions();
 
-	protected abstract Provider<? extends ClientEntriesService.Options> getClientOnlyEntriesOptionsProvider(SourceSet clientSourceSet);
+    protected abstract Provider<? extends ClientEntriesService.Options>
+        getClientOnlyEntriesOptionsProvider(SourceSet clientSourceSet);
 
-	public interface AbstractRemapParams extends WorkParameters {
-		RegularFileProperty getInputFile();
-		RegularFileProperty getArchiveFile();
+    @Inject
+    protected abstract WorkerExecutor getWorkerExecutor();
 
-		Property<String> getSourceNamespace();
-		Property<String> getTargetNamespace();
+    private SourceSet getClientSourceSet() {
+        Check.require(LoomGradleExtension.get(getProject()).areEnvironmentSourceSetsSplit(),
+            "Cannot get client sourceset as project is not split");
+        return SourceSetHelper.getSourceSetByName(getClientOnlySourceSetName().get(), getProject());
+    }
 
-		/**
-		 * Checks whether {@link #getSourceNamespace()} and {@link #getTargetNamespace()}
-		 * have the same value. When this is {@code true}, the user does not intend for any
-		 * remapping to occur. They are using the task for its other features, such as adding
-		 * namespace to the manifest, nesting jars, reproducible builds, etc.
-		 *
-		 * @return whether the source and target namespaces match
-		 */
-		default boolean namespacesMatch() {
-			return this.getSourceNamespace().get().equals(this.getTargetNamespace().get());
-		}
+    public abstract static class AbstractRemapAction<T extends AbstractRemapParams> implements WorkAction<T> {
+        private static final Logger LOGGER = LoggerFactory.getLogger(AbstractRemapAction.class);
 
-		Property<Boolean> getArchivePreserveFileTimestamps();
-		Property<Boolean> getArchiveReproducibleFileOrder();
-		Property<ZipEntryCompression> getEntryCompression();
+        protected final Path outputFile;
 
-		Property<JarManifestService> getJarManifestService();
-		MapProperty<String, String> getManifestAttributes();
+        @Inject
+        public AbstractRemapAction() {
+            outputFile = getParameters().getArchiveFile().getAsFile().get().toPath();
+        }
 
-		ListProperty<String> getClientOnlyEntries();
-	}
+        private static void mergeAttributes(Attributes target, Attributes source) {
+            source.forEach(target::putIfAbsent);
+        }
 
-	protected void applyClientOnlyManifestAttributes(AbstractRemapParams params, List<String> entries) {
-		params.getManifestAttributes().set(Map.of(
-				Constants.Manifest.SPLIT_ENV, "true",
-				Constants.Manifest.CLIENT_ENTRIES, String.join(";", entries)
-		));
-	}
+        private static void mergeManifests(Manifest target, Manifest source) {
+            mergeAttributes(target.getMainAttributes(), source.getMainAttributes());
 
-	public abstract static class AbstractRemapAction<T extends AbstractRemapParams> implements WorkAction<T> {
-		private static final Logger LOGGER = LoggerFactory.getLogger(AbstractRemapAction.class);
-		protected final Path outputFile;
+            source.getEntries().forEach((name, sourceAttributes) -> {
+                final Attributes targetAttributes = target.getAttributes(name);
 
-		@Inject
-		public AbstractRemapAction() {
-			outputFile = getParameters().getArchiveFile().getAsFile().get().toPath();
-		}
+                if (targetAttributes != null) {
+                    mergeAttributes(targetAttributes, sourceAttributes);
+                } else {
+                    target.getEntries().put(name, sourceAttributes);
+                }
+            });
+        }
 
-		@Override
-		public final void execute() {
-			try {
-				Path tempInput = Files.createTempFile("loom-remapJar-", "-input.jar");
-				Files.copy(outputFile, tempInput, StandardCopyOption.REPLACE_EXISTING);
-				execute(tempInput);
-				Files.delete(tempInput);
-			} catch (Exception e) {
-				try {
-					Files.deleteIfExists(outputFile);
-				} catch (IOException ex) {
-					LOGGER.error("Failed to delete output file", ex);
-				}
+        @Override
+        public final void execute() {
+            try {
+                Path tempInput = Files.createTempFile("loom-remapJar-", "-input.jar");
+                Files.copy(outputFile, tempInput, StandardCopyOption.REPLACE_EXISTING);
+                execute(tempInput);
+                Files.delete(tempInput);
+            } catch (Exception e) {
+                try {
+                    Files.deleteIfExists(outputFile);
+                } catch (IOException ex) {
+                    LOGGER.error("Failed to delete output file", ex);
+                }
 
-				throw ExceptionUtil.createDescriptiveWrapper(RuntimeException::new, "Failed to remap " + outputFile.toAbsolutePath(), e);
-			}
-		}
+                throw ExceptionUtil.createDescriptiveWrapper(RuntimeException::new,
+                    "Failed to remap " + outputFile.toAbsolutePath(), e);
+            }
+        }
 
-		// Note: the inputFile parameter is the remapping input file.
-		// The main input jar is available in the parameters, but should not be used
-		// for remapping as it might be missing some files added manually to this task.
-		protected abstract void execute(Path inputFile) throws IOException;
+        // Note: the inputFile parameter is the remapping input file.
+        // The main input jar is available in the parameters, but should not be used
+        // for remapping as it might be missing some files added manually to this task.
+        protected abstract void execute(Path inputFile) throws IOException;
 
-		protected void modifyJarManifest() throws IOException {
-			int count = ZipUtils.transform(outputFile, Map.of(Constants.Manifest.PATH, bytes -> {
-				var manifest = new Manifest(new ByteArrayInputStream(bytes));
-				byte[] sourceManifestBytes = ZipUtils.unpackNullable(getParameters().getInputFile().get().getAsFile().toPath(), Constants.Manifest.PATH);
+        protected void modifyJarManifest() throws IOException {
+            int count = ZipUtils.transform(outputFile, Map.of(Constants.Manifest.PATH, bytes -> {
+                var manifest = new Manifest(new ByteArrayInputStream(bytes));
+                byte[] sourceManifestBytes = ZipUtils
+                    .unpackNullable(getParameters().getInputFile().get().getAsFile().toPath(), Constants.Manifest.PATH);
 
-				if (sourceManifestBytes != null) {
-					var sourceManifest = new Manifest(new ByteArrayInputStream(sourceManifestBytes));
-					mergeManifests(manifest, sourceManifest);
-				}
+                if (sourceManifestBytes != null) {
+                    var sourceManifest = new Manifest(new ByteArrayInputStream(sourceManifestBytes));
+                    mergeManifests(manifest, sourceManifest);
+                }
 
-				getParameters().getJarManifestService().get().apply(manifest, getParameters().getManifestAttributes().get());
-				manifest.getMainAttributes().putValue(Constants.Manifest.MAPPING_NAMESPACE, getParameters().getTargetNamespace().get());
+                getParameters().getJarManifestService()
+                    .get()
+                    .apply(manifest, getParameters().getManifestAttributes().get());
+                manifest.getMainAttributes()
+                    .putValue(Constants.Manifest.MAPPING_NAMESPACE, getParameters().getTargetNamespace().get());
 
-				ByteArrayOutputStream out = new ByteArrayOutputStream();
-				manifest.write(out);
-				return out.toByteArray();
-			}));
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                manifest.write(out);
+                return out.toByteArray();
+            }));
 
-			Check.require(count > 0, "Did not transform any jar manifest");
-		}
+            Check.require(count > 0, "Did not transform any jar manifest");
+        }
 
-		protected void rewriteJar() throws IOException {
-			final boolean isReproducibleFileOrder = getParameters().getArchiveReproducibleFileOrder().get();
-			final boolean isPreserveFileTimestamps = getParameters().getArchivePreserveFileTimestamps().get();
-			final ZipEntryCompression compression = getParameters().getEntryCompression().get();
+        protected void rewriteJar() throws IOException {
+            final boolean isReproducibleFileOrder = getParameters().getArchiveReproducibleFileOrder().get();
+            final boolean isPreserveFileTimestamps = getParameters().getArchivePreserveFileTimestamps().get();
+            final ZipEntryCompression compression = getParameters().getEntryCompression().get();
 
-			if (isReproducibleFileOrder || !isPreserveFileTimestamps || compression != ZipEntryCompression.DEFLATED) {
-				ZipReprocessorUtil.reprocessZip(outputFile, isReproducibleFileOrder, isPreserveFileTimestamps, compression);
-			}
-		}
+            if (isReproducibleFileOrder || !isPreserveFileTimestamps || compression != ZipEntryCompression.DEFLATED) {
+                ZipReprocessorUtil.reprocessZip(outputFile, isReproducibleFileOrder, isPreserveFileTimestamps,
+                    compression);
+            }
+        }
+    }
 
-		private static void mergeManifests(Manifest target, Manifest source) {
-			mergeAttributes(target.getMainAttributes(), source.getMainAttributes());
+    public interface AbstractRemapParams extends WorkParameters {
+        RegularFileProperty getArchiveFile();
 
-			source.getEntries().forEach((name, sourceAttributes) -> {
-				final Attributes targetAttributes = target.getAttributes(name);
+        Property<Boolean> getArchivePreserveFileTimestamps();
 
-				if (targetAttributes != null) {
-					mergeAttributes(targetAttributes, sourceAttributes);
-				} else {
-					target.getEntries().put(name, sourceAttributes);
-				}
-			});
-		}
+        Property<Boolean> getArchiveReproducibleFileOrder();
 
-		private static void mergeAttributes(Attributes target, Attributes source) {
-			source.forEach(target::putIfAbsent);
-		}
-	}
+        ListProperty<String> getClientOnlyEntries();
 
-	private SourceSet getClientSourceSet() {
-		Check.require(LoomGradleExtension.get(getProject()).areEnvironmentSourceSetsSplit(), "Cannot get client sourceset as project is not split");
-		return SourceSetHelper.getSourceSetByName(getClientOnlySourceSetName().get(), getProject());
-	}
+        Property<ZipEntryCompression> getEntryCompression();
+
+        RegularFileProperty getInputFile();
+
+        Property<JarManifestService> getJarManifestService();
+
+        MapProperty<String, String> getManifestAttributes();
+
+        Property<String> getSourceNamespace();
+
+        Property<String> getTargetNamespace();
+
+        /**
+         * Checks whether {@link #getSourceNamespace()} and {@link #getTargetNamespace()}
+         * have the same value. When this is {@code true}, the user does not intend for any
+         * remapping to occur. They are using the task for its other features, such as adding
+         * namespace to the manifest, nesting jars, reproducible builds, etc.
+         *
+         * @return whether the source and target namespaces match
+         */
+        default boolean namespacesMatch() {
+            return this.getSourceNamespace().get().equals(this.getTargetNamespace().get());
+        }
+    }
 }

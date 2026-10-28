@@ -44,34 +44,35 @@ package dev.aoqia.leaf.loom.util.nativeplatform;
 import org.jspecify.annotations.Nullable;
 
 public class LoomNativePlatformException extends Exception {
-	public LoomNativePlatformException(String message) {
-		super(message);
-	}
+    public LoomNativePlatformException(String message) {
+        super(message);
+    }
 
-	public LoomNativePlatformException(String message, Throwable cause) {
-		super(message, cause);
-	}
+    public LoomNativePlatformException(String message, Throwable cause) {
+        super(message, cause);
+    }
 
-	public static LoomNativePlatformException fromWin32Error(String operation, int errorCode) {
-		return new LoomNativePlatformException(formatWin32Error(operation, errorCode));
-	}
+    public static String formatWin32Error(String operation, int errorCode) {
+        final StringBuilder message = new StringBuilder(
+            "%s failed: Windows error %d (0x%08X)".formatted(operation, errorCode, errorCode));
+        final String windowsMessage = tryFormatMessage(errorCode);
 
-	public static String formatWin32Error(String operation, int errorCode) {
-		final StringBuilder message = new StringBuilder("%s failed: Windows error %d (0x%08X)".formatted(operation, errorCode, errorCode));
-		final String windowsMessage = tryFormatMessage(errorCode);
+        if (windowsMessage != null && !windowsMessage.isBlank()) {
+            message.append(": ").append(windowsMessage);
+        }
 
-		if (windowsMessage != null && !windowsMessage.isBlank()) {
-			message.append(": ").append(windowsMessage);
-		}
+        return message.toString();
+    }
 
-		return message.toString();
-	}
+    public static LoomNativePlatformException fromWin32Error(String operation, int errorCode) {
+        return new LoomNativePlatformException(formatWin32Error(operation, errorCode));
+    }
 
-	private static @Nullable String tryFormatMessage(int errorCode) {
-		try {
-			return Win32.tryFormatMessage(errorCode);
-		} catch (Throwable e) {
-			return null;
-		}
-	}
+    private static @Nullable String tryFormatMessage(int errorCode) {
+        try {
+            return Win32.tryFormatMessage(errorCode);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
 }

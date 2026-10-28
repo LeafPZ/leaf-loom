@@ -68,72 +68,66 @@ import dev.aoqia.leaf.loom.util.Checksum;
 
 @ApiStatus.Internal
 public abstract class IntermediaryMappingsProvider extends IntermediateMappingsProviderInternal {
-	public static final String NAME = "intermediary-v2";
-	private static final String FABRIC_INTERMEDIARY_GROUP_NAME = "net.fabricmc:intermediary";
-	private static final Logger LOGGER = LoggerFactory.getLogger(IntermediateMappingsProvider.class);
+    public static final String NAME = "intermediary-v2";
+    private static final String FABRIC_INTERMEDIARY_GROUP_NAME = "net.fabricmc:intermediary";
+    private static final Logger LOGGER = LoggerFactory.getLogger(IntermediateMappingsProvider.class);
 
-	public abstract Property<String> getIntermediaryUrl();
+    @Inject
+    public abstract DependencyFactory getDependencyFactory();
 
-	public abstract Property<Boolean> getRefreshDeps();
+    public abstract Property<String> getIntermediaryUrl();
 
-	@Inject
-	public abstract DependencyFactory getDependencyFactory();
+    @Override
+    public String getName() {
+        final String encodedMcVersion = URLEncoder.encode(getGameVersion().get(), StandardCharsets.UTF_8);
+        final String urlRaw = getIntermediaryUrl().get();
 
-	@Override
-	public void provide(Path tinyMappings, @Nullable Project project) throws IOException {
-		if (Files.exists(tinyMappings) && !getRefreshDeps().get()) {
-			return;
-		}
+        if (!LoomGradleExtensionApiImpl.DEFAULT_INTERMEDIARY_URL.equals(urlRaw)) {
+            final String url = getIntermediaryUrl().get().formatted(encodedMcVersion);
 
-		// Download and extract intermediary
-		final Path intermediaryJarPath = Files.createTempFile(getName(), ".jar");
-		final String encodedMcVersion = URLEncoder.encode(getGameVersion().get(), StandardCharsets.UTF_8);
-		final String urlRaw = getIntermediaryUrl().get();
+            return NAME + "-" + Checksum.of(url).sha1().hex();
+        }
 
-		if (project != null && urlRaw.equals(LoomGradleExtensionApiImpl.DEFAULT_INTERMEDIARY_URL)) {
-			final ModuleDependency intermediaryDep = getDependencyFactory()
-					.create(FABRIC_INTERMEDIARY_GROUP_NAME + ':' + encodedMcVersion);
-			intermediaryDep.artifact(new Action<DependencyArtifact>() {
-				@Override
-				public void execute(final DependencyArtifact dependencyArtifact) {
-					dependencyArtifact.setClassifier("v2");
-				}
-			});
-			final Configuration config = project.getConfigurations().detachedConfiguration(intermediaryDep);
+        return NAME;
+    }
 
-			Files.copy(
-					config.getSingleFile().toPath(),
-					intermediaryJarPath,
-					StandardCopyOption.REPLACE_EXISTING
-			);
-			Files.deleteIfExists(tinyMappings);
-		} else {
-			final String url = urlRaw.formatted(encodedMcVersion);
+    public abstract Property<Boolean> getRefreshDeps();
 
-			LOGGER.info("Downloading intermediary from {}", url);
+    @Override
+    public void provide(Path tinyMappings, @Nullable Project project) throws IOException {
+        if (Files.exists(tinyMappings) && !getRefreshDeps().get()) {
+            return;
+        }
 
-			Files.deleteIfExists(tinyMappings);
-			Files.deleteIfExists(intermediaryJarPath);
+        // Download and extract intermediary
+        final Path intermediaryJarPath = Files.createTempFile(getName(), ".jar");
+        final String encodedMcVersion = URLEncoder.encode(getGameVersion().get(), StandardCharsets.UTF_8);
+        final String urlRaw = getIntermediaryUrl().get();
 
-			getDownloader().get().apply(url)
-					.defaultCache()
-					.downloadPath(intermediaryJarPath);
-		}
+        if (project != null && urlRaw.equals(LoomGradleExtensionApiImpl.DEFAULT_INTERMEDIARY_URL)) {
+            final ModuleDependency intermediaryDep = getDependencyFactory()
+                .create(FABRIC_INTERMEDIARY_GROUP_NAME + ':' + encodedMcVersion);
+            intermediaryDep.artifact(new Action<DependencyArtifact>() {
+                @Override
+                public void execute(final DependencyArtifact dependencyArtifact) {
+                    dependencyArtifact.setClassifier("v2");
+                }
+            });
+            final Configuration config = project.getConfigurations().detachedConfiguration(intermediaryDep);
 
-		TinyJarInfo.extractMappings(intermediaryJarPath, tinyMappings);
-	}
+            Files.copy(config.getSingleFile().toPath(), intermediaryJarPath, StandardCopyOption.REPLACE_EXISTING);
+            Files.deleteIfExists(tinyMappings);
+        } else {
+            final String url = urlRaw.formatted(encodedMcVersion);
 
-	@Override
-	public String getName() {
-		final String encodedMcVersion = URLEncoder.encode(getGameVersion().get(), StandardCharsets.UTF_8);
-		final String urlRaw = getIntermediaryUrl().get();
+            LOGGER.info("Downloading intermediary from {}", url);
 
-		if (!LoomGradleExtensionApiImpl.DEFAULT_INTERMEDIARY_URL.equals(urlRaw)) {
-			final String url = getIntermediaryUrl().get().formatted(encodedMcVersion);
+            Files.deleteIfExists(tinyMappings);
+            Files.deleteIfExists(intermediaryJarPath);
 
-			return NAME + "-" + Checksum.of(url).sha1().hex();
-		}
+            getDownloader().get().apply(url).defaultCache().downloadPath(intermediaryJarPath);
+        }
 
-		return NAME;
-	}
+        TinyJarInfo.extractMappings(intermediaryJarPath, tinyMappings);
+    }
 }

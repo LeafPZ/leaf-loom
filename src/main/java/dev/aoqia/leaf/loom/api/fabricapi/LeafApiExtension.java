@@ -49,44 +49,49 @@ import org.jetbrains.annotations.ApiStatus;
  * A gradle extension with specific functionality related to Fabric API.
  */
 public interface LeafApiExtension {
-	/**
-	 * Get a {@link Dependency} for a given Fabric API module.
-	 *
-	 * @param moduleName The name of the module.
-	 * @param fabricApiVersion The main Fabric API version.
-	 * @return A {@link Dependency} for the module.
-	 */
-	Dependency module(String moduleName, String fabricApiVersion);
+    /**
+     * Configuration data generation using the default settings.
+     */
+    void configureDataGeneration();
 
-	/**
-	 * Get the version of a Fabric API module.
-	 * @param moduleName The name of the module.
-	 * @param fabricApiVersion The main Fabric API version.
-	 * @return The version of the module.
-	 */
-	String moduleVersion(String moduleName, String fabricApiVersion);
+    /**
+     * Configuration data generation using the specified settings.
+     *
+     * @param action An action to configure specific data generation settings. See {@link DataGenerationSettings} for
+     * more information.
+     */
+    void configureDataGeneration(Action<DataGenerationSettings> action);
 
-	/**
-	 * Configuration data generation using the default settings.
-	 */
-	void configureDataGeneration();
+    /**
+     * Configuration of game and client tests using the default settings.
+     */
+    @ApiStatus.Experimental
+    void configureTests();
 
-	/**
-	 * Configuration data generation using the specified settings.
-	 * @param action An action to configure specific data generation settings. See {@link DataGenerationSettings} for more information.
-	 */
-	void configureDataGeneration(Action<DataGenerationSettings> action);
+    /**
+     * Configuration of game and/or client tests using the specified settings.
+     *
+     * @param action An action to configure specific game test settings. See {@link GameTestSettings} for more
+     * information.
+     */
+    @ApiStatus.Experimental
+    void configureTests(Action<GameTestSettings> action);
 
-	/**
-	 * Configuration of game and client tests using the default settings.
-	 */
-	@ApiStatus.Experimental
-	void configureTests();
+    /**
+     * Get a {@link Dependency} for a given Fabric API module.
+     *
+     * @param moduleName The name of the module.
+     * @param fabricApiVersion The main Fabric API version.
+     * @return A {@link Dependency} for the module.
+     */
+    Dependency module(String moduleName, String fabricApiVersion);
 
-	/**
-	 * Configuration of game and/or client tests using the specified settings.
-	 * @param action An action to configure specific game test settings. See {@link GameTestSettings} for more information.
-	 */
-	@ApiStatus.Experimental
-	void configureTests(Action<GameTestSettings> action);
+    /**
+     * Get the version of a Fabric API module.
+     *
+     * @param moduleName The name of the module.
+     * @param fabricApiVersion The main Fabric API version.
+     * @return The version of the module.
+     */
+    String moduleVersion(String moduleName, String fabricApiVersion);
 }

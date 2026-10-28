@@ -42,18 +42,18 @@
 package dev.aoqia.leaf.loom.util;
 
 public final class Check {
-	private Check() {
-	}
+    private Check() {
+    }
 
-	public static void require(boolean expression, String message) {
-		if (!expression) {
-			throw new IllegalArgumentException(message);
-		}
-	}
+    public static void require(boolean expression) {
+        if (!expression) {
+            throw new IllegalArgumentException();
+        }
+    }
 
-	public static void require(boolean expression) {
-		if (!expression) {
-			throw new IllegalArgumentException();
-		}
-	}
+    public static void require(boolean expression, String message) {
+        if (!expression) {
+            throw new IllegalArgumentException(message);
+        }
+    }
 }

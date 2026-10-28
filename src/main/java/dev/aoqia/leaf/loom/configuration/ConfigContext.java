@@ -47,7 +47,9 @@ import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 public interface ConfigContext {
-	Project project();
-	ServiceFactory serviceFactory();
-	LoomGradleExtension extension();
+    LoomGradleExtension extension();
+
+    Project project();
+
+    ServiceFactory serviceFactory();
 }

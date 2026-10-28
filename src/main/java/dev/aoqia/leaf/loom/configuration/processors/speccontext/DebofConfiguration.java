@@ -57,89 +57,84 @@ import dev.aoqia.leaf.loom.util.Strings;
 import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 
 /**
- * This mess is created out of the need to resolve the compile/runtime dependencies, without using the actual runtime/compile classpath.
+ * This mess is created out of the need to resolve the compile/runtime dependencies, without using the actual
+ * runtime/compile classpath.
  * As we need to add the minecraft jar to it later (based on the compile/runtime dependencies).
  */
 public record DebofConfiguration(String name, List<Function<SourceSet, String>> configurationFunctions) {
-	public static final DebofConfiguration COMPILE = new DebofConfiguration("compile", List.of(
-			SourceSet::getImplementationConfigurationName,
-			SourceSet::getApiConfigurationName,
-			SourceSet::getCompileOnlyConfigurationName,
-			SourceSet::getCompileOnlyApiConfigurationName
-	));
-	public static final DebofConfiguration RUNTIME = new DebofConfiguration("runtime", List.of(
-			SourceSet::getImplementationConfigurationName,
-			SourceSet::getApiConfigurationName,
-			SourceSet::getRuntimeOnlyConfigurationName,
-			s -> Constants.Configurations.LOCAL_RUNTIME
-	));
-	public static final List<DebofConfiguration> ALL = List.of(COMPILE, RUNTIME);
+    public static final DebofConfiguration COMPILE = new DebofConfiguration("compile",
+        List.of(SourceSet::getImplementationConfigurationName, SourceSet::getApiConfigurationName,
+            SourceSet::getCompileOnlyConfigurationName, SourceSet::getCompileOnlyApiConfigurationName));
+    public static final DebofConfiguration RUNTIME = new DebofConfiguration("runtime",
+        List.of(SourceSet::getImplementationConfigurationName, SourceSet::getApiConfigurationName,
+            SourceSet::getRuntimeOnlyConfigurationName, s -> Constants.Configurations.LOCAL_RUNTIME));
+    public static final List<DebofConfiguration> ALL = List.of(COMPILE, RUNTIME);
 
-	public Configuration getConfiguration(Project project, TargetSourceSet targetSourceSet) {
-		return project.getConfigurations().getByName(resolveConfigurationName(targetSourceSet));
-	}
+    public Configuration getConfiguration(Project project, TargetSourceSet targetSourceSet) {
+        return project.getConfigurations().getByName(resolveConfigurationName(targetSourceSet));
+    }
 
-	public List<Configuration> getConfigurations(Project project) {
-		ConfigurationContainer configurations = project.getConfigurations();
-		return TargetSourceSet.applicable(project).stream()
-				.map(this::resolveConfigurationName)
-				.map(configurations::getByName)
-				.toList();
-	}
+    public List<Configuration> getConfigurations(Project project) {
+        ConfigurationContainer configurations = project.getConfigurations();
+        return TargetSourceSet.applicable(project)
+            .stream()
+            .map(this::resolveConfigurationName)
+            .map(configurations::getByName)
+            .toList();
+    }
 
-	private String resolveConfigurationName(TargetSourceSet targetSourceSet) {
-		return "%s%sDependencyResolve".formatted(targetSourceSet.name, Strings.capitalize(name()));
-	}
+    private String resolveConfigurationName(TargetSourceSet targetSourceSet) {
+        return "%s%sDependencyResolve".formatted(targetSourceSet.name, Strings.capitalize(name()));
+    }
 
-	public static void create(Project project) {
-		for (DebofConfiguration debofConfiguration : ALL) {
-			debofConfiguration.createResolveConfiguration(project);
-		}
-	}
+    public static void create(Project project) {
+        for (DebofConfiguration debofConfiguration : ALL) {
+            debofConfiguration.createResolveConfiguration(project);
+        }
+    }
 
-	public void createResolveConfiguration(Project project) {
-		ConfigurationContainer configurations = project.getConfigurations();
+    public void createResolveConfiguration(Project project) {
+        ConfigurationContainer configurations = project.getConfigurations();
 
-		for (TargetSourceSet target : TargetSourceSet.applicable(project)) {
-			SourceSet sourceSet = target.getSourceSet(project);
+        for (TargetSourceSet target : TargetSourceSet.applicable(project)) {
+            SourceSet sourceSet = target.getSourceSet(project);
 
-			configurations.register(resolveConfigurationName(target), c -> {
-				LoomConfigurations.Role.RESOLVABLE.apply(c);
+            configurations.register(resolveConfigurationName(target), c -> {
+                LoomConfigurations.Role.RESOLVABLE.apply(c);
 
-				for (Function<SourceSet, String> configProvider : configurationFunctions()) {
-					Configuration sourceConfig = configurations.findByName(configProvider.apply(sourceSet));
+                for (Function<SourceSet, String> configProvider : configurationFunctions()) {
+                    Configuration sourceConfig = configurations.findByName(configProvider.apply(sourceSet));
 
-					if (sourceConfig == null) {
-						continue;
-					}
+                    if (sourceConfig == null) {
+                        continue;
+                    }
 
-					c.extendsFrom(sourceConfig);
-				}
-			});
-		}
-	}
+                    c.extendsFrom(sourceConfig);
+                }
+            });
+        }
+    }
 
-	public enum TargetSourceSet {
-		MAIN(SourceSet.MAIN_SOURCE_SET_NAME, e -> Boolean.TRUE),
-		CLIENT("client", LoomGradleExtension::areEnvironmentSourceSetsSplit);
+    public enum TargetSourceSet {
+        CLIENT("client", LoomGradleExtension::areEnvironmentSourceSetsSplit),
+        MAIN(SourceSet.MAIN_SOURCE_SET_NAME, e -> Boolean.TRUE);
 
-		private final String name;
-		private final Function<LoomGradleExtension, Boolean> enabled;
+        private final Function<LoomGradleExtension, Boolean> enabled;
 
-		TargetSourceSet(String name, Function<LoomGradleExtension, Boolean> enabled) {
-			this.name = name;
-			this.enabled = enabled;
-		}
+        private final String name;
 
-		public SourceSet getSourceSet(Project project) {
-			return SourceSetHelper.getSourceSetByName(this.name, project);
-		}
+        TargetSourceSet(String name, Function<LoomGradleExtension, Boolean> enabled) {
+            this.name = name;
+            this.enabled = enabled;
+        }
 
-		public static List<TargetSourceSet> applicable(Project project) {
-			LoomGradleExtension extension = LoomGradleExtension.get(project);
-			return Arrays.stream(values())
-					.filter(targetSourceSet -> targetSourceSet.enabled.apply(extension))
-					.toList();
-		}
-	}
+        public static List<TargetSourceSet> applicable(Project project) {
+            LoomGradleExtension extension = LoomGradleExtension.get(project);
+            return Arrays.stream(values()).filter(targetSourceSet -> targetSourceSet.enabled.apply(extension)).toList();
+        }
+
+        public SourceSet getSourceSet(Project project) {
+            return SourceSetHelper.getSourceSetByName(this.name, project);
+        }
+    }
 }

@@ -65,100 +65,101 @@ import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 
 public class GradleMappingContext implements MappingContext {
-	private final Project project;
-	private final LoomGradleExtension extension;
-	private final String workingDirName;
+    private final LoomGradleExtension extension;
+    private final Project project;
+    private final String workingDirName;
 
-	public GradleMappingContext(Project project, String workingDirName) {
-		this.project = project;
-		this.extension = LoomGradleExtension.get(project);
-		this.workingDirName = workingDirName;
-	}
-
-	@Override
-	public Path resolveDependency(Dependency dependency) {
-		Configuration configuration = project.getConfigurations().detachedConfiguration(dependency);
-		// Don't allow changing versions as this breaks down with how we cache layered mappings.
-		configuration.resolutionStrategy(ResolutionStrategy::failOnNonReproducibleResolution);
-		return configuration.getSingleFile().toPath();
-	}
-
-	@Override
-	public Path resolveMavenDependency(String mavenNotation) {
-		return resolveDependency(project.getDependencies().create(mavenNotation));
-	}
-
-	@Override
-	public Path resolveDependency(MinimalExternalModuleDependency dependency) {
-		return resolveDependency(project.getDependencies().create(dependency));
-	}
-
-	@Override
-	public Supplier<MemoryMappingTree> intermediaryTree() {
-		return () -> {
-			if (!extension.getUseIntermediateMappings().get()) {
-				throw new IllegalStateException("Intermediary mappings is disabled");
-			}
-
-			try (var serviceFactory = new ScopedServiceFactory()) {
-				IntermediateMappingsService intermediateMappingsService = serviceFactory.get(IntermediateMappingsService.createOptions(project, zomboidProvider()));
-				return intermediateMappingsService.getMemoryMappingTree();
-			} catch (IOException e) {
-				throw new UncheckedIOException(e);
-			}
-		};
-	}
-
-	@Override
-	public boolean isUsingIntermediateMappings() {
-		return extension.getUseIntermediateMappings().get();
-	}
-
-	@Override
-	public String productionNamespace() {
-		return extension.getProductionNamespace().get();
-	}
-
-	@Override
-	public ZomboidProvider zomboidProvider() {
-		return extension.getZomboidProvider();
-	}
-
-	@Override
-	public Path workingDirectory(String name) {
-		return new File(zomboidProvider().dir("layered/working_dir/" + workingDirName), name).toPath();
-	}
-
-	@Override
-	public Logger getLogger() {
-		return project.getLogger();
-	}
+    public GradleMappingContext(Project project, String workingDirName) {
+        this.project = project;
+        this.extension = LoomGradleExtension.get(project);
+        this.workingDirName = workingDirName;
+    }
 
     @Override
     public CopyGameFileBuilder copyGameFile(String url) {
         return extension.copyGameFile(url);
     }
 
-	@Override
-	public DownloadBuilder download(String url) {
-		return extension.download(url);
-	}
+    @Override
+    public DownloadBuilder download(String url) {
+        return extension.download(url);
+    }
 
-	@Override
-	public boolean refreshDeps() {
-		return extension.refreshDeps();
-	}
+    public LoomGradleExtension getExtension() {
+        return extension;
+    }
 
-	@Override
-	public boolean hasProperty(String property) {
-		return GradleUtils.getBooleanProperty(project, property);
-	}
+    @Override
+    public Logger getLogger() {
+        return project.getLogger();
+    }
 
-	public Project getProject() {
-		return project;
-	}
+    public Project getProject() {
+        return project;
+    }
 
-	public LoomGradleExtension getExtension() {
-		return extension;
-	}
+    @Override
+    public boolean hasProperty(String property) {
+        return GradleUtils.getBooleanProperty(project, property);
+    }
+
+    @Override
+    public Supplier<MemoryMappingTree> intermediaryTree() {
+        return () -> {
+            if (!extension.getUseIntermediateMappings().get()) {
+                throw new IllegalStateException("Intermediary mappings is disabled");
+            }
+
+            try (var serviceFactory = new ScopedServiceFactory()) {
+                IntermediateMappingsService intermediateMappingsService = serviceFactory
+                    .get(IntermediateMappingsService.createOptions(project, zomboidProvider()));
+                return intermediateMappingsService.getMemoryMappingTree();
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        };
+    }
+
+    @Override
+    public boolean isUsingIntermediateMappings() {
+        return extension.getUseIntermediateMappings().get();
+    }
+
+    @Override
+    public String productionNamespace() {
+        return extension.getProductionNamespace().get();
+    }
+
+    @Override
+    public boolean refreshDeps() {
+        return extension.refreshDeps();
+    }
+
+    @Override
+    public Path resolveDependency(Dependency dependency) {
+        Configuration configuration = project.getConfigurations().detachedConfiguration(dependency);
+        // Don't allow changing versions as this breaks down with how we cache layered mappings.
+        configuration.resolutionStrategy(ResolutionStrategy::failOnNonReproducibleResolution);
+        return configuration.getSingleFile().toPath();
+    }
+
+    @Override
+    public Path resolveDependency(MinimalExternalModuleDependency dependency) {
+        return resolveDependency(project.getDependencies().create(dependency));
+    }
+
+    @Override
+    public Path resolveMavenDependency(String mavenNotation) {
+        return resolveDependency(project.getDependencies().create(mavenNotation));
+    }
+
+    @Override
+    public Path workingDirectory(String name) {
+        return new File(zomboidProvider().dir("layered/working_dir/" + workingDirName), name).toPath();
+    }
+
+    @Override
+    public ZomboidProvider zomboidProvider() {
+        return extension.getZomboidProvider();
+    }
 }

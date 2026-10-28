@@ -42,7 +42,7 @@
 package dev.aoqia.leaf.loom.test.unit.processor.classes;
 
 public interface SecondGenericInterface<T> {
-	default T secondGenericInjectedMethod() {
-		return null;
-	}
+    default T secondGenericInjectedMethod() {
+        return null;
+    }
 }

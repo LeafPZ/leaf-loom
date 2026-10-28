@@ -46,16 +46,16 @@ import org.gradle.api.Project;
 import dev.aoqia.leaf.loom.api.RunConfiguration;
 
 abstract class AbstractIntellijRunConfigWriter implements IntellijRunConfigWriter {
-	protected final RunConfiguration run;
-	protected final Project project;
+    protected final Project project;
+    protected final RunConfiguration run;
 
-	protected AbstractIntellijRunConfigWriter(RunConfiguration run, Project project) {
-		this.run = run;
-		this.project = project;
-	}
+    protected AbstractIntellijRunConfigWriter(RunConfiguration run, Project project) {
+        this.run = run;
+        this.project = project;
+    }
 
-	@Override
-	public boolean shouldOverwrite(String existingXml) {
-		return !getType().equals(IntellijRunConfigWriter.getType(existingXml));
-	}
+    @Override
+    public boolean shouldOverwrite(String existingXml) {
+        return !getType().equals(IntellijRunConfigWriter.getType(existingXml));
+    }
 }

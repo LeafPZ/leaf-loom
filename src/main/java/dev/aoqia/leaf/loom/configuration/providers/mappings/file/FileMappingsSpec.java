@@ -49,17 +49,24 @@ import dev.aoqia.leaf.loom.api.mappings.layered.spec.FileSpec;
 import dev.aoqia.leaf.loom.api.mappings.layered.spec.MappingsSpec;
 
 public record FileMappingsSpec(
-		FileSpec fileSpec, String mappingPath,
-		Optional<String> fallbackSourceNamespace, String fallbackTargetNamespace,
-		boolean enigma, boolean unpick, boolean annotations,
-		Optional<String> mergeNamespace,
-		Optional<String> fallbackUnpickConstants
-) implements MappingsSpec<FileMappingsLayer> {
-	@Override
-	public FileMappingsLayer createLayer(MappingContext context) {
-		String finalFallbackSourceNamespace = fallbackSourceNamespace.orElse(context.productionNamespace());
-		String finalMergeNamespace = mergeNamespace.orElse(context.isUsingIntermediateMappings() ? MappingsNamespace.INTERMEDIARY.toString() : MappingsNamespace.OFFICIAL.toString());
-		String finalFallbackUnpickConstants = unpick ? fallbackUnpickConstants.orElse(null) : null;
-		return new FileMappingsLayer(fileSpec.get(context), mappingPath, finalFallbackSourceNamespace, fallbackTargetNamespace, enigma, unpick, annotations, finalMergeNamespace, finalFallbackUnpickConstants);
-	}
+    FileSpec fileSpec,
+    String mappingPath,
+    Optional<String> fallbackSourceNamespace,
+    String fallbackTargetNamespace,
+    boolean enigma,
+    boolean unpick,
+    boolean annotations,
+    Optional<String> mergeNamespace,
+    Optional<String> fallbackUnpickConstants
+) implements MappingsSpec<FileMappingsLayer>
+{
+    @Override
+    public FileMappingsLayer createLayer(MappingContext context) {
+        String finalFallbackSourceNamespace = fallbackSourceNamespace.orElse(context.productionNamespace());
+        String finalMergeNamespace = mergeNamespace.orElse(context.isUsingIntermediateMappings()
+            ? MappingsNamespace.INTERMEDIARY.toString() : MappingsNamespace.OFFICIAL.toString());
+        String finalFallbackUnpickConstants = unpick ? fallbackUnpickConstants.orElse(null) : null;
+        return new FileMappingsLayer(fileSpec.get(context), mappingPath, finalFallbackSourceNamespace,
+            fallbackTargetNamespace, enigma, unpick, annotations, finalMergeNamespace, finalFallbackUnpickConstants);
+    }
 }

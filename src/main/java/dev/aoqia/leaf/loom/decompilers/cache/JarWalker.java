@@ -77,200 +77,202 @@ import dev.aoqia.leaf.loom.util.CompletableFutureCollector;
 import dev.aoqia.leaf.loom.util.FileSystemUtil;
 
 public final class JarWalker {
-	private static final Logger LOGGER = LoggerFactory.getLogger(JarWalker.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(JarWalker.class);
 
-	private JarWalker() {
-	}
+    private JarWalker() {
+    }
 
-	public static List<ClassEntry> findClasses(Path jar) throws IOException {
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(jar)) {
-			return findClasses(fs);
-		}
-	}
+    public static List<ClassEntry> findClasses(FileSystemUtil.Delegate fs) throws IOException {
+        List<String> outerClasses = new ArrayList<>();
+        Map<String, List<String>> innerClasses = new HashMap<>();
 
-	public static List<ClassEntry> findClasses(FileSystemUtil.Delegate fs) throws IOException {
-		List<String> outerClasses = new ArrayList<>();
-		Map<String, List<String>> innerClasses = new HashMap<>();
+        Map<String, Set<String>> innerClassesFromOuterCache = new HashMap<>();
 
-		Map<String, Set<String>> innerClassesFromOuterCache = new HashMap<>();
+        // Iterate over all the classes in the jar, and store them into the sorted list.
+        try (Stream<Path> walk = Files.walk(fs.getRoot())) {
+            Iterator<Path> iterator = walk.iterator();
 
-		// Iterate over all the classes in the jar, and store them into the sorted list.
-		try (Stream<Path> walk = Files.walk(fs.getRoot())) {
-			Iterator<Path> iterator = walk.iterator();
+            while (iterator.hasNext()) {
+                final Path entry = iterator.next();
 
-			while (iterator.hasNext()) {
-				final Path entry = iterator.next();
+                if (!Files.isRegularFile(entry)) {
+                    continue;
+                }
 
-				if (!Files.isRegularFile(entry)) {
-					continue;
-				}
-
-				final String fileName = entry.toString().substring(fs.getRoot().toString().length());
+                final String fileName = entry.toString().substring(fs.getRoot().toString().length());
 
                 // FIXME(leaf): Hacky hacky hack!
-				if (!fileName.endsWith(".class") || fileName.startsWith("META-INF/versions/")) {
-					continue;
-				}
+                if (!fileName.endsWith(".class") || fileName.startsWith("META-INF/versions/")) {
+                    continue;
+                }
 
-				String outerClass = findOuterClass(fs, fileName, innerClassesFromOuterCache);
+                String outerClass = findOuterClass(fs, fileName, innerClassesFromOuterCache);
 
-				if (outerClass == null) {
-					outerClasses.add(fileName);
-				} else {
-					innerClasses.computeIfAbsent(outerClass + ".class", k -> new ArrayList<>()).add(fileName);
-				}
-			}
-		}
+                if (outerClass == null) {
+                    outerClasses.add(fileName);
+                } else {
+                    innerClasses.computeIfAbsent(outerClass + ".class", k -> new ArrayList<>()).add(fileName);
+                }
+            }
+        }
 
-		LOGGER.info("Found {} outer classes and {} inner classes", outerClasses.size(), innerClasses.size());
+        LOGGER.info("Found {} outer classes and {} inner classes", outerClasses.size(), innerClasses.size());
 
-		Collections.sort(outerClasses);
+        Collections.sort(outerClasses);
 
-		final Executor executor = getExecutor();
-		List<CompletableFuture<ClassEntry>> classEntries = new ArrayList<>();
+        final Executor executor = getExecutor();
+        List<CompletableFuture<ClassEntry>> classEntries = new ArrayList<>();
 
-		for (String outerClass : outerClasses) {
-			List<String> innerClassList = new ArrayList<>(innerClasses.getOrDefault(outerClass, List.of()));
+        for (String outerClass : outerClasses) {
+            List<String> innerClassList = new ArrayList<>(innerClasses.getOrDefault(outerClass, List.of()));
 
-			// Include every descendant so nested classes are copied and hashed with their top-level class.
-			for (int i = 0; i < innerClassList.size(); i++) {
-				String innerClass = innerClassList.get(i);
-				innerClassList.addAll(innerClasses.getOrDefault(innerClass, List.of()));
-			}
+            // Include every descendant so nested classes are copied and hashed with their top-level class.
+            for (int i = 0; i < innerClassList.size(); i++) {
+                String innerClass = innerClassList.get(i);
+                innerClassList.addAll(innerClasses.getOrDefault(innerClass, List.of()));
+            }
 
-			Collections.sort(innerClassList);
-			classEntries.add(getClassEntry(outerClass, innerClassList, fs, executor));
-		}
+            Collections.sort(innerClassList);
+            classEntries.add(getClassEntry(outerClass, innerClassList, fs, executor));
+        }
 
-		try {
-			return classEntries.stream()
-					.collect(CompletableFutureCollector.allOf())
-					.get(10, TimeUnit.MINUTES);
-		} catch (InterruptedException | ExecutionException | TimeoutException e) {
-			throw new RuntimeException("Failed to get class entries", e);
-		}
-	}
+        try {
+            return classEntries.stream().collect(CompletableFutureCollector.allOf()).get(10, TimeUnit.MINUTES);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            throw new RuntimeException("Failed to get class entries", e);
+        }
+    }
 
-	/**
-	 * Check if the given class file denotes and inner class and find the corresponding outer class name.
-	 */
-	private static String findOuterClass(FileSystemUtil.Delegate fs, String classFile, Map<String, Set<String>> innerClassesFromOuterCache) throws IOException {
-		// this check can speed things up quite a bit, even if it does not follow the JVM spec
-		if (classFile.indexOf('$') < 0) {
-			return null;
-		}
+    public static List<ClassEntry> findClasses(Path jar) throws IOException {
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(jar)) {
+            return findClasses(fs);
+        }
+    }
 
-		try (InputStream is = Files.newInputStream(fs.getPath(classFile))) {
-			final ClassReader reader = new ClassReader(is);
-			final ClassNode classNode = new ClassNode();
+    private static Set<String> enumerateInnerClasses(FileSystemUtil.Delegate fs, String className) {
+        try (InputStream is = Files.newInputStream(fs.getPath(className + ".class"))) {
+            final ClassReader reader = new ClassReader(is);
+            final ClassNode classNode = new ClassNode();
 
-			reader.accept(classNode, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
+            reader.accept(classNode, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
 
-			for (InnerClassNode innerClass : classNode.innerClasses) {
-				// a class file also contains references to enclosed inner classes
-				if (innerClass.name.equals(classNode.name)) {
-					// only regular inner classes have the outer class in the inner class attribute
-					if (innerClass.outerName != null) {
-						String candidate = innerClass.outerName;
-						Set<String> fromOuterClass = innerClassesFromOuterCache.computeIfAbsent(candidate, className -> enumerateInnerClasses(fs, className));
+            return classNode.innerClasses.stream()
+                .map(innerClassNode -> innerClassNode.name)
+                .collect(Collectors.toSet());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
-						if (fromOuterClass.contains(classNode.name)) {
-							return candidate;
-						}
-					}
+    /**
+     * Check if the given class file denotes and inner class and find the corresponding outer class name.
+     */
+    private static String findOuterClass(FileSystemUtil.Delegate fs, String classFile,
+        Map<String, Set<String>> innerClassesFromOuterCache) throws IOException
+    {
+        // this check can speed things up quite a bit, even if it does not follow the JVM spec
+        if (classFile.indexOf('$') < 0) {
+            return null;
+        }
 
-					// local and anonymous classes have the outer class in the enclosing method attribute
-					// we check for both attributes because both should be present for decompilers to
-					// recognize a class as an inner class
-					if (classNode.outerClass != null) {
-						String candidate = classNode.outerClass;
-						Set<String> fromOuterClass = innerClassesFromOuterCache.computeIfAbsent(candidate, className -> enumerateInnerClasses(fs, className));
+        try (InputStream is = Files.newInputStream(fs.getPath(classFile))) {
+            final ClassReader reader = new ClassReader(is);
+            final ClassNode classNode = new ClassNode();
 
-						if (fromOuterClass.contains(classNode.name)) {
-							return candidate;
-						}
-					}
+            reader.accept(classNode, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
 
-					// there are some Minecraft versions with one attribute stripped but not the other
-					LOGGER.debug("inner class attribute is present for " + classNode.name + " but no outer class could be found, weird!");
-				}
-			}
-		}
+            for (InnerClassNode innerClass : classNode.innerClasses) {
+                // a class file also contains references to enclosed inner classes
+                if (innerClass.name.equals(classNode.name)) {
+                    // only regular inner classes have the outer class in the inner class attribute
+                    if (innerClass.outerName != null) {
+                        String candidate = innerClass.outerName;
+                        Set<String> fromOuterClass = innerClassesFromOuterCache.computeIfAbsent(candidate,
+                            className -> enumerateInnerClasses(fs, className));
 
-		return null;
-	}
+                        if (fromOuterClass.contains(classNode.name)) {
+                            return candidate;
+                        }
+                    }
 
-	private static Set<String> enumerateInnerClasses(FileSystemUtil.Delegate fs, String className) {
-		try (InputStream is = Files.newInputStream(fs.getPath(className + ".class"))) {
-			final ClassReader reader = new ClassReader(is);
-			final ClassNode classNode = new ClassNode();
+                    // local and anonymous classes have the outer class in the enclosing method attribute
+                    // we check for both attributes because both should be present for decompilers to
+                    // recognize a class as an inner class
+                    if (classNode.outerClass != null) {
+                        String candidate = classNode.outerClass;
+                        Set<String> fromOuterClass = innerClassesFromOuterCache.computeIfAbsent(candidate,
+                            className -> enumerateInnerClasses(fs, className));
 
-			reader.accept(classNode, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
+                        if (fromOuterClass.contains(classNode.name)) {
+                            return candidate;
+                        }
+                    }
 
-			return classNode.innerClasses.stream()
-					.map(innerClassNode -> innerClassNode.name)
-					.collect(Collectors.toSet());
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
-	}
+                    // there are some Minecraft versions with one attribute stripped but not the other
+                    LOGGER.debug("inner class attribute is present for " + classNode.name
+                        + " but no outer class could be found, weird!");
+                }
+            }
+        }
 
-	private static CompletableFuture<ClassEntry> getClassEntry(String outerClass, List<String> innerClasses, FileSystemUtil.Delegate fs, Executor executor) {
-		List<CompletableFuture<List<String>>> parentClassesFutures = new ArrayList<>();
+        return null;
+    }
 
-		// Get the super classes of the outer class and any inner classes
-		parentClassesFutures.add(CompletableFuture.supplyAsync(() -> getSuperClasses(outerClass, fs), executor));
+    private static CompletableFuture<ClassEntry> getClassEntry(String outerClass, List<String> innerClasses,
+        FileSystemUtil.Delegate fs, Executor executor)
+    {
+        List<CompletableFuture<List<String>>> parentClassesFutures = new ArrayList<>();
 
-		for (String innerClass : innerClasses) {
-			parentClassesFutures.add(CompletableFuture.supplyAsync(() -> getSuperClasses(innerClass, fs), executor));
-		}
+        // Get the super classes of the outer class and any inner classes
+        parentClassesFutures.add(CompletableFuture.supplyAsync(() -> getSuperClasses(outerClass, fs), executor));
 
-		return parentClassesFutures.stream()
-				.collect(CompletableFutureCollector.allOf())
-				.thenApply(lists -> lists.stream()
-						.flatMap(List::stream)
-						.filter(JarWalker::isNotReservedClass)
-						.distinct()
-						.toList())
-				.thenApply(parentClasses -> new ClassEntry(outerClass, innerClasses, parentClasses));
-	}
+        for (String innerClass : innerClasses) {
+            parentClassesFutures.add(CompletableFuture.supplyAsync(() -> getSuperClasses(innerClass, fs), executor));
+        }
 
-	private static List<String> getSuperClasses(String classFile, FileSystemUtil.Delegate fs) {
-		try (InputStream is = Files.newInputStream(fs.getPath(classFile))) {
-			final ClassReader reader = new ClassReader(is);
+        return parentClassesFutures.stream()
+            .collect(CompletableFutureCollector.allOf())
+            .thenApply(
+                lists -> lists.stream().flatMap(List::stream).filter(JarWalker::isNotReservedClass).distinct().toList())
+            .thenApply(parentClasses -> new ClassEntry(outerClass, innerClasses, parentClasses));
+    }
 
-			List<String> parentClasses = new ArrayList<>();
-			String superName = reader.getSuperName();
+    private static Executor getExecutor() {
+        if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_21)) {
+            try {
+                Method m = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
+                return (ExecutorService) m.invoke(null);
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                throw new RuntimeException("Failed to create virtual thread executor", e);
+            }
+        }
 
-			if (superName != null && !superName.equals("java/lang/Object")) {
-				parentClasses.add(superName + ".class");
-			}
+        return ForkJoinPool.commonPool();
+    }
 
-			for (String iface : reader.getInterfaces()) {
-				parentClasses.add(iface + ".class");
-			}
+    private static List<String> getSuperClasses(String classFile, FileSystemUtil.Delegate fs) {
+        try (InputStream is = Files.newInputStream(fs.getPath(classFile))) {
+            final ClassReader reader = new ClassReader(is);
 
-			return Collections.unmodifiableList(parentClasses);
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read class file: " + classFile, e);
-		}
-	}
+            List<String> parentClasses = new ArrayList<>();
+            String superName = reader.getSuperName();
 
-	private static Executor getExecutor() {
-		if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_21)) {
-			try {
-				Method m = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
-				return (ExecutorService) m.invoke(null);
-			} catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-				throw new RuntimeException("Failed to create virtual thread executor", e);
-			}
-		}
+            if (superName != null && !superName.equals("java/lang/Object")) {
+                parentClasses.add(superName + ".class");
+            }
 
-		return ForkJoinPool.commonPool();
-	}
+            for (String iface : reader.getInterfaces()) {
+                parentClasses.add(iface + ".class");
+            }
 
-	// Slight optimization, if we skip over Object
-	private static boolean isNotReservedClass(String name) {
-		return !"java/lang/Object".equals(name);
-	}
+            return Collections.unmodifiableList(parentClasses);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read class file: " + classFile, e);
+        }
+    }
+
+    // Slight optimization, if we skip over Object
+    private static boolean isNotReservedClass(String name) {
+        return !"java/lang/Object".equals(name);
+    }
 }

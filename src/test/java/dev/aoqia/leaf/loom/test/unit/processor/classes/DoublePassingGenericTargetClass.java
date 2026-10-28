@@ -42,8 +42,8 @@
 package dev.aoqia.leaf.loom.test.unit.processor.classes;
 
 public class DoublePassingGenericTargetClass<F, S> {
-	public static class Pair<F, S> {
-		Pair(F ignoredF, S ignoredS) {
-		}
-	}
+    public static class Pair<F, S> {
+        Pair(F ignoredF, S ignoredS) {
+        }
+    }
 }

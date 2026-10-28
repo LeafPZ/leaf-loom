@@ -91,305 +91,314 @@ import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 
 @DisableCachingByDefault
 public abstract class AbstractRunTask extends JavaExec {
-	private static final Logger LOGGER = LoggerFactory.getLogger(AbstractRunTask.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractRunTask.class);
 
-	@Inject
-	protected abstract ExecOperations getExecOperations();
+    public AbstractRunTask(Function<Project, RunConfiguration> configProvider) {
+        super();
+        setGroup(Constants.TaskGroup.LEAF);
 
-    // TODO maybe revert back to a string
-	@InputFiles
-	@PathSensitive(PathSensitivity.NONE)
-	protected abstract DirectoryProperty getInternalWorkingDir();
+        final Provider<RunConfiguration> config = getProject().provider(() -> configProvider.apply(getProject()));
 
-	// TODO maybe revert back to a string
-	@InputFiles
-	@PathSensitive(PathSensitivity.NONE)
-	protected abstract DirectoryProperty getInternalRunDir();
+        getInternalClasspath().from(
+            config.map(runConfig -> SourceSetHelper.getSourceSetByName(runConfig.getSourceSet().get(), getProject())
+                .getRuntimeClasspath()
+                .filter(new LibraryFilter(RuntimeLibraries.getExcludedLibraryPaths(getProject(), config.get()),
+                    RunConfigUtils.getDisplayName(config.get(), getProject())))));
 
-	@Input
-	protected abstract MapProperty<String, Object> getInternalEnvironmentVars();
-	@Input
-	protected abstract ListProperty<String> getInternalJvmArgs();
-	@Input
-	protected abstract Property<Boolean> getUseArgFile();
-	@Input
-	protected abstract Property<String> getProjectDir();
-	@Input
-	// We use a string here, as it's technically an output, but we don't want to cache runs of this task by default.
-	protected abstract Property<String> getArgFilePath();
-	@Input
-	public abstract Property<Boolean> getUseXvfb();
+        getArgumentProviders().add(new CommandLineArgumentProvider() {
+            @Override
+            public Iterable<String> asArguments() {
+                return config.get().getProgramArguments().get();
+            }
+        });
+        getArgumentProviders().add(new CommandLineArgumentProvider() {
+            @Override
+            public Iterable<String> asArguments() {
+                if (AbstractRunTask.this.getTracyCapture().isPresent()) {
+                    return List.of("--tracy");
+                }
 
-	@Nested
-	@Optional
-	public abstract Property<TracyCapture> getTracyCapture();
-
-	/**
-	 * Configures the tracy profiler to run alongside the game. See @{@link TracyCapture} for more information.
-	 *
-	 * @param action The configuration action.
-	 */
-	@SuppressWarnings("unused")
-	public void tracy(Action<? super TracyCapture> action) {
-		getTracyCapture().set(getProject().getObjects().newInstance(TracyCapture.class));
-		getTracyCapture().finalizeValue();
-		action.execute(getTracyCapture().get());
-	}
-
-	// We control the classpath, as we use a ArgFile to pass it over the command line: https://docs.oracle.com/javase/7/docs/technotes/tools/windows/javac.html#commandlineargfile
-	@Classpath
-	protected abstract ConfigurableFileCollection getInternalClasspath();
-
-	public AbstractRunTask(Function<Project, RunConfiguration> configProvider) {
-		super();
-		setGroup(Constants.TaskGroup.LEAF);
-
-		final Provider<RunConfiguration> config = getProject().provider(() -> configProvider.apply(getProject()));
-
-		getInternalClasspath().from(config.map(runConfig -> SourceSetHelper.getSourceSetByName(runConfig.getSourceSet().get(), getProject()).getRuntimeClasspath()
-				.filter(new LibraryFilter(
-						RuntimeLibraries.getExcludedLibraryPaths(getProject(), config.get()),
-						RunConfigUtils.getDisplayName(config.get(), getProject()))
-				)));
-
-		getArgumentProviders().add(new CommandLineArgumentProvider() {
-			@Override
-			public Iterable<String> asArguments() {
-				return config.get().getProgramArguments().get();
-			}
-		});
-		getArgumentProviders().add(new CommandLineArgumentProvider() {
-			@Override
-			public Iterable<String> asArguments() {
-				if (AbstractRunTask.this.getTracyCapture().isPresent()) {
-					return List.of("--tracy");
-				}
-
-				return List.of();
-			}
-		});
-		getMainClass().set(config.flatMap(RunConfiguration::getDevLaunchMainClass));
-		getJvmArgumentProviders().add(this::getGameJvmArgs);
+                return List.of();
+            }
+        });
+        getMainClass().set(config.flatMap(RunConfiguration::getDevLaunchMainClass));
+        getJvmArgumentProviders().add(this::getGameJvmArgs);
 
         getInternalWorkingDir().set(config.flatMap(RunConfiguration::getWorkingDirectory));
         getInternalRunDir().set(config.flatMap(RunConfiguration::getRunDirectory));
         getInternalEnvironmentVars().set(config.flatMap(RunConfiguration::getEnvironmentVars));
         getInternalJvmArgs().set(config.flatMap(RunConfiguration::getJvmArguments));
-		getUseArgFile().set(getProject().provider(this::canUseArgFile));
-		getProjectDir().set(getProject().getProjectDir().getAbsolutePath());
+        getUseArgFile().set(getProject().provider(this::canUseArgFile));
+        getProjectDir().set(getProject().getProjectDir().getAbsolutePath());
 
-		// Set up useXvfb: convention is CI + Linux + client run config + xvfb exists
-		getUseXvfb().convention(
-				getProject().getProviders().environmentVariable("CI")
-						.map(value -> Platform.CURRENT.getOperatingSystem().isLinux())
-						.zip(config, (enabled, runConfig) -> enabled && runConfig.getRuntimeEnvironment().get().equals("client"))
-						.flatMap(enabled -> enabled ? XVFBExistsValueSource.exists(getProject()) : getProject().getProviders().provider(() -> false))
-						.orElse(false)
-		);
+        // Set up useXvfb: convention is CI + Linux + client run config + xvfb exists
+        getUseXvfb().convention(getProject().getProviders()
+            .environmentVariable("CI")
+            .map(value -> Platform.CURRENT.getOperatingSystem().isLinux())
+            .zip(config, (enabled, runConfig) -> enabled && runConfig.getRuntimeEnvironment().get().equals("client"))
+            .flatMap(enabled -> enabled ? XVFBExistsValueSource.exists(getProject())
+                : getProject().getProviders().provider(() -> false))
+            .orElse(false));
 
-		File buildCache = LoomGradleExtension.get(getProject()).getFiles().getProjectBuildCache();
-		File argFile = new File(buildCache, "argFiles/" + getName());
-		getArgFilePath().set(argFile.getAbsolutePath());
-	}
+        File buildCache = LoomGradleExtension.get(getProject()).getFiles().getProjectBuildCache();
+        File argFile = new File(buildCache, "argFiles/" + getName());
+        getArgFilePath().set(argFile.getAbsolutePath());
+    }
 
-	private boolean canUseArgFile() {
-		if (!canPathBeASCIIEncoded()) {
-			// The gradle home or project dir contain chars that cannot be ascii encoded, thus are not supported by an arg file.
-			return false;
-		}
+    // https://github.com/JetBrains/intellij-community/blob/295dd68385a458bdfde638152e36d19bed18b666/platform/util/base/src/com/intellij/openapi/util/text/Strings.java#L100-L118
+    public static boolean containsAnyChar(final String value, final String chars) {
+        return chars.length() > value.length() ? containsAnyChar(value, chars, 0, value.length())
+            : containsAnyChar(chars, value, 0, chars.length());
+    }
 
-		// @-files were added for java (not javac) in Java 9, see https://bugs.openjdk.org/browse/JDK-8027634
-		return getJavaVersion().isJava9Compatible();
-	}
+    public static boolean containsAnyChar(final String value, final String chars, final int start, final int end) {
+        for (int i = start; i < end; i++) {
+            if (chars.indexOf(value.charAt(i)) >= 0) {
+                return true;
+            }
+        }
 
-	private boolean canPathBeASCIIEncoded() {
-		CharsetEncoder asciiEncoder = StandardCharsets.US_ASCII.newEncoder();
+        return false;
+    }
 
-		return asciiEncoder.canEncode(getProject().getProjectDir().getAbsolutePath())
-				&& asciiEncoder.canEncode(getProject().getGradle().getGradleUserHomeDir().getAbsolutePath());
-	}
+    // Based off
+    // https://github.com/JetBrains/intellij-community/blob/295dd68385a458bdfde638152e36d19bed18b666/platform/util/src/com/intellij/execution/CommandLineWrapperUtil.java#L87
+    private static String quoteArg(String arg) {
+        final String specials = " #'\"\n\r\t\f";
 
-	@Override
-	public void exec() {
-		if (getUseArgFile().get()) {
-			LOGGER.debug("Using arg file for {}", getName());
-			writeArgFile();
-			// We're using an arg file, pass an empty classpath to the super JavaExec.
-			super.setClasspath(getObjectFactory().fileCollection());
-		} else {
-			LOGGER.debug("Using bare classpath for {}", getName());
-			// The classpath is passed normally, so pass the full classpath to the super JavaExec.
-			super.setClasspath(getInternalClasspath());
-		}
+        if (!containsAnyChar(arg, specials)) {
+            return arg;
+        }
 
-		setWorkingDir(getInternalWorkingDir());
-		environment(getInternalEnvironmentVars().get());
+        final StringBuilder sb = new StringBuilder(arg.length() * 2);
 
-		Path runDirectory = getInternalRunDir().getAsFile().get().toPath();
-		if (!Files.exists(runDirectory)) {
-			try {
-				Files.createDirectories(runDirectory);
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to create run directory " + runDirectory, e);
-			}
-		} else if (!Files.isDirectory(runDirectory)) {
-			LOGGER.warn("Run directory {} is not a directory", runDirectory);
-		}
+        for (int i = 0; i < arg.length(); i++) {
+            char c = arg.charAt(i);
 
-		// Wrap with Tracy if enabled
-		if (getTracyCapture().isPresent()) {
-			try {
-				getTracyCapture().get().runWithTracy(this::execInternal);
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to run with Tracy", e);
-			}
+            switch (c) {
+                case ' ', '#', '\'' -> sb.append('"').append(c).append('"');
+                case '"' -> sb.append("\"\\\"\"");
+                case '\n' -> sb.append("\"\\n\"");
+                case '\r' -> sb.append("\"\\r\"");
+                case '\t' -> sb.append("\"\\t\"");
+                case '\f' -> sb.append("\"\\f\"");
+                default -> sb.append(c);
+            }
+        }
 
-			return;
-		}
+        return sb.toString();
+    }
 
-		execInternal();
-	}
+    @Override
+    public JavaExec classpath(Object... paths) {
+        this.getInternalClasspath().from(paths);
+        return this;
+    }
 
-	private void execInternal() {
-		// Wrap with XVFB if enabled and on Linux
-		if (getUseXvfb().get()) {
-			LOGGER.info("Using XVFB for headless client execution");
-			execWithXvfb();
-		} else {
-			super.exec();
-		}
-	}
+    @Override
+    public void exec() {
+        if (getUseArgFile().get()) {
+            LOGGER.debug("Using arg file for {}", getName());
+            writeArgFile();
+            // We're using an arg file, pass an empty classpath to the super JavaExec.
+            super.setClasspath(getObjectFactory().fileCollection());
+        } else {
+            LOGGER.debug("Using bare classpath for {}", getName());
+            // The classpath is passed normally, so pass the full classpath to the super JavaExec.
+            super.setClasspath(getInternalClasspath());
+        }
 
-	private void execWithXvfb() {
-		String javaExec = getJavaLauncher().get().getExecutablePath().getAsFile().getAbsolutePath();
+        setWorkingDir(getInternalWorkingDir());
+        environment(getInternalEnvironmentVars().get());
 
-		// Build the complete command line: xvfb-run --auto-servernum java [jvm-args] mainclass [program-args]
-		List<String> commandLine = new ArrayList<>();
-		commandLine.add(XVFBExistsValueSource.XVFB);
-		commandLine.add("--auto-servernum");
-		commandLine.add(javaExec);
-		commandLine.addAll(getAllJvmArgs());
-		commandLine.add(getMainClass().get());
-		commandLine.addAll(getArgs());
+        Path runDirectory = getInternalRunDir().getAsFile().get().toPath();
+        if (!Files.exists(runDirectory)) {
+            try {
+                Files.createDirectories(runDirectory);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to create run directory " + runDirectory, e);
+            }
+        } else if (!Files.isDirectory(runDirectory)) {
+            LOGGER.warn("Run directory {} is not a directory", runDirectory);
+        }
 
-		for (CommandLineArgumentProvider provider : getArgumentProviders()) {
-			for (String arg : provider.asArguments()) {
-				commandLine.add(arg);
-			}
-		}
+        // Wrap with Tracy if enabled
+        if (getTracyCapture().isPresent()) {
+            try {
+                getTracyCapture().get().runWithTracy(this::execInternal);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to run with Tracy", e);
+            }
 
-		getExecOperations().exec(execSpec -> {
-			execSpec.setCommandLine(commandLine);
-			execSpec.setWorkingDir(getWorkingDir());
-			execSpec.setEnvironment(getEnvironment());
-		});
-	}
+            return;
+        }
 
-	@Override
-	public void setWorkingDir(File dir) {
-		if (!dir.exists()) {
-			dir.mkdirs();
-		}
+        execInternal();
+    }
 
-		super.setWorkingDir(dir);
-	}
+    @Override
+    public FileCollection getClasspath() {
+        return this.getInternalClasspath();
+    }
 
-	private List<String> getGameJvmArgs() {
-		final List<String> args = new ArrayList<>();
+    @Nested
+    @Optional
+    public abstract Property<TracyCapture> getTracyCapture();
 
-		if (getUseArgFile().get()) {
-			args.add("@" + Paths.get(getArgFilePath().get()).toAbsolutePath());
-		}
+    @Input
+    public abstract Property<Boolean> getUseXvfb();
 
-		args.addAll(getInternalJvmArgs().get());
-		return args;
-	}
+    @Override
+    public JavaExec setClasspath(FileCollection classpath) {
+        this.getInternalClasspath().setFrom(classpath);
+        return this;
+    }
 
-	private void writeArgFile() {
-		final String content = "-classpath\n" + this.getInternalClasspath().getFiles().stream()
-				.map(File::getAbsolutePath)
-				.map(AbstractRunTask::quoteArg)
-				.collect(Collectors.joining(File.pathSeparator));
+    @Override
+    public void setWorkingDir(File dir) {
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
 
-		try {
-			final Path argsFile = Paths.get(getArgFilePath().get());
-			Files.createDirectories(argsFile.getParent());
-			Files.writeString(argsFile, content, StandardCharsets.UTF_8);
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to create classpath file", e);
-		}
-	}
+        super.setWorkingDir(dir);
+    }
 
-	// Based off https://github.com/JetBrains/intellij-community/blob/295dd68385a458bdfde638152e36d19bed18b666/platform/util/src/com/intellij/execution/CommandLineWrapperUtil.java#L87
-	private static String quoteArg(String arg) {
-		final String specials = " #'\"\n\r\t\f";
+    /**
+     * Configures the tracy profiler to run alongside the game. See @{@link TracyCapture} for more information.
+     *
+     * @param action The configuration action.
+     */
+    @SuppressWarnings("unused")
+    public void tracy(Action<? super TracyCapture> action) {
+        getTracyCapture().set(getProject().getObjects().newInstance(TracyCapture.class));
+        getTracyCapture().finalizeValue();
+        action.execute(getTracyCapture().get());
+    }
 
-		if (!containsAnyChar(arg, specials)) {
-			return arg;
-		}
+    @Input
+    // We use a string here, as it's technically an output, but we don't want to cache runs of this task by default.
+    protected abstract Property<String> getArgFilePath();
 
-		final StringBuilder sb = new StringBuilder(arg.length() * 2);
+    @Inject
+    protected abstract ExecOperations getExecOperations();
 
-		for (int i = 0; i < arg.length(); i++) {
-			char c = arg.charAt(i);
+    // We control the classpath, as we use a ArgFile to pass it over the command line:
+    // https://docs.oracle.com/javase/7/docs/technotes/tools/windows/javac.html#commandlineargfile
+    @Classpath
+    protected abstract ConfigurableFileCollection getInternalClasspath();
 
-			switch (c) {
-			case ' ', '#', '\'' -> sb.append('"').append(c).append('"');
-			case '"' -> sb.append("\"\\\"\"");
-			case '\n' -> sb.append("\"\\n\"");
-			case '\r' -> sb.append("\"\\r\"");
-			case '\t' -> sb.append("\"\\t\"");
-			case '\f' -> sb.append("\"\\f\"");
-			default -> sb.append(c);
-			}
-		}
+    @Input
+    protected abstract MapProperty<String, Object> getInternalEnvironmentVars();
 
-		return sb.toString();
-	}
+    @Input
+    protected abstract ListProperty<String> getInternalJvmArgs();
 
-	// https://github.com/JetBrains/intellij-community/blob/295dd68385a458bdfde638152e36d19bed18b666/platform/util/base/src/com/intellij/openapi/util/text/Strings.java#L100-L118
-	public static boolean containsAnyChar(final String value, final String chars) {
-		return chars.length() > value.length()
-				? containsAnyChar(value, chars, 0, value.length())
-				: containsAnyChar(chars, value, 0, chars.length());
-	}
+    // TODO maybe revert back to a string
+    @InputFiles
+    @PathSensitive(PathSensitivity.NONE)
+    protected abstract DirectoryProperty getInternalRunDir();
 
-	public static boolean containsAnyChar(final String value, final String chars, final int start, final int end) {
-		for (int i = start; i < end; i++) {
-			if (chars.indexOf(value.charAt(i)) >= 0) {
-				return true;
-			}
-		}
+    // TODO maybe revert back to a string
+    @InputFiles
+    @PathSensitive(PathSensitivity.NONE)
+    protected abstract DirectoryProperty getInternalWorkingDir();
 
-		return false;
-	}
+    @Input
+    protected abstract Property<String> getProjectDir();
 
-	@Override
-	public JavaExec setClasspath(FileCollection classpath) {
-		this.getInternalClasspath().setFrom(classpath);
-		return this;
-	}
+    @Input
+    protected abstract Property<Boolean> getUseArgFile();
 
-	@Override
-	public JavaExec classpath(Object... paths) {
-		this.getInternalClasspath().from(paths);
-		return this;
-	}
+    private boolean canPathBeASCIIEncoded() {
+        CharsetEncoder asciiEncoder = StandardCharsets.US_ASCII.newEncoder();
 
-	@Override
-	public FileCollection getClasspath() {
-		return this.getInternalClasspath();
-	}
+        return asciiEncoder.canEncode(getProject().getProjectDir().getAbsolutePath())
+            && asciiEncoder.canEncode(getProject().getGradle().getGradleUserHomeDir().getAbsolutePath());
+    }
 
-	public record LibraryFilter(List<String> excludedLibraryPaths, String configName) implements Spec<File> {
-		@Override
-		public boolean isSatisfiedBy(File element) {
-			if (excludedLibraryPaths.contains(element.getAbsolutePath())) {
-				LOGGER.debug("Excluding library {} from {} run config", element.getName(), configName);
-				return false;
-			}
+    private boolean canUseArgFile() {
+        if (!canPathBeASCIIEncoded()) {
+            // The gradle home or project dir contain chars that cannot be ascii encoded, thus are not supported by
+            // an arg file.
+            return false;
+        }
 
-			return true;
-		}
-	}
+        // @-files were added for java (not javac) in Java 9, see https://bugs.openjdk.org/browse/JDK-8027634
+        return getJavaVersion().isJava9Compatible();
+    }
+
+    private void execInternal() {
+        // Wrap with XVFB if enabled and on Linux
+        if (getUseXvfb().get()) {
+            LOGGER.info("Using XVFB for headless client execution");
+            execWithXvfb();
+        } else {
+            super.exec();
+        }
+    }
+
+    private void execWithXvfb() {
+        String javaExec = getJavaLauncher().get().getExecutablePath().getAsFile().getAbsolutePath();
+
+        // Build the complete command line: xvfb-run --auto-servernum java [jvm-args] mainclass [program-args]
+        List<String> commandLine = new ArrayList<>();
+        commandLine.add(XVFBExistsValueSource.XVFB);
+        commandLine.add("--auto-servernum");
+        commandLine.add(javaExec);
+        commandLine.addAll(getAllJvmArgs());
+        commandLine.add(getMainClass().get());
+        commandLine.addAll(getArgs());
+
+        for (CommandLineArgumentProvider provider : getArgumentProviders()) {
+            for (String arg : provider.asArguments()) {
+                commandLine.add(arg);
+            }
+        }
+
+        getExecOperations().exec(execSpec -> {
+            execSpec.setCommandLine(commandLine);
+            execSpec.setWorkingDir(getWorkingDir());
+            execSpec.setEnvironment(getEnvironment());
+        });
+    }
+
+    private List<String> getGameJvmArgs() {
+        final List<String> args = new ArrayList<>();
+
+        if (getUseArgFile().get()) {
+            args.add("@" + Paths.get(getArgFilePath().get()).toAbsolutePath());
+        }
+
+        args.addAll(getInternalJvmArgs().get());
+        return args;
+    }
+
+    private void writeArgFile() {
+        final String content = "-classpath\n" + this.getInternalClasspath()
+            .getFiles()
+            .stream()
+            .map(File::getAbsolutePath)
+            .map(AbstractRunTask::quoteArg)
+            .collect(Collectors.joining(File.pathSeparator));
+
+        try {
+            final Path argsFile = Paths.get(getArgFilePath().get());
+            Files.createDirectories(argsFile.getParent());
+            Files.writeString(argsFile, content, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to create classpath file", e);
+        }
+    }
+
+    public record LibraryFilter(List<String> excludedLibraryPaths, String configName) implements Spec<File> {
+        @Override
+        public boolean isSatisfiedBy(File element) {
+            if (excludedLibraryPaths.contains(element.getAbsolutePath())) {
+                LOGGER.debug("Excluding library {} from {} run config", element.getName(), configName);
+                return false;
+            }
+
+            return true;
+        }
+    }
 }

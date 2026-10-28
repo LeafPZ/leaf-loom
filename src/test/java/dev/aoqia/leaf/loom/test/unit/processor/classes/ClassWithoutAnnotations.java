@@ -42,11 +42,11 @@
 package dev.aoqia.leaf.loom.test.unit.processor.classes;
 
 public class ClassWithoutAnnotations {
-	public int otherField;
+    public int otherField;
 
-	public void otherMethod() {
-	}
+    public void otherMethod() {
+    }
 
-	public void otherMethodWithParams(int param) {
-	}
+    public void otherMethodWithParams(int param) {
+    }
 }

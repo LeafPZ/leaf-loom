@@ -55,31 +55,32 @@ import dev.aoqia.leaf.loom.api.LoomGradleExtensionAPI;
 import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 
 public class LeafModJsonHelpers {
-	/**
-	 * Returns the list of mods provided by either {@link LoomGradleExtensionAPI#getLeafModJsonPath()}
-	 * or {@code fabric.mod.json} in main or client resources.
-	 */
-	public static List<LeafModJson> getModsInProject(Project project) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		Provider<File> overrideFile = extension.getLeafModJsonPath().getAsFile();
+    /**
+     * Returns the list of mods provided by either {@link LoomGradleExtensionAPI#getLeafModJsonPath()}
+     * or {@code fabric.mod.json} in main or client resources.
+     */
+    public static List<LeafModJson> getModsInProject(Project project) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        Provider<File> overrideFile = extension.getLeafModJsonPath().getAsFile();
 
-		if (overrideFile.isPresent()) {
-			return List.of(LeafModJsonFactory.createFromFile(overrideFile.get()));
-		}
+        if (overrideFile.isPresent()) {
+            return List.of(LeafModJsonFactory.createFromFile(overrideFile.get()));
+        }
 
-		var sourceSets = new ArrayList<SourceSet>();
-		sourceSets.add(SourceSetHelper.getMainSourceSet(project));
+        var sourceSets = new ArrayList<SourceSet>();
+        sourceSets.add(SourceSetHelper.getMainSourceSet(project));
 
-		if (extension.areEnvironmentSourceSetsSplit()) {
-			sourceSets.add(SourceSetHelper.getSourceSetByName("client", project));
-		}
+        if (extension.areEnvironmentSourceSetsSplit()) {
+            sourceSets.add(SourceSetHelper.getSourceSetByName("client", project));
+        }
 
-		final LeafModJson fabricModJson = LeafModJsonFactory.createFromSourceSetsNullable(project, sourceSets.toArray(SourceSet[]::new));
+        final LeafModJson fabricModJson = LeafModJsonFactory.createFromSourceSetsNullable(project,
+            sourceSets.toArray(SourceSet[]::new));
 
-		if (fabricModJson != null) {
-			return List.of(fabricModJson);
-		}
+        if (fabricModJson != null) {
+            return List.of(fabricModJson);
+        }
 
-		return Collections.emptyList();
-	}
+        return Collections.emptyList();
+    }
 }

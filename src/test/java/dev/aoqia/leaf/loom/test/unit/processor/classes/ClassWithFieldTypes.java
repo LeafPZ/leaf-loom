@@ -44,7 +44,7 @@ package dev.aoqia.leaf.loom.test.unit.processor.classes;
 import java.util.List;
 
 public class ClassWithFieldTypes {
-	public List<String> listField;
+    public String[] arrayField;
 
-	public String[] arrayField;
+    public List<String> listField;
 }

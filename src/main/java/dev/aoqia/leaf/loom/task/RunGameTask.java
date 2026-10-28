@@ -50,11 +50,11 @@ import dev.aoqia.leaf.loom.configuration.ide.DefaultRunConfigurationSettings;
 
 @DisableCachingByDefault
 public abstract class RunGameTask extends AbstractRunTask {
-	@Inject
-	public RunGameTask(RunConfiguration settings) {
-		super(proj -> DefaultRunConfigurationSettings.finialise(settings, proj));
+    @Inject
+    public RunGameTask(RunConfiguration settings) {
+        super(proj -> DefaultRunConfigurationSettings.finialise(settings, proj));
 
-		// Defaults to empty, forwards stdin to mc.
-		setStandardInput(System.in);
-	}
+        // Defaults to empty, forwards stdin to mc.
+        setStandardInput(System.in);
+    }
 }

@@ -50,26 +50,29 @@ import org.gradle.api.tasks.Internal;
 import dev.aoqia.leaf.loom.util.gradle.GradleTypeAdapter;
 
 /**
- * A simple base class for creating cache keys. Extend this class and create abstract properties to be included in the cache key.
+ * A simple base class for creating cache keys. Extend this class and create abstract properties to be included in
+ * the cache key.
  */
 public abstract class CacheKey {
-	private static final int CHECKSUM_LENGTH = 8;
-	private final transient Supplier<String> jsonSupplier = Lazy.of(() -> GradleTypeAdapter.GSON.toJson(this));
-	private final transient Supplier<String> cacheKeySupplier = Lazy.of(() -> Checksum.of(jsonSupplier.get()).sha1().hex(CHECKSUM_LENGTH));
+    private static final int CHECKSUM_LENGTH = 8;
 
-	public static <T> T create(Project project, Class<T> clazz, Action<T> action) {
-		T instance = project.getObjects().newInstance(clazz);
-		action.execute(instance);
-		return instance;
-	}
+    private final transient Supplier<String> jsonSupplier = Lazy.of(() -> GradleTypeAdapter.GSON.toJson(this));
+    private final transient Supplier<
+        String> cacheKeySupplier = Lazy.of(() -> Checksum.of(jsonSupplier.get()).sha1().hex(CHECKSUM_LENGTH));
 
-	@Internal
-	public final String getJson() {
-		return jsonSupplier.get();
-	}
+    public static <T> T create(Project project, Class<T> clazz, Action<T> action) {
+        T instance = project.getObjects().newInstance(clazz);
+        action.execute(instance);
+        return instance;
+    }
 
-	@Internal
-	public final String getCacheKey() {
-		return cacheKeySupplier.get();
-	}
+    @Internal
+    public final String getCacheKey() {
+        return cacheKeySupplier.get();
+    }
+
+    @Internal
+    public final String getJson() {
+        return jsonSupplier.get();
+    }
 }

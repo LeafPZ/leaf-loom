@@ -65,41 +65,40 @@ import dev.aoqia.leaf.loom.util.Constants;
 
 @DisableCachingByDefault
 public abstract class GenerateRemapClasspathTask extends AbstractLoomTask {
-	@InputFiles
-	@PathSensitive(PathSensitivity.ABSOLUTE)
-	public abstract ConfigurableFileCollection getRemapClasspath();
+    public GenerateRemapClasspathTask() {
+        final ConfigurationContainer configurations = getProject().getConfigurations();
 
-	@OutputFile
-	public abstract RegularFileProperty getRemapClasspathFile();
+        getRemapClasspath().from(configurations.named(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES));
+        getExtension().getRuntimeRemapConfigurations()
+            .stream()
+            .map(RemapConfigurationSettings::getName)
+            .map(configurations::named)
+            .forEach(getRemapClasspath()::from);
 
-	public GenerateRemapClasspathTask() {
-		final ConfigurationContainer configurations = getProject().getConfigurations();
+        for (Path minecraftJar : getExtension().getZomboidJars(getExtension().getProductionNamespaceEnum().get())) {
+            getRemapClasspath().from(minecraftJar.toFile());
+        }
 
-		getRemapClasspath().from(configurations.named(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES));
-		getExtension().getRuntimeRemapConfigurations().stream()
-				.map(RemapConfigurationSettings::getName)
-				.map(configurations::named)
-				.forEach(getRemapClasspath()::from);
+        getRemapClasspathFile().set(getExtension().getFiles().getRemapClasspathFile());
+    }
 
-		for (Path minecraftJar : getExtension().getZomboidJars(getExtension().getProductionNamespaceEnum().get())) {
-			getRemapClasspath().from(minecraftJar.toFile());
-		}
+    @InputFiles
+    @PathSensitive(PathSensitivity.ABSOLUTE)
+    public abstract ConfigurableFileCollection getRemapClasspath();
 
-		getRemapClasspathFile().set(getExtension().getFiles().getRemapClasspathFile());
-	}
+    @OutputFile
+    public abstract RegularFileProperty getRemapClasspathFile();
 
-	@TaskAction
-	public void run() {
-		final List<File> remapClasspath = new ArrayList<>(getRemapClasspath().getFiles());
+    @TaskAction
+    public void run() {
+        final List<File> remapClasspath = new ArrayList<>(getRemapClasspath().getFiles());
 
-		String str = remapClasspath.stream()
-				.map(File::getAbsolutePath)
-				.collect(Collectors.joining(File.pathSeparator));
+        String str = remapClasspath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator));
 
-		try {
-			Files.writeString(getRemapClasspathFile().getAsFile().get().toPath(), str);
-		} catch (IOException e) {
-			throw new RuntimeException("Failed to generate remap classpath", e);
-		}
-	}
+        try {
+            Files.writeString(getRemapClasspathFile().getAsFile().get().toPath(), str);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to generate remap classpath", e);
+        }
+    }
 }

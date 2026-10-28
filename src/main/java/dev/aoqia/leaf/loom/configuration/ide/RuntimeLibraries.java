@@ -58,36 +58,41 @@ import dev.aoqia.leaf.loom.api.RunConfiguration;
 import dev.aoqia.leaf.loom.util.Constants;
 
 public class RuntimeLibraries {
-	public static List<String> getExcludedLibraryPaths(Project project, RunConfiguration runConfiguration) {
-		if (!runConfiguration.getRuntimeEnvironment().get().toLowerCase(Locale.ROOT).equals("server")) {
-			return Collections.emptyList();
-		}
+    public static List<String> getExcludedLibraryPaths(Project project, RunConfiguration runConfiguration) {
+        if (!runConfiguration.getRuntimeEnvironment().get().toLowerCase(Locale.ROOT).equals("server")) {
+            return Collections.emptyList();
+        }
 
-		final Set<ResolvedArtifact> clientLibraries = getArtifacts(project, Constants.Configurations.ZOMBOID_CLIENT_RUNTIME_LIBRARIES);
-		final Set<ResolvedArtifact> serverLibraries = getArtifacts(project, Constants.Configurations.ZOMBOID_SERVER_RUNTIME_LIBRARIES);
-		final List<String> clientOnlyLibraries = new ArrayList<>();
+        final Set<ResolvedArtifact> clientLibraries = getArtifacts(project,
+            Constants.Configurations.ZOMBOID_CLIENT_RUNTIME_LIBRARIES);
+        final Set<ResolvedArtifact> serverLibraries = getArtifacts(project,
+            Constants.Configurations.ZOMBOID_SERVER_RUNTIME_LIBRARIES);
+        final List<String> clientOnlyLibraries = new ArrayList<>();
 
-		for (ResolvedArtifact library : clientLibraries) {
-			if (!containsLibrary(serverLibraries, library.getModuleVersion().getId())) {
-				clientOnlyLibraries.add(library.getFile().getAbsolutePath());
-			}
-		}
+        for (ResolvedArtifact library : clientLibraries) {
+            if (!containsLibrary(serverLibraries, library.getModuleVersion().getId())) {
+                clientOnlyLibraries.add(library.getFile().getAbsolutePath());
+            }
+        }
 
-		return clientOnlyLibraries;
-	}
+        return clientOnlyLibraries;
+    }
 
-	private static Set<ResolvedArtifact> getArtifacts(Project project, String configuration) {
-		return project.getConfigurations().getByName(configuration).getHierarchy()
-				.stream()
-				.map(c -> c.getResolvedConfiguration().getResolvedArtifacts())
-				.flatMap(Collection::stream)
-				.collect(Collectors.toSet());
-	}
+    private static boolean containsLibrary(Set<ResolvedArtifact> artifacts, ModuleVersionIdentifier identifier) {
+        return artifacts.stream()
+            .map(ResolvedArtifact::getModuleVersion)
+            .map(ResolvedModuleVersion::getId)
+            .anyMatch(
+                test -> test.getGroup().equals(identifier.getGroup()) && test.getName().equals(identifier.getName()));
+    }
 
-	private static boolean containsLibrary(Set<ResolvedArtifact> artifacts, ModuleVersionIdentifier identifier) {
-		return artifacts.stream()
-				.map(ResolvedArtifact::getModuleVersion)
-				.map(ResolvedModuleVersion::getId)
-				.anyMatch(test -> test.getGroup().equals(identifier.getGroup()) && test.getName().equals(identifier.getName()));
-	}
+    private static Set<ResolvedArtifact> getArtifacts(Project project, String configuration) {
+        return project.getConfigurations()
+            .getByName(configuration)
+            .getHierarchy()
+            .stream()
+            .map(c -> c.getResolvedConfiguration().getResolvedArtifacts())
+            .flatMap(Collection::stream)
+            .collect(Collectors.toSet());
+    }
 }

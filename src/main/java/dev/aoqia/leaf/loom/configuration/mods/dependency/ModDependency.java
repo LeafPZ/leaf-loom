@@ -54,100 +54,103 @@ import dev.aoqia.leaf.loom.configuration.mods.ArtifactMetadata;
 import dev.aoqia.leaf.loom.configuration.mods.ArtifactRef;
 
 public abstract sealed class ModDependency permits SplitModDependency, SimpleModDependency {
-	private final ArtifactRef artifact;
-	private final ArtifactMetadata metadata;
-	private final String group;
-	private final String name;
-	private final String version;
-	@Nullable private final String classifier;
-	private final ModDependencyOptions options;
+    private final ArtifactRef artifact;
+    @Nullable
+    private final String classifier;
+    private final String group;
+    private final ArtifactMetadata metadata;
+    private final String name;
+    private final ModDependencyOptions options;
+    private final String version;
 
-	public ModDependency(ArtifactRef artifact, ArtifactMetadata metadata, ModDependencyOptions options) {
-		this.artifact = artifact;
-		this.metadata = metadata;
-		this.group = artifact.group();
-		this.name = artifact.name();
-		this.version = artifact.version();
-		this.classifier = artifact.classifier();
-		this.options = options;
-	}
+    public ModDependency(ArtifactRef artifact, ArtifactMetadata metadata, ModDependencyOptions options) {
+        this.artifact = artifact;
+        this.metadata = metadata;
+        this.group = artifact.group();
+        this.name = artifact.name();
+        this.version = artifact.version();
+        this.classifier = artifact.classifier();
+        this.options = options;
+    }
 
-	/**
-	 * Returns true when the cache is invalid.
-	 */
-	public abstract boolean isCacheInvalid(Project project, @Nullable String variant);
+    /**
+     * Apply the dependency to the project.
+     */
+    public abstract void applyToProject(Project project);
 
-	/**
-	 * Write an artifact to the local cache.
-	 */
-	public abstract void copyToCache(Project project, Path path, @Nullable String variant) throws IOException;
+    /**
+     * Write an artifact to the local cache.
+     */
+    public abstract void copyToCache(Project project, Path path, @Nullable String variant) throws IOException;
 
-	/**
-	 * Apply the dependency to the project.
-	 */
-	public abstract void applyToProject(Project project);
+    public ArtifactRef getInputArtifact() {
+        return artifact;
+    }
 
-	/**
-	 * Create a maven helper for the local cache.
-	 * @param type The jar type, e.g "common" or "client" for split dependencies.
-	 */
-	protected LocalMavenHelper createMavenHelper(Project project, @Nullable String type) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final Path root = extension.getFiles().getRemappedModCache().toPath();
-		final String fullName = getName() + (type != null ? "-" + type : "");
-		return new LocalMavenHelper(getGroup(), fullName, this.version, this.classifier, root, getSnapshotVersion());
-	}
+    public Path getInputFile() {
+        return artifact.path();
+    }
 
-	private @Nullable String getSnapshotVersion() {
-		if (artifact instanceof ArtifactRef.ResolvedArtifactRef resolvedArtifactRef) {
-			ComponentIdentifier componentIdentifier = resolvedArtifactRef.artifact().getId().getComponentIdentifier();
+    public ArtifactMetadata getMetadata() {
+        return metadata;
+    }
 
-			if (componentIdentifier instanceof MavenUniqueSnapshotComponentIdentifier mavenUniqueId) {
-				return mavenUniqueId.getSnapshotVersion();
-			}
-		}
+    public ModDependencyOptions getOptions() {
+        return options;
+    }
 
-		return null;
-	}
+    public Path getWorkingFile(Project project, @Nullable String classifier) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final String fileName = classifier == null ? String.format("%s-%s-%s.jar", getGroup(), getName(), version)
+            : String.format("%s-%s-%s-%s.jar", getGroup(), getName(), version, classifier);
 
-	public ArtifactRef getInputArtifact() {
-		return artifact;
-	}
+        return extension.getFiles().getProjectBuildCache().toPath().resolve("remapped_working").resolve(fileName);
+    }
 
-	public ArtifactMetadata getMetadata() {
-		return metadata;
-	}
+    /**
+     * Returns true when the cache is invalid.
+     */
+    public abstract boolean isCacheInvalid(Project project, @Nullable String variant);
 
-	protected String getName() {
-		return "%s-%s".formatted(name, options.getCacheKey());
-	}
+    @Override
+    public String toString() {
+        return "ModDependency{" + "group='" + group + '\'' + ", name='" + name + '\'' + ", version='" + version + '\''
+            + ", classifier='" + classifier + '\'' + '}';
+    }
 
-	protected String getGroup() {
-		return "remapped.%s".formatted(group);
-	}
+    /**
+     * Create a maven helper for the local cache.
+     *
+     * @param type The jar type, e.g "common" or "client" for split dependencies.
+     */
+    protected LocalMavenHelper createMavenHelper(Project project, @Nullable String type) {
+        final LoomGradleExtension extension = LoomGradleExtension.get(project);
+        final Path root = extension.getFiles().getRemappedModCache().toPath();
+        final String fullName = getName() + (type != null ? "-" + type : "");
+        return new LocalMavenHelper(getGroup(), fullName, this.version, this.classifier, root, getSnapshotVersion());
+    }
 
-	protected String getVersion() {
-		return version;
-	}
+    protected String getGroup() {
+        return "remapped.%s".formatted(group);
+    }
 
-	public Path getInputFile() {
-		return artifact.path();
-	}
+    protected String getName() {
+        return "%s-%s".formatted(name, options.getCacheKey());
+    }
 
-	public Path getWorkingFile(Project project, @Nullable String classifier) {
-		final LoomGradleExtension extension = LoomGradleExtension.get(project);
-		final String fileName = classifier == null ? String.format("%s-%s-%s.jar", getGroup(), getName(), version)
-													: String.format("%s-%s-%s-%s.jar", getGroup(), getName(), version, classifier);
+    protected String getVersion() {
+        return version;
+    }
 
-		return extension.getFiles().getProjectBuildCache().toPath().resolve("remapped_working").resolve(fileName);
-	}
+    private @Nullable String getSnapshotVersion() {
+        if (artifact instanceof ArtifactRef.ResolvedArtifactRef resolvedArtifactRef) {
+            ComponentIdentifier componentIdentifier = resolvedArtifactRef.artifact().getId().getComponentIdentifier();
 
-	public ModDependencyOptions getOptions() {
-		return options;
-	}
+            if (componentIdentifier instanceof MavenUniqueSnapshotComponentIdentifier mavenUniqueId) {
+                return mavenUniqueId.getSnapshotVersion();
+            }
+        }
 
-	@Override
-	public String toString() {
-		return "ModDependency{" + "group='" + group + '\'' + ", name='" + name + '\'' + ", version='" + version + '\'' + ", classifier='" + classifier + '\'' + '}';
-	}
+        return null;
+    }
 }

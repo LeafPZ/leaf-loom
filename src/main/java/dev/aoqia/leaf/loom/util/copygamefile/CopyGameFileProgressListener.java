@@ -22,18 +22,21 @@ package dev.aoqia.leaf.loom.util.copygamefile;
 public interface CopyGameFileProgressListener {
     CopyGameFileProgressListener NONE = new CopyGameFileProgressListener() {
         @Override
-        public void onStart() {}
+        public void onEnd() {
+        }
 
         @Override
-        public void onProgress(long bytesTransferred, long contentLength) {}
+        public void onProgress(long bytesTransferred, long contentLength) {
+        }
 
         @Override
-        public void onEnd() {}
+        public void onStart() {
+        }
     };
 
-    void onStart();
+    void onEnd();
 
     void onProgress(long bytesTransferred, long contentLength);
 
-    void onEnd();
+    void onStart();
 }

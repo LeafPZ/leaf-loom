@@ -51,30 +51,33 @@ import dev.aoqia.leaf.loom.api.mappings.layered.spec.FileSpec;
 import dev.aoqia.leaf.loom.util.Checksum;
 
 public class LocalFileSpec implements FileSpec {
-	private final File file;
-	private final int hash;
+    private final File file;
+    private final int hash;
 
-	public LocalFileSpec(File file) {
-		this.file = file;
-		this.hash = calculateHashCode();
-	}
+    public LocalFileSpec(File file) {
+        this.file = file;
+        this.hash = calculateHashCode();
+    }
 
-	private int calculateHashCode() {
-		if (!file.exists()) {
-			throw new RuntimeException("Could not find %s, it must be present at spec creation time to calculate mappings hash".formatted(file.getAbsolutePath()));
-		}
+    @Override
+    public Path get(MappingContext context) {
+        return file.toPath();
+    }
 
-		// Use the file hash as part of the spec, this means if the input file changes the mappings will be re-generated.
-		return Objects.hash(Arrays.hashCode(Checksum.of(file).sha256().digest()), file.getAbsolutePath());
-	}
+    @Override
+    public int hashCode() {
+        return hash;
+    }
 
-	@Override
-	public Path get(MappingContext context) {
-		return file.toPath();
-	}
+    private int calculateHashCode() {
+        if (!file.exists()) {
+            throw new RuntimeException(
+                "Could not find %s, it must be present at spec creation time to calculate mappings hash"
+                    .formatted(file.getAbsolutePath()));
+        }
 
-	@Override
-	public int hashCode() {
-		return hash;
-	}
+        // Use the file hash as part of the spec, this means if the input file changes the mappings will be
+        // re-generated.
+        return Objects.hash(Arrays.hashCode(Checksum.of(file).sha256().digest()), file.getAbsolutePath());
+    }
 }

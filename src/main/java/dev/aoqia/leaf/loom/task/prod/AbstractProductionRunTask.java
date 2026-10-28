@@ -80,150 +80,163 @@ import dev.aoqia.leaf.loom.task.RemapTaskConfiguration;
 import dev.aoqia.leaf.loom.util.Constants;
 
 /**
- * This is the base task for running the game in a "production" like environment. Using intermediary names, and not enabling development only features.
+ * This is the base task for running the game in a "production" like environment. Using intermediary names, and not
+ * enabling development only features.
  *
- * <p>Do not use this task directly, use {@link ClientProductionRunTask} or {@link ServerProductionRunTask} instead.
+ * <p>
+ * Do not use this task directly, use {@link ClientProductionRunTask} or {@link ServerProductionRunTask} instead.
  */
 @ApiStatus.Experimental
 @UntrackedTask(because = "Always rerun this task.")
-public abstract sealed class AbstractProductionRunTask extends AbstractLoomTask permits ClientProductionRunTask, ServerProductionRunTask {
-	private static final Logger LOGGER = LoggerFactory.getLogger(AbstractProductionRunTask.class);
+public abstract sealed class AbstractProductionRunTask extends AbstractLoomTask
+    permits ClientProductionRunTask, ServerProductionRunTask
+{
+    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractProductionRunTask.class);
 
-	/**
-	 * A collection of mods that will be used when running the game. The mods must be remapped to run with intermediary names.
-	 *
-	 * <p>By default this includes the remapped jar.
-	 */
-	@Classpath
-	public abstract ConfigurableFileCollection getMods();
+    @Inject
+    public AbstractProductionRunTask() {
+        JavaToolchainSpec defaultToolchain = getProject().getExtensions()
+            .getByType(JavaPluginExtension.class)
+            .getToolchain();
+        getJavaLauncher().convention(getJavaToolchainService().launcherFor(defaultToolchain));
+        getRunDir().convention(getProject().getLayout().getProjectDirectory().dir("run"));
 
-	/**
-	 * A list of additional JVM arguments to pass to the game.
-	 */
-	@Input
-	public abstract ListProperty<String> getJvmArgs();
+        // Use the appropriate jar based on whether remapping is enabled
+        if (getExtension().dontRemapOutputs()) {
+            // No remapping - use the standard jar task
+            getMods().from(getProject().getTasks().named(JavaPlugin.JAR_TASK_NAME));
+        } else {
+            // Remapping enabled - use the remapJar task
+            getMods().from(getProject().getTasks().named(RemapTaskConfiguration.REMAP_JAR_TASK_NAME));
+        }
 
-	/**
-	 * A list of additional program arguments to pass to the game.
-	 */
-	@Input
-	public abstract ListProperty<String> getProgramArgs();
+        getMods().from(getProject().getConfigurations().named(Constants.Configurations.PRODUCTION_RUNTIME_MODS));
+    }
 
-	/**
-	 * The directory to run the game in.
-	 */
-	@OutputDirectory
-	public abstract DirectoryProperty getRunDir();
+    private static String joinFiles(Stream<File> stream) {
+        return stream.map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator));
+    }
 
-	/**
-	 * The {@link JavaLauncher} to use when running the game, this can be used to specify a specific Java version to use.
-	 *
-	 * <p>See: <a href="https://docs.gradle.org/current/userguide/toolchains.html#sec:plugins_toolchains">Java Toolchains</a>
-	 * @return
-	 */
-	@Nested
-	public abstract Property<JavaLauncher> getJavaLauncher();
+    /**
+     * The {@link JavaLauncher} to use when running the game, this can be used to specify a specific Java version to
+     * use.
+     *
+     * <p>
+     * See:
+     * <a href="https://docs.gradle.org/current/userguide/toolchains.html#sec:plugins_toolchains">Java Toolchains</a>
+     *
+     * @return
+     */
+    @Nested
+    public abstract Property<JavaLauncher> getJavaLauncher();
 
-	// Internal options
-	@ApiStatus.Internal
-	@Classpath
-	protected abstract ConfigurableFileCollection getClasspath();
+    /**
+     * A list of additional JVM arguments to pass to the game.
+     */
+    @Input
+    public abstract ListProperty<String> getJvmArgs();
 
-	@ApiStatus.Internal
-	@Input
-	protected abstract Property<String> getMainClass();
+    /**
+     * A collection of mods that will be used when running the game. The mods must be remapped to run with
+     * intermediary names.
+     *
+     * <p>
+     * By default this includes the remapped jar.
+     */
+    @Classpath
+    public abstract ConfigurableFileCollection getMods();
 
-	@Inject
-	protected abstract ExecOperations getExecOperations();
+    /**
+     * A list of additional program arguments to pass to the game.
+     */
+    @Input
+    public abstract ListProperty<String> getProgramArgs();
 
-	@Inject
-	protected abstract JavaToolchainService getJavaToolchainService();
+    /**
+     * The directory to run the game in.
+     */
+    @OutputDirectory
+    public abstract DirectoryProperty getRunDir();
 
-	@Inject
-	public AbstractProductionRunTask() {
-		JavaToolchainSpec defaultToolchain = getProject().getExtensions().getByType(JavaPluginExtension.class).getToolchain();
-		getJavaLauncher().convention(getJavaToolchainService().launcherFor(defaultToolchain));
-		getRunDir().convention(getProject().getLayout().getProjectDirectory().dir("run"));
+    @TaskAction
+    public void run() throws IOException {
+        Files.createDirectories(getRunDir().get().getAsFile().toPath());
 
-		// Use the appropriate jar based on whether remapping is enabled
-		if (getExtension().dontRemapOutputs()) {
-			// No remapping - use the standard jar task
-			getMods().from(getProject().getTasks().named(JavaPlugin.JAR_TASK_NAME));
-		} else {
-			// Remapping enabled - use the remapJar task
-			getMods().from(getProject().getTasks().named(RemapTaskConfiguration.REMAP_JAR_TASK_NAME));
-		}
+        ExecResult result = getExecOperations().exec(exec -> {
+            configureCommand(exec);
+            configureJvmArgs(exec);
+            configureClasspath(exec);
+            configureMainClass(exec);
+            configureProgramArgs(exec);
 
-		getMods().from(getProject().getConfigurations().named(Constants.Configurations.PRODUCTION_RUNTIME_MODS));
-	}
+            exec.setStandardInput(System.in);
+            exec.setWorkingDir(getRunDir());
 
-	@TaskAction
-	public void run() throws IOException {
-		Files.createDirectories(getRunDir().get().getAsFile().toPath());
+            LOGGER.debug("Running command: {}", exec.getCommandLine());
+        });
+        result.assertNormalExitValue();
+    }
 
-		ExecResult result = getExecOperations().exec(exec -> {
-			configureCommand(exec);
-			configureJvmArgs(exec);
-			configureClasspath(exec);
-			configureMainClass(exec);
-			configureProgramArgs(exec);
+    protected void configureClasspath(ExecSpec exec) {
+        exec.args("-cp");
+        exec.args(joinFiles(streamClasspath()));
+    }
 
-			exec.setStandardInput(System.in);
-			exec.setWorkingDir(getRunDir());
+    protected void configureCommand(ExecSpec exec) {
+        exec.commandLine(getJavaLauncher().get().getExecutablePath());
+    }
 
-			LOGGER.debug("Running command: {}", exec.getCommandLine());
-		});
-		result.assertNormalExitValue();
-	}
+    protected void configureJvmArgs(ExecSpec exec) {
+        exec.args(getJvmArgs().get());
+        exec.args("-Dfabric.addMods=" + joinFiles(getMods().getFiles().stream()));
+    }
 
-	protected void configureCommand(ExecSpec exec) {
-		exec.commandLine(getJavaLauncher().get().getExecutablePath());
-	}
+    protected void configureMainClass(ExecSpec exec) {
+        exec.args(getMainClass().get());
+    }
 
-	protected void configureJvmArgs(ExecSpec exec) {
-		exec.args(getJvmArgs().get());
-		exec.args("-Dfabric.addMods=" + joinFiles(getMods().getFiles().stream()));
-	}
+    protected void configureProgramArgs(ExecSpec exec) {
+        exec.args(getProgramArgs().get());
+    }
 
-	protected Stream<File> streamClasspath() {
-		return getClasspath().getFiles().stream();
-	}
+    protected Provider<Configuration> detachedConfigurationProvider(String mavenNotation,
+        Provider<String> versionProvider)
+    {
+        return versionProvider.map(version -> {
+            Dependency serverLauncher = getProject().getDependencies().create(mavenNotation.formatted(version));
+            return getProject().getConfigurations().detachedConfiguration(serverLauncher);
+        });
+    }
 
-	protected void configureClasspath(ExecSpec exec) {
-		exec.args("-cp");
-		exec.args(joinFiles(streamClasspath()));
-	}
+    // Internal options
+    @ApiStatus.Internal
+    @Classpath
+    protected abstract ConfigurableFileCollection getClasspath();
 
-	protected void configureMainClass(ExecSpec exec) {
-		exec.args(getMainClass().get());
-	}
+    @Inject
+    protected abstract ExecOperations getExecOperations();
 
-	protected void configureProgramArgs(ExecSpec exec) {
-		exec.args(getProgramArgs().get());
-	}
+    @Inject
+    protected abstract JavaToolchainService getJavaToolchainService();
 
-	@Internal
-	protected Provider<String> getProjectLoaderVersion() {
-		return getProject().provider(() -> {
-			InstallerData installerData = getExtension().getInstallerData();
+    @ApiStatus.Internal
+    @Input
+    protected abstract Property<String> getMainClass();
 
-			if (installerData == null) {
-				return null;
-			}
+    @Internal
+    protected Provider<String> getProjectLoaderVersion() {
+        return getProject().provider(() -> {
+            InstallerData installerData = getExtension().getInstallerData();
 
-			return installerData.version();
-		});
-	}
+            if (installerData == null) {
+                return null;
+            }
 
-	protected Provider<Configuration> detachedConfigurationProvider(String mavenNotation, Provider<String> versionProvider) {
-		return versionProvider.map(version -> {
-			Dependency serverLauncher = getProject().getDependencies().create(mavenNotation.formatted(version));
-			return getProject().getConfigurations().detachedConfiguration(serverLauncher);
-		});
-	}
+            return installerData.version();
+        });
+    }
 
-	private static String joinFiles(Stream<File> stream) {
-		return stream.map(File::getAbsolutePath)
-				.collect(Collectors.joining(File.pathSeparator));
-	}
+    protected Stream<File> streamClasspath() {
+        return getClasspath().getFiles().stream();
+    }
 }

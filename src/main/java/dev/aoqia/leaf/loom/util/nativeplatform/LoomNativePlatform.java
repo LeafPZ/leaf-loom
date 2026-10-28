@@ -48,48 +48,48 @@ import java.util.List;
 import dev.aoqia.leaf.loom.util.Platform;
 
 public final class LoomNativePlatform {
-	private static final NativePlatform PLATFORM = create();
+    private static final NativePlatform PLATFORM = create();
 
-	private LoomNativePlatform() {
-	}
+    private LoomNativePlatform() {
+    }
 
-	public static List<ProcessHandle> getProcessesWithLockOn(Path path) throws LoomNativePlatformException {
-		return PLATFORM.getProcessesWithLockOn(path);
-	}
+    public static List<ProcessHandle> getProcessesWithLockOn(Path path) throws LoomNativePlatformException {
+        return PLATFORM.getProcessesWithLockOn(path);
+    }
 
-	public static List<String> getWindowTitlesForPid(long pid) throws LoomNativePlatformException {
-		return PLATFORM.getWindowTitlesForPid(pid);
-	}
+    public static List<String> getWindowTitlesForPid(long pid) throws LoomNativePlatformException {
+        return PLATFORM.getWindowTitlesForPid(pid);
+    }
 
-	public static boolean isSupported() {
-		return PLATFORM != UnsupportedNativePlatform.INSTANCE;
-	}
+    public static boolean isSupported() {
+        return PLATFORM != UnsupportedNativePlatform.INSTANCE;
+    }
 
-	private static NativePlatform create() {
-		if (Platform.CURRENT.getOperatingSystem().isWindows()) {
-			return WindowsNativePlatform.create();
-		}
+    private static NativePlatform create() {
+        if (Platform.CURRENT.getOperatingSystem().isWindows()) {
+            return WindowsNativePlatform.create();
+        }
 
-		return UnsupportedNativePlatform.INSTANCE;
-	}
+        return UnsupportedNativePlatform.INSTANCE;
+    }
 
-	interface NativePlatform {
-		List<ProcessHandle> getProcessesWithLockOn(Path path) throws LoomNativePlatformException;
+    interface NativePlatform {
+        List<ProcessHandle> getProcessesWithLockOn(Path path) throws LoomNativePlatformException;
 
-		List<String> getWindowTitlesForPid(long pid) throws LoomNativePlatformException;
-	}
+        List<String> getWindowTitlesForPid(long pid) throws LoomNativePlatformException;
+    }
 
-	private enum UnsupportedNativePlatform implements NativePlatform {
-		INSTANCE;
+    private enum UnsupportedNativePlatform implements NativePlatform {
+        INSTANCE;
 
-		@Override
-		public List<ProcessHandle> getProcessesWithLockOn(Path path) {
-			return Collections.emptyList();
-		}
+        @Override
+        public List<ProcessHandle> getProcessesWithLockOn(Path path) {
+            return Collections.emptyList();
+        }
 
-		@Override
-		public List<String> getWindowTitlesForPid(long pid) {
-			return Collections.emptyList();
-		}
-	}
+        @Override
+        public List<String> getWindowTitlesForPid(long pid) {
+            return Collections.emptyList();
+        }
+    }
 }

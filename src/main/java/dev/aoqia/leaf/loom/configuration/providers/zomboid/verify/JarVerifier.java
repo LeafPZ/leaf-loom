@@ -59,51 +59,53 @@ import org.slf4j.LoggerFactory;
 import dev.aoqia.leaf.loom.util.ZipReprocessorUtil;
 
 public final class JarVerifier {
-	private static final Logger LOGGER = LoggerFactory.getLogger(JarVerifier.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(JarVerifier.class);
 
-	private JarVerifier() {
-	}
+    private JarVerifier() {
+    }
 
-	public static void verify(Path jarPath, CertificateChain certificateChain) throws IOException, SignatureVerificationFailure {
-		Objects.requireNonNull(jarPath, "jarPath");
-		Objects.requireNonNull(certificateChain, "certificateChain");
+    public static void verify(Path jarPath, CertificateChain certificateChain)
+        throws IOException, SignatureVerificationFailure
+    {
+        Objects.requireNonNull(jarPath, "jarPath");
+        Objects.requireNonNull(certificateChain, "certificateChain");
 
-		if (certificateChain.issuer() != null) {
-			throw new IllegalStateException("Can only verify jars from a root certificate");
-		}
+        if (certificateChain.issuer() != null) {
+            throw new IllegalStateException("Can only verify jars from a root certificate");
+        }
 
-		Set<X509Certificate> jarCertificates = new HashSet<>();
+        Set<X509Certificate> jarCertificates = new HashSet<>();
 
-		try (JarFile jarFile = new JarFile(jarPath.toFile(), true)) {
-			for (JarEntry jarEntry : Collections.list(jarFile.entries())) {
-				if (ZipReprocessorUtil.isSpecialFile(jarEntry.getName())
-						|| jarEntry.getName().equals("META-INF/MANIFEST.MF")
-						|| jarEntry.isDirectory()) {
-					continue;
-				}
+        try (JarFile jarFile = new JarFile(jarPath.toFile(), true)) {
+            for (JarEntry jarEntry : Collections.list(jarFile.entries())) {
+                if (ZipReprocessorUtil.isSpecialFile(jarEntry.getName())
+                    || jarEntry.getName().equals("META-INF/MANIFEST.MF") || jarEntry.isDirectory())
+                {
+                    continue;
+                }
 
-				try {
-					// Must read the entire entry to trigger the signature verification
-					byte[] bytes = jarFile.getInputStream(jarEntry).readAllBytes();
-				} catch (SecurityException e) {
-					throw new SignatureVerificationFailure("Jar entry " + jarEntry.getName() + " failed signature verification", e);
-				}
+                try {
+                    // Must read the entire entry to trigger the signature verification
+                    byte[] bytes = jarFile.getInputStream(jarEntry).readAllBytes();
+                } catch (SecurityException e) {
+                    throw new SignatureVerificationFailure(
+                        "Jar entry " + jarEntry.getName() + " failed signature verification", e);
+                }
 
-				Certificate[] entryCertificates = jarEntry.getCertificates();
+                Certificate[] entryCertificates = jarEntry.getCertificates();
 
-				if (entryCertificates == null) {
-					throw new SignatureVerificationFailure("Jar entry " + jarEntry.getName() + " does not have a signature");
-				}
+                if (entryCertificates == null) {
+                    throw new SignatureVerificationFailure(
+                        "Jar entry " + jarEntry.getName() + " does not have a signature");
+                }
 
-				Arrays.stream(entryCertificates)
-						.map(c -> (X509Certificate) c)
-						.forEach(jarCertificates::add);
-			}
-		}
+                Arrays.stream(entryCertificates).map(c -> (X509Certificate) c).forEach(jarCertificates::add);
+            }
+        }
 
-		CertificateChain jarCertificateChain = CertificateChain.getRoot(jarCertificates);
+        CertificateChain jarCertificateChain = CertificateChain.getRoot(jarCertificates);
 
-		jarCertificateChain.verifyChainMatches(certificateChain);
-		LOGGER.debug("Jar {} is signed by the expected certificate", jarPath);
-	}
+        jarCertificateChain.verifyChainMatches(certificateChain);
+        LOGGER.debug("Jar {} is signed by the expected certificate", jarPath);
+    }
 }

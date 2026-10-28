@@ -38,11 +38,6 @@ public abstract class ClearLoomCacheTask extends DefaultTask {
         setGroup(Constants.TaskGroup.LEAF);
     }
 
-    @Internal
-    protected LoomGradleExtension getExtension() {
-        return LoomGradleExtension.get(getProject());
-    }
-
     @TaskAction
     public void run() {
         try {
@@ -51,8 +46,12 @@ public abstract class ClearLoomCacheTask extends DefaultTask {
             throw new RuntimeException("Failed to delete leaf-loom gradle cache directory.");
         } catch (IllegalArgumentException e) {
             throw new RuntimeException(
-                "Expected directory but found file when trying to delete leaf-loom gradle cache."
-            );
+                "Expected directory but found file when trying to delete leaf-loom gradle cache.");
         }
+    }
+
+    @Internal
+    protected LoomGradleExtension getExtension() {
+        return LoomGradleExtension.get(getProject());
     }
 }

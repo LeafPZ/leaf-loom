@@ -61,53 +61,55 @@ import dev.aoqia.leaf.loom.util.Pair;
 import dev.aoqia.leaf.loom.util.ZipUtils;
 
 final class AccessWidenerTransformer {
-	private static final Logger LOGGER = LoggerFactory.getLogger(AccessWidenerTransformer.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(AccessWidenerTransformer.class);
 
-	private final ClassTweaker accessWidener;
+    private final ClassTweaker accessWidener;
 
-	AccessWidenerTransformer(ClassTweaker accessWidener) {
-		this.accessWidener = accessWidener;
-	}
+    AccessWidenerTransformer(ClassTweaker accessWidener) {
+        this.accessWidener = accessWidener;
+    }
 
-	/**
-	 * Apply the rules from an access-widener to the given jar or zip file.
-	 */
-	void apply(Path jarFile) {
-		try {
-			Set<String> targets = accessWidener.getTargets();
-			int transformed = ZipUtils.transformAsync(jarFile, getTransformers(targets));
+    /**
+     * Apply the rules from an access-widener to the given jar or zip file.
+     */
+    void apply(Path jarFile) {
+        try {
+            Set<String> targets = accessWidener.getTargets();
+            int transformed = ZipUtils.transformAsync(jarFile, getTransformers(targets));
 
-			LOGGER.debug("Applied access wideners to {} classes in {}", transformed, jarFile);
+            LOGGER.debug("Applied access wideners to {} classes in {}", transformed, jarFile);
 
-			if (targets.size() != transformed) {
-				LOGGER.debug("Access widener target count ({}) does not match transformed class count ({}).", targets.size(), transformed);
-			}
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to apply access wideners to %s".formatted(jarFile), e);
-		}
-	}
+            if (targets.size() != transformed) {
+                LOGGER.debug("Access widener target count ({}) does not match transformed class count ({}).",
+                    targets.size(), transformed);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to apply access wideners to %s".formatted(jarFile), e);
+        }
+    }
 
-	private List<Pair<String, ZipUtils.UnsafeUnaryOperator<byte[]>>> getTransformers(Set<String> classes) {
-		return classes.stream()
-				.map(string -> new Pair<>(string + ".class", getTransformer(string)))
-				.collect(Collectors.toList());
-	}
+    private ZipUtils.UnsafeUnaryOperator<byte[]> getTransformer(String className) {
+        return input -> {
+            ClassReader reader = new ClassReader(input);
 
-	private ZipUtils.UnsafeUnaryOperator<byte[]> getTransformer(String className) {
-		return input -> {
-			ClassReader reader = new ClassReader(input);
+            if (!reader.getClassName().equals(className)) {
+                throw new IllegalStateException(
+                    "Class name mismatch: expected %s but transforming %s".formatted(className, reader.getClassName()));
+            }
 
-			if (!reader.getClassName().equals(className)) {
-				throw new IllegalStateException("Class name mismatch: expected %s but transforming %s".formatted(className, reader.getClassName()));
-			}
+            ClassWriter writer = new ClassWriter(0);
+            ClassVisitor classVisitor = accessWidener.createClassVisitor(Constants.ASM_VERSION, writer, null);
 
-			ClassWriter writer = new ClassWriter(0);
-			ClassVisitor classVisitor = accessWidener.createClassVisitor(Constants.ASM_VERSION, writer, null);
+            LOGGER.debug("Applying access widener to {}", className);
 
-			LOGGER.debug("Applying access widener to {}", className);
+            reader.accept(classVisitor, 0);
+            return writer.toByteArray();
+        };
+    }
 
-			reader.accept(classVisitor, 0);
-			return writer.toByteArray();
-		};
-	}
+    private List<Pair<String, ZipUtils.UnsafeUnaryOperator<byte[]>>> getTransformers(Set<String> classes) {
+        return classes.stream()
+            .map(string -> new Pair<>(string + ".class", getTransformer(string)))
+            .collect(Collectors.toList());
+    }
 }

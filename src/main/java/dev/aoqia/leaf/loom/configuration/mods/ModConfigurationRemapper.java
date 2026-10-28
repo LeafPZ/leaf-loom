@@ -99,315 +99,351 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 @SuppressWarnings("UnstableApiUsage")
 public class ModConfigurationRemapper {
-	// This is a placeholder that is used when the actual group is missing (null or empty).
-	// This can happen when the dependency is a FileCollectionDependency or from a flatDir repository.
-	public static final String MISSING_GROUP = "unspecified";
+    // This is a placeholder that is used when the actual group is missing (null or empty).
+    // This can happen when the dependency is a FileCollectionDependency or from a flatDir repository.
+    public static final String MISSING_GROUP = "unspecified";
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(ModConfigurationRemapper.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModConfigurationRemapper.class);
 
-	public static void supplyModConfigurations(Project project, ServiceFactory serviceFactory, String mappingsSuffix, LoomGradleExtension extension, SourceRemapper sourceRemapper) {
-		final DependencyHandler dependencies = project.getDependencies();
-		// The configurations where the source and remapped artifacts go.
-		// key: source, value: target
-		final Map<Provider<? extends Configuration>, NamedDomainObjectProvider<? extends Configuration>> configsToRemap = new LinkedHashMap<>();
-		// Client remapped dep collectors for split source sets. Same keys and values.
-		final Map<Provider<? extends Configuration>, NamedDomainObjectProvider<? extends Configuration>> clientConfigsToRemap = new HashMap<>();
+    public static String replaceIfNullOrEmpty(@Nullable String s, Supplier<String> fallback) {
+        return s == null || s.isEmpty() ? fallback.get() : s;
+    }
 
-		/*
-		 * Hack fix/improvement for https://github.com/FabricMC/fabric-loom/issues/1012
-		 * Ensure that modImplementation is processed first, so any installer.json on that configuration takes priority.
-		 */
-		final List<RemapConfigurationSettings> remapConfigurationSettings = extension.getRemapConfigurations()
-				.stream()
-				.sorted(Comparator.comparing(setting -> !setting.getName().equals("modImplementation")))
-				.toList();
+    public static void supplyModConfigurations(Project project, ServiceFactory serviceFactory, String mappingsSuffix,
+        LoomGradleExtension extension, SourceRemapper sourceRemapper)
+    {
+        final DependencyHandler dependencies = project.getDependencies();
+        // The configurations where the source and remapped artifacts go.
+        // key: source, value: target
+        final Map<Provider<? extends Configuration>,
+            NamedDomainObjectProvider<? extends Configuration>> configsToRemap = new LinkedHashMap<>();
+        // Client remapped dep collectors for split source sets. Same keys and values.
+        final Map<Provider<? extends Configuration>,
+            NamedDomainObjectProvider<? extends Configuration>> clientConfigsToRemap = new HashMap<>();
 
-		for (RemapConfigurationSettings entry : remapConfigurationSettings) {
-			// key: true if runtime, false if compile
-			final Map<Boolean, Boolean> envToEnabled = Map.of(
-					false, entry.getOnCompileClasspath().get(),
-					true, entry.getOnRuntimeClasspath().get()
-			);
+        /*
+         * Hack fix/improvement for https://github.com/FabricMC/fabric-loom/issues/1012
+         * Ensure that modImplementation is processed first, so any installer.json on that configuration takes priority.
+         */
+        final List<RemapConfigurationSettings> remapConfigurationSettings = extension.getRemapConfigurations()
+            .stream()
+            .sorted(Comparator.comparing(setting -> !setting.getName().equals("modImplementation")))
+            .toList();
 
-			envToEnabled.forEach((runtime, enabled) -> {
-				if (!enabled) return;
+        for (RemapConfigurationSettings entry : remapConfigurationSettings) {
+            // key: true if runtime, false if compile
+            final Map<Boolean, Boolean> envToEnabled = Map.of(false, entry.getOnCompileClasspath().get(), true,
+                entry.getOnRuntimeClasspath().get());
 
-				final NamedDomainObjectProvider<? extends Configuration> target = RemapConfigurations.getOrRegisterCollectorConfiguration(project, entry, runtime);
-				// We copy the source with the desired usage type to get only the runtime or api jars, not both.
-				Provider<? extends Configuration> sourceCopy = entry.getSourceConfiguration().map(source -> {
-					Configuration copy = source.copyRecursive();
-					Usage usage = project.getObjects().named(Usage.class, runtime ? Usage.JAVA_RUNTIME : Usage.JAVA_API);
-					copy.attributes(attributes -> attributes.attribute(Usage.USAGE_ATTRIBUTE, usage));
-					return copy;
-				});
-				configsToRemap.put(sourceCopy, target);
+            envToEnabled.forEach((runtime, enabled) -> {
+                if (!enabled) {
+                    return;
+                }
 
-				// If our remap configuration entry targets the client source set as well,
-				// let's set up a collector for it too.
-				if (entry.getClientSourceConfigurationName().isPresent()) {
-					final SourceSet clientSourceSet = SourceSetHelper.getSourceSetByName(ZomboidSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME, project);
-					final NamedDomainObjectProvider<? extends Configuration> clientTarget = RemapConfigurations.getOrRegisterCollectorConfiguration(project, clientSourceSet, runtime);
-					clientConfigsToRemap.put(sourceCopy, clientTarget);
-				}
-			});
+                final NamedDomainObjectProvider<? extends Configuration> target = RemapConfigurations
+                    .getOrRegisterCollectorConfiguration(project, entry, runtime);
+                // We copy the source with the desired usage type to get only the runtime or api jars, not both.
+                Provider<? extends Configuration> sourceCopy = entry.getSourceConfiguration().map(source -> {
+                    Configuration copy = source.copyRecursive();
+                    Usage usage = project.getObjects()
+                        .named(Usage.class, runtime ? Usage.JAVA_RUNTIME : Usage.JAVA_API);
+                    copy.attributes(attributes -> attributes.attribute(Usage.USAGE_ATTRIBUTE, usage));
+                    return copy;
+                });
+                configsToRemap.put(sourceCopy, target);
 
-			// Export to other projects.
-			if (entry.getTargetConfigurationName().get().equals(JavaPlugin.API_CONFIGURATION_NAME)) {
-				// Note: legacy (pre-1.1) behavior is kept for this remapping since
-				// we don't have a modApiElements/modRuntimeElements kind of configuration.
-				// TODO: Expose API/runtime usage attributes for namedElements to make it work like normal project dependencies.
-				final NamedDomainObjectProvider<? extends Configuration> remappedConfig = project.getConfigurations().register(entry.getRemappedConfigurationName(), config -> config.setTransitive(false));
-				project.getConfigurations().named(Constants.Configurations.NAMED_ELEMENTS).configure(config -> config.extendsFrom(remappedConfig));
-				configsToRemap.put(entry.getSourceConfiguration(), remappedConfig);
-			}
-		}
+                // If our remap configuration entry targets the client source set as well,
+                // let's set up a collector for it too.
+                if (entry.getClientSourceConfigurationName().isPresent()) {
+                    final SourceSet clientSourceSet = SourceSetHelper
+                        .getSourceSetByName(ZomboidSourceSets.Split.CLIENT_ONLY_SOURCE_SET_NAME, project);
+                    final NamedDomainObjectProvider<? extends Configuration> clientTarget = RemapConfigurations
+                        .getOrRegisterCollectorConfiguration(project, clientSourceSet, runtime);
+                    clientConfigsToRemap.put(sourceCopy, clientTarget);
+                }
+            });
 
-		final ModDependencyOptions modDependencyOptions = ModDependencyOptions.create(project, ModDependencyOptions.class, options -> {
-			options.getMappings().set(mappingsSuffix);
-			options.getInlineRefmap().set(extension.getMixin().getInlineDependencyRefmaps());
-		});
+            // Export to other projects.
+            if (entry.getTargetConfigurationName().get().equals(JavaPlugin.API_CONFIGURATION_NAME)) {
+                // Note: legacy (pre-1.1) behavior is kept for this remapping since
+                // we don't have a modApiElements/modRuntimeElements kind of configuration.
+                // TODO: Expose API/runtime usage attributes for namedElements to make it work like normal project
+                // dependencies.
+                final NamedDomainObjectProvider<? extends Configuration> remappedConfig = project.getConfigurations()
+                    .register(entry.getRemappedConfigurationName(), config -> config.setTransitive(false));
+                project.getConfigurations()
+                    .named(Constants.Configurations.NAMED_ELEMENTS)
+                    .configure(config -> config.extendsFrom(remappedConfig));
+                configsToRemap.put(entry.getSourceConfiguration(), remappedConfig);
+            }
+        }
 
-		if (LOGGER.isInfoEnabled()) {
-			LOGGER.info("Mod dependency options: {}", modDependencyOptions.getJson());
-		}
+        final ModDependencyOptions modDependencyOptions = ModDependencyOptions.create(project,
+            ModDependencyOptions.class, options -> {
+                options.getMappings().set(mappingsSuffix);
+                options.getInlineRefmap().set(extension.getMixin().getInlineDependencyRefmaps());
+            });
 
-		// Round 1: Discovery
-		// Go through all the configs to find artifacts to remap and
-		// the installer data. The installer data has to be added before
-		// any mods are remapped since remapping needs the dependencies provided by that data.
-		final Map<Provider<? extends Configuration>, List<ModDependency>> dependenciesBySourceConfig = new HashMap<>();
-		AsyncCache<ArtifactMetadata> metaCache = new AsyncCache<>();
-		configsToRemap.forEach((sourceConfig, remappedConfig) -> {
-			/*
-			sourceConfig - The source configuration where the intermediary named artifacts come from. i.e "modApi"
-			remappedConfig - The target configuration where the remapped artifacts go
-			 */
-			final NamedDomainObjectProvider<? extends Configuration> clientRemappedConfig = clientConfigsToRemap.get(sourceConfig);
-			List<ArtifactRef> artifactRefs = resolveArtifacts(project, sourceConfig);
-			Map<ArtifactRef, ArtifactMetadata> metadataMap = getMetadata(artifactRefs, metaCache, extension.getDefaultMixinRemapTypeEnum().get());
-			final List<ModDependency> modDependencies = new ArrayList<>();
+        if (LOGGER.isInfoEnabled()) {
+            LOGGER.info("Mod dependency options: {}", modDependencyOptions.getJson());
+        }
 
-			for (ArtifactRef artifact : artifactRefs) {
-				final ArtifactMetadata artifactMetadata = Objects.requireNonNull(metadataMap.get(artifact), "Failed to find metadata for artifact");
+        // Round 1: Discovery
+        // Go through all the configs to find artifacts to remap and
+        // the installer data. The installer data has to be added before
+        // any mods are remapped since remapping needs the dependencies provided by that data.
+        final Map<Provider<? extends Configuration>, List<ModDependency>> dependenciesBySourceConfig = new HashMap<>();
+        AsyncCache<ArtifactMetadata> metaCache = new AsyncCache<>();
+        configsToRemap.forEach((sourceConfig, remappedConfig) -> {
+            /*
+             * sourceConfig - The source configuration where the intermediary named artifacts come from. i.e "modApi"
+             * remappedConfig - The target configuration where the remapped artifacts go
+             */
+            final NamedDomainObjectProvider<
+                ? extends Configuration> clientRemappedConfig = clientConfigsToRemap.get(sourceConfig);
+            List<ArtifactRef> artifactRefs = resolveArtifacts(project, sourceConfig);
+            Map<ArtifactRef, ArtifactMetadata> metadataMap = getMetadata(artifactRefs, metaCache,
+                extension.getDefaultMixinRemapTypeEnum().get());
+            final List<ModDependency> modDependencies = new ArrayList<>();
 
-				if (artifactMetadata.installerData() != null) {
-					if (extension.getInstallerData() != null) {
-						project.getLogger().info("Found another installer JSON in ({}), ignoring", artifact.path());
-					} else {
-						project.getLogger().info("Applying installer data from {}", artifact.path());
-						artifactMetadata.installerData().applyToProject(project);
-					}
-				}
+            for (ArtifactRef artifact : artifactRefs) {
+                final ArtifactMetadata artifactMetadata = Objects.requireNonNull(metadataMap.get(artifact),
+                    "Failed to find metadata for artifact");
 
-				if (!artifactMetadata.shouldRemap()) {
-					// Note: not applying to any type of vanilla Gradle target config like
-					// api or implementation to fix https://github.com/FabricMC/fabric-loom/issues/572.
-					artifact.applyToConfiguration(project, remappedConfig);
-					continue;
-				}
+                if (artifactMetadata.installerData() != null) {
+                    if (extension.getInstallerData() != null) {
+                        project.getLogger().info("Found another installer JSON in ({}), ignoring", artifact.path());
+                    } else {
+                        project.getLogger().info("Applying installer data from {}", artifact.path());
+                        artifactMetadata.installerData().applyToProject(project);
+                    }
+                }
 
-				final ModDependency modDependency = ModDependencyFactory.create(artifact, artifactMetadata, remappedConfig, clientRemappedConfig, modDependencyOptions, project);
-				scheduleSourcesRemapping(project, sourceRemapper, modDependency);
-				modDependencies.add(modDependency);
-			}
+                if (!artifactMetadata.shouldRemap()) {
+                    // Note: not applying to any type of vanilla Gradle target config like
+                    // api or implementation to fix https://github.com/FabricMC/fabric-loom/issues/572.
+                    artifact.applyToConfiguration(project, remappedConfig);
+                    continue;
+                }
 
-			dependenciesBySourceConfig.put(sourceConfig, modDependencies);
-		});
+                final ModDependency modDependency = ModDependencyFactory.create(artifact, artifactMetadata,
+                    remappedConfig, clientRemappedConfig, modDependencyOptions, project);
+                scheduleSourcesRemapping(project, sourceRemapper, modDependency);
+                modDependencies.add(modDependency);
+            }
 
-		// Round 2: Remapping
-		// Remap all discovered artifacts.
-		configsToRemap.forEach((sourceConfig, remappedConfig) -> {
-			final List<ModDependency> modDependencies = dependenciesBySourceConfig.get(sourceConfig);
+            dependenciesBySourceConfig.put(sourceConfig, modDependencies);
+        });
 
-			if (modDependencies.isEmpty()) {
-				// Nothing else to do
-				return;
-			}
+        // Round 2: Remapping
+        // Remap all discovered artifacts.
+        configsToRemap.forEach((sourceConfig, remappedConfig) -> {
+            final List<ModDependency> modDependencies = dependenciesBySourceConfig.get(sourceConfig);
 
-			final NamedDomainObjectProvider<? extends Configuration> clientRemappedConfig = clientConfigsToRemap.get(sourceConfig);
-			final boolean refreshDeps = LoomGradleExtension.get(project).refreshDeps();
-			// TODO: With the same artifacts being considered multiple times for their different
-			//   usage attributes, this should probably not process them multiple times even with refreshDeps.
-			final List<ModDependency> toRemap = modDependencies.stream()
-					.filter(dependency -> refreshDeps || dependency.isCacheInvalid(project, null))
-					.toList();
+            if (modDependencies.isEmpty()) {
+                // Nothing else to do
+                return;
+            }
 
-			if (!toRemap.isEmpty()) {
-				try {
-					new ModProcessor(project, sourceConfig, serviceFactory).processMods(toRemap);
-				} catch (IOException e) {
-					throw new UncheckedIOException("Failed to remap mods", e);
-				}
-			}
+            final NamedDomainObjectProvider<
+                ? extends Configuration> clientRemappedConfig = clientConfigsToRemap.get(sourceConfig);
+            final boolean refreshDeps = LoomGradleExtension.get(project).refreshDeps();
+            // TODO: With the same artifacts being considered multiple times for their different
+            // usage attributes, this should probably not process them multiple times even with refreshDeps.
+            final List<ModDependency> toRemap = modDependencies.stream()
+                .filter(dependency -> refreshDeps || dependency.isCacheInvalid(project, null))
+                .toList();
 
-			// Add all of the remapped mods onto the config
-			for (ModDependency info : modDependencies) {
-				info.applyToProject(project);
-				createConstraints(info.getInputArtifact(), remappedConfig, sourceConfig, dependencies);
+            if (!toRemap.isEmpty()) {
+                try {
+                    new ModProcessor(project, sourceConfig, serviceFactory).processMods(toRemap);
+                } catch (IOException e) {
+                    throw new UncheckedIOException("Failed to remap mods", e);
+                }
+            }
 
-				if (clientRemappedConfig != null) {
-					createConstraints(info.getInputArtifact(), clientRemappedConfig, sourceConfig, dependencies);
-				}
-			}
-		});
-	}
+            // Add all of the remapped mods onto the config
+            for (ModDependency info : modDependencies) {
+                info.applyToProject(project);
+                createConstraints(info.getInputArtifact(), remappedConfig, sourceConfig, dependencies);
 
-	private static Map<ArtifactRef, ArtifactMetadata> getMetadata(List<ArtifactRef> artifacts, AsyncCache<ArtifactMetadata> cache, ArtifactMetadata.MixinRemapType defaultMixinRemapType) {
-		var futures = new HashMap<ArtifactRef, CompletableFuture<ArtifactMetadata>>();
+                if (clientRemappedConfig != null) {
+                    createConstraints(info.getInputArtifact(), clientRemappedConfig, sourceConfig, dependencies);
+                }
+            }
+        });
+    }
 
-		for (ArtifactRef artifact : artifacts) {
-			CompletableFuture<ArtifactMetadata> future = cache.get(artifact, () -> {
-				try {
-					return ArtifactMetadata.create(artifact, LoomGradlePlugin.LOOM_VERSION, defaultMixinRemapType);
-				} catch (IOException e) {
-					throw ExceptionUtil.createDescriptiveWrapper(UncheckedIOException::new, "Failed to read metadata from " + artifact.path(), e);
-				}
-			});
+    private static void createConstraints(ArtifactRef artifact,
+        NamedDomainObjectProvider<? extends Configuration> targetConfig, Provider<? extends Configuration> sourceConfig,
+        DependencyHandler dependencies)
+    {
+        if (true) {
+            // Disabled due to the gradle module metadata causing issues. Try the MavenProject test to reproduce issue.
+            return;
+        }
 
-			futures.put(artifact, future);
-		}
+        if (artifact instanceof ArtifactRef.ResolvedArtifactRef mavenArtifact) {
+            final String dependencyCoordinate = "%s:%s".formatted(mavenArtifact.group(), mavenArtifact.name());
 
-		return AsyncCache.joinMap(futures);
-	}
+            // Prevent adding the same un-remapped dependency to the target configuration.
+            targetConfig.get()
+                .getDependencyConstraints()
+                .add(dependencies.getConstraints().create(dependencyCoordinate, constraint -> {
+                    constraint.because("configuration (%s) already contains the remapped module from configuration (%s)"
+                        .formatted(targetConfig.getName(), sourceConfig.get().getName()));
 
-	private static void createConstraints(ArtifactRef artifact, NamedDomainObjectProvider<? extends Configuration> targetConfig, Provider<? extends Configuration> sourceConfig, DependencyHandler dependencies) {
-		if (true) {
-			// Disabled due to the gradle module metadata causing issues. Try the MavenProject test to reproduce issue.
-			return;
-		}
+                    constraint.version(MutableVersionConstraint::rejectAll);
+                }));
+        }
+    }
 
-		if (artifact instanceof ArtifactRef.ResolvedArtifactRef mavenArtifact) {
-			final String dependencyCoordinate = "%s:%s".formatted(mavenArtifact.group(), mavenArtifact.name());
+    private static Map<ResolvedArtifact, Path> downloadAllSources(Project project,
+        Set<ResolvedArtifact> resolvedArtifacts)
+    {
+        if (isCIBuild()) {
+            return Map.of();
+        }
 
-			// Prevent adding the same un-remapped dependency to the target configuration.
-			targetConfig.get().getDependencyConstraints().add(dependencies.getConstraints().create(dependencyCoordinate, constraint -> {
-				constraint.because("configuration (%s) already contains the remapped module from configuration (%s)".formatted(
-						targetConfig.getName(),
-						sourceConfig.get().getName()
-				));
+        final DependencyHandler dependencies = project.getDependencies();
 
-				constraint.version(MutableVersionConstraint::rejectAll);
-			}));
-		}
-	}
+        List<ComponentIdentifier> componentIdentifiers = resolvedArtifacts.stream()
+            .map(ResolvedArtifact::getId)
+            .map(ComponentArtifactIdentifier::getComponentIdentifier)
+            .toList();
 
-	private static List<ArtifactRef> resolveArtifacts(Project project, Provider<? extends Configuration> configuration) {
-		final List<ArtifactRef> artifacts = new ArrayList<>();
+        // noinspection unchecked
+        ArtifactResolutionQuery query = dependencies.createArtifactResolutionQuery()
+            .forComponents(componentIdentifiers)
+            .withArtifacts(JvmLibrary.class, SourcesArtifact.class);
 
-		final Set<ResolvedArtifact> resolvedArtifacts = configuration.get().getResolvedConfiguration().getResolvedArtifacts();
-		Map<ResolvedArtifact, Path> sourcesMap = downloadAllSources(project, resolvedArtifacts);
+        // Run a single query for all of the artifacts, this will allow them to be resolved in parallel before they
+        // are queried individually
+        Set<ComponentArtifactsResult> resolvedSources = query.execute().getResolvedComponents();
+        Map<ResolvedArtifact, Path> sources = new HashMap<>();
 
-		for (ResolvedArtifact artifact : resolvedArtifacts) {
-			Path sources = sourcesMap.get(artifact);
-			artifacts.add(new ArtifactRef.ResolvedArtifactRef(artifact, sources));
-		}
+        for (ResolvedArtifact resolvedArtifact : resolvedArtifacts) {
+            for (ComponentArtifactsResult sourceArtifact : resolvedSources) {
+                if (sourceArtifact.getId().equals(resolvedArtifact.getId().getComponentIdentifier())) {
+                    Path sourcesPath = getSourcesPath(sourceArtifact);
 
-		// FileCollectionDependency (files/fileTree) doesn't resolve properly,
-		// so we have to "resolve" it on our own. The naming is "abc.jar" => "unspecified:abc:unspecified".
-		for (FileCollectionDependency dependency : configuration.get().getAllDependencies().withType(FileCollectionDependency.class)) {
-			final String group = replaceIfNullOrEmpty(dependency.getGroup(), () -> MISSING_GROUP);
-			final FileCollection files = dependency.getFiles();
+                    if (sourcesPath != null) {
+                        sources.put(resolvedArtifact, sourcesPath);
+                    }
+                }
+            }
+        }
 
-			for (File artifact : files) {
-				final String name = getNameWithoutExtension(artifact.toPath());
-				final String version = replaceIfNullOrEmpty(dependency.getVersion(), () -> Checksum.of(artifact).sha256().hex(10));
-				artifacts.add(new ArtifactRef.FileArtifactRef(artifact.toPath(), group, name, version));
-			}
-		}
+        return sources;
+    }
 
-		return artifacts;
-	}
+    private static Map<ArtifactRef, ArtifactMetadata> getMetadata(List<ArtifactRef> artifacts,
+        AsyncCache<ArtifactMetadata> cache, ArtifactMetadata.MixinRemapType defaultMixinRemapType)
+    {
+        var futures = new HashMap<ArtifactRef, CompletableFuture<ArtifactMetadata>>();
 
-	private static String getNameWithoutExtension(Path file) {
-		final String fileName = file.getFileName().toString();
-		final int dotIndex = fileName.lastIndexOf('.');
-		return (dotIndex == -1) ? fileName : fileName.substring(0, dotIndex);
-	}
+        for (ArtifactRef artifact : artifacts) {
+            CompletableFuture<ArtifactMetadata> future = cache.get(artifact, () -> {
+                try {
+                    return ArtifactMetadata.create(artifact, LoomGradlePlugin.LOOM_VERSION, defaultMixinRemapType);
+                } catch (IOException e) {
+                    throw ExceptionUtil.createDescriptiveWrapper(UncheckedIOException::new,
+                        "Failed to read metadata from " + artifact.path(), e);
+                }
+            });
 
-	private static Map<ResolvedArtifact, Path> downloadAllSources(Project project, Set<ResolvedArtifact> resolvedArtifacts) {
-		if (isCIBuild()) {
-			return Map.of();
-		}
+            futures.put(artifact, future);
+        }
 
-		final DependencyHandler dependencies = project.getDependencies();
+        return AsyncCache.joinMap(futures);
+    }
 
-		List<ComponentIdentifier> componentIdentifiers = resolvedArtifacts.stream()
-				.map(ResolvedArtifact::getId)
-				.map(ComponentArtifactIdentifier::getComponentIdentifier)
-				.toList();
+    private static String getNameWithoutExtension(Path file) {
+        final String fileName = file.getFileName().toString();
+        final int dotIndex = fileName.lastIndexOf('.');
+        return (dotIndex == -1) ? fileName : fileName.substring(0, dotIndex);
+    }
 
-		//noinspection unchecked
-		ArtifactResolutionQuery query = dependencies.createArtifactResolutionQuery()
-				.forComponents(componentIdentifiers)
-				.withArtifacts(JvmLibrary.class, SourcesArtifact.class);
+    private static Path getSourcesPath(ComponentArtifactsResult sourceArtifact) {
+        for (ArtifactResult srcArtifact : sourceArtifact.getArtifacts(SourcesArtifact.class)) {
+            if (srcArtifact instanceof ResolvedArtifactResult) {
+                return ((ResolvedArtifactResult) srcArtifact).getFile().toPath();
+            }
+        }
 
-		// Run a single query for all of the artifacts, this will allow them to be resolved in parallel before they are queried individually
-		Set<ComponentArtifactsResult> resolvedSources = query.execute().getResolvedComponents();
-		Map<ResolvedArtifact, Path> sources = new HashMap<>();
+        return null;
+    }
 
-		for (ResolvedArtifact resolvedArtifact : resolvedArtifacts) {
-			for (ComponentArtifactsResult sourceArtifact : resolvedSources) {
-				if (sourceArtifact.getId().equals(resolvedArtifact.getId().getComponentIdentifier())) {
-					Path sourcesPath = getSourcesPath(sourceArtifact);
+    private static boolean isCIBuild() {
+        final String loomProperty = System.getProperty("leaf.loom.ci");
 
-					if (sourcesPath != null) {
-						sources.put(resolvedArtifact, sourcesPath);
-					}
-				}
-			}
-		}
+        if (loomProperty != null) {
+            return loomProperty.equalsIgnoreCase("true");
+        }
 
-		return sources;
-	}
+        // CI seems to be set by most popular CI services
+        return System.getenv("CI") != null;
+    }
 
-	private static Path getSourcesPath(ComponentArtifactsResult sourceArtifact) {
-		for (ArtifactResult srcArtifact : sourceArtifact.getArtifacts(SourcesArtifact.class)) {
-			if (srcArtifact instanceof ResolvedArtifactResult) {
-				return ((ResolvedArtifactResult) srcArtifact).getFile().toPath();
-			}
-		}
+    private static List<ArtifactRef> resolveArtifacts(Project project,
+        Provider<? extends Configuration> configuration)
+    {
+        final List<ArtifactRef> artifacts = new ArrayList<>();
 
-		return null;
-	}
+        final Set<
+            ResolvedArtifact> resolvedArtifacts = configuration.get().getResolvedConfiguration().getResolvedArtifacts();
+        Map<ResolvedArtifact, Path> sourcesMap = downloadAllSources(project, resolvedArtifacts);
 
-	private static void scheduleSourcesRemapping(Project project, SourceRemapper sourceRemapper, ModDependency dependency) {
-		if (isCIBuild()) {
-			return;
-		}
+        for (ResolvedArtifact artifact : resolvedArtifacts) {
+            Path sources = sourcesMap.get(artifact);
+            artifacts.add(new ArtifactRef.ResolvedArtifactRef(artifact, sources));
+        }
 
-		final Path sourcesInput = dependency.getInputArtifact().sources();
+        // FileCollectionDependency (files/fileTree) doesn't resolve properly,
+        // so we have to "resolve" it on our own. The naming is "abc.jar" => "unspecified:abc:unspecified".
+        for (FileCollectionDependency dependency : configuration.get()
+            .getAllDependencies()
+            .withType(FileCollectionDependency.class))
+        {
+            final String group = replaceIfNullOrEmpty(dependency.getGroup(), () -> MISSING_GROUP);
+            final FileCollection files = dependency.getFiles();
 
-		if (sourcesInput == null || Files.notExists(sourcesInput)) {
-			return;
-		}
+            for (File artifact : files) {
+                final String name = getNameWithoutExtension(artifact.toPath());
+                final String version = replaceIfNullOrEmpty(dependency.getVersion(),
+                    () -> Checksum.of(artifact).sha256().hex(10));
+                artifacts.add(new ArtifactRef.FileArtifactRef(artifact.toPath(), group, name, version));
+            }
+        }
 
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
+        return artifacts;
+    }
 
-		if (dependency.isCacheInvalid(project, "sources") || extension.refreshDeps()) {
-			final Path output = dependency.getWorkingFile(project, "sources");
+    private static void scheduleSourcesRemapping(Project project, SourceRemapper sourceRemapper,
+        ModDependency dependency)
+    {
+        if (isCIBuild()) {
+            return;
+        }
 
-			sourceRemapper.scheduleRemapSources(sourcesInput.toFile(), output.toFile(), false, true, () -> {
-				try {
-					dependency.copyToCache(project, output, "sources");
-				} catch (IOException e) {
-					throw new UncheckedIOException("Failed to apply sources to local cache for: " + dependency, e);
-				}
-			});
-		}
-	}
+        final Path sourcesInput = dependency.getInputArtifact().sources();
 
-	public static String replaceIfNullOrEmpty(@Nullable String s, Supplier<String> fallback) {
-		return s == null || s.isEmpty() ? fallback.get() : s;
-	}
+        if (sourcesInput == null || Files.notExists(sourcesInput)) {
+            return;
+        }
 
-	private static boolean isCIBuild() {
-		final String loomProperty = System.getProperty("leaf.loom.ci");
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-		if (loomProperty != null) {
-			return loomProperty.equalsIgnoreCase("true");
-		}
+        if (dependency.isCacheInvalid(project, "sources") || extension.refreshDeps()) {
+            final Path output = dependency.getWorkingFile(project, "sources");
 
-		// CI seems to be set by most popular CI services
-		return System.getenv("CI") != null;
-	}
+            sourceRemapper.scheduleRemapSources(sourcesInput.toFile(), output.toFile(), false, true, () -> {
+                try {
+                    dependency.copyToCache(project, output, "sources");
+                } catch (IOException e) {
+                    throw new UncheckedIOException("Failed to apply sources to local cache for: " + dependency, e);
+                }
+            });
+        }
+    }
 }

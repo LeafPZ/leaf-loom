@@ -61,43 +61,44 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public final class LorenzMappingService extends Service<LorenzMappingService.Options> {
-	public static final ServiceType<Options, LorenzMappingService> TYPE = new ServiceType<>(Options.class, LorenzMappingService.class);
+    public static final ServiceType<Options,
+        LorenzMappingService> TYPE = new ServiceType<>(Options.class, LorenzMappingService.class);
 
-	public interface Options extends Service.Options {
-		@Nested
-		Property<MappingsService.Options> getMappings();
-	}
+    private final Supplier<MappingSet> mappings = Lazy.of(this::readMappings);
 
-	public static Provider<Options> createOptions(Project project, RemapMappingConfiguration mappingConfiguration, MappingsNamespace from, MappingsNamespace to) {
-		return TYPE.create(project, options -> options.getMappings().set(
-			MappingsService.createOptions(
-				project,
-				mappingConfiguration.tinyMappings,
-				from.toString(),
-				to.toString(),
-				false)
-		));
-	}
+    public LorenzMappingService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	private final Supplier<MappingSet> mappings = Lazy.of(this::readMappings);
+    public static Provider<Options> createOptions(Project project, RemapMappingConfiguration mappingConfiguration,
+        MappingsNamespace from, MappingsNamespace to)
+    {
+        return TYPE.create(project,
+            options -> options.getMappings()
+                .set(MappingsService.createOptions(project, mappingConfiguration.tinyMappings, from.toString(),
+                    to.toString(), false)));
+    }
 
-	public LorenzMappingService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    public MappingSet getMappings() {
+        return mappings.get();
+    }
 
-	private MappingSet readMappings() {
-		MappingsService mappingsService = getServiceFactory().get(getOptions().getMappings().get());
+    private MappingSet readMappings() {
+        MappingsService mappingsService = getServiceFactory().get(getOptions().getMappings().get());
 
-		try {
-			try (var reader = new TinyMappingsReader(mappingsService.getMemoryMappingTree(), mappingsService.getFrom(), mappingsService.getTo())) {
-				return reader.read();
-			}
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read lorenz mappings", e);
-		}
-	}
+        try {
+            try (var reader = new TinyMappingsReader(mappingsService.getMemoryMappingTree(), mappingsService.getFrom(),
+                mappingsService.getTo()))
+            {
+                return reader.read();
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read lorenz mappings", e);
+        }
+    }
 
-	public MappingSet getMappings() {
-		return mappings.get();
-	}
+    public interface Options extends Service.Options {
+        @Nested
+        Property<MappingsService.Options> getMappings();
+    }
 }

@@ -76,101 +76,116 @@ import dev.aoqia.leaf.loom.util.service.Service;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
-public final class MigrateClassTweakerMappingsService extends Service<MigrateClassTweakerMappingsService.Options> implements Closeable {
-	private static final ServiceType<Options, MigrateClassTweakerMappingsService> TYPE = new ServiceType<>(Options.class, MigrateClassTweakerMappingsService.class);
-	private static final String MIGRATION_TARGET_NS = "migrationTarget";
+public final class MigrateClassTweakerMappingsService extends Service<MigrateClassTweakerMappingsService.Options>
+    implements Closeable
+{
+    private static final String MIGRATION_TARGET_NS = "migrationTarget";
 
-	public MigrateClassTweakerMappingsService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    private static final ServiceType<Options, MigrateClassTweakerMappingsService> TYPE = new ServiceType<>(
+        Options.class, MigrateClassTweakerMappingsService.class);
 
-	public interface Options extends Service.Options {
-		@Nested
-		Property<MigrateMappingsService.Options> getMappings();
-		@Nested
-		Property<TinyRemapperService.Options> getTinyRemapperOptions();
-		@InputFile
-		@PathSensitive(PathSensitivity.NONE)
-		RegularFileProperty getMergedMappings();
-	}
+    public MigrateClassTweakerMappingsService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	public static Provider<Options> createOptions(Project project, Provider<String> targetMappings) {
-		ConfigurableFileCollection libraryClasspath = project.getObjects().fileCollection();
-		libraryClasspath.from(project.getConfigurations().getByName(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES));
-		libraryClasspath.from(project.getConfigurations().getByName(Constants.Configurations.ZOMBOID_RUNTIME_LIBRARIES));
+    public static Provider<Options> createOptions(Project project, Provider<String> targetMappings) {
+        ConfigurableFileCollection libraryClasspath = project.getObjects().fileCollection();
+        libraryClasspath
+            .from(project.getConfigurations().getByName(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES));
+        libraryClasspath
+            .from(project.getConfigurations().getByName(Constants.Configurations.ZOMBOID_RUNTIME_LIBRARIES));
 
-		return TYPE.create(project, (o) -> {
-			o.getMappings().set(MigrateMappingsService.createOptions(project, targetMappings));
-			Provider<RegularFile> mergedMappings = o.getMappings().flatMap(m -> {
-				return createMergedMappingFile(project, targetMappings, m.getSourceMappings(), m.getTargetMappings());
-			});
-			o.getMergedMappings().set(mergedMappings);
+        return TYPE.create(project, (o) -> {
+            o.getMappings().set(MigrateMappingsService.createOptions(project, targetMappings));
+            Provider<RegularFile> mergedMappings = o.getMappings().flatMap(m -> {
+                return createMergedMappingFile(project, targetMappings, m.getSourceMappings(), m.getTargetMappings());
+            });
+            o.getMergedMappings().set(mergedMappings);
 
-			o.getTinyRemapperOptions().set(TinyRemapperService.TYPE.create(project, o2 -> {
-				o2.getClasspath().from(o.getMappings().map(m -> m.getClasspath().minus(libraryClasspath)));
-				o2.getFrom().set(MappingsNamespace.NAMED.toString());
-				o2.getTo().set(MIGRATION_TARGET_NS);
-				o2.getMappings().add(MappingsService.TYPE.create(project, o3 -> {
-					o3.getMappingsFile().set(mergedMappings);
-					o3.getFrom().set(MappingsNamespace.NAMED.toString());
-					o3.getTo().set(MIGRATION_TARGET_NS);
-					o3.getRemapLocals().set(false);
-				}));
-				o2.getUselegacyMixinAP().set(false);
-			}));
-		});
-	}
+            o.getTinyRemapperOptions().set(TinyRemapperService.TYPE.create(project, o2 -> {
+                o2.getClasspath().from(o.getMappings().map(m -> m.getClasspath().minus(libraryClasspath)));
+                o2.getFrom().set(MappingsNamespace.NAMED.toString());
+                o2.getTo().set(MIGRATION_TARGET_NS);
+                o2.getMappings().add(MappingsService.TYPE.create(project, o3 -> {
+                    o3.getMappingsFile().set(mergedMappings);
+                    o3.getFrom().set(MappingsNamespace.NAMED.toString());
+                    o3.getTo().set(MIGRATION_TARGET_NS);
+                    o3.getRemapLocals().set(false);
+                }));
+                o2.getUselegacyMixinAP().set(false);
+            }));
+        });
+    }
 
-	public Remapper getRemapper() {
-		final TinyRemapperService service = getServiceFactory().get(getOptions().getTinyRemapperOptions());
-		return service.getTinyRemapperForRemapping().getEnvironment().getRemapper();
-	}
+    private static Provider<RegularFile> createMergedMappingFile(Project project, Provider<String> targetMappingsId,
+        Provider<MappingsService.Options> sourceOptions, Provider<TinyMappingsService.Options> targetOptions)
+    {
+        return sourceOptions.flatMap(sourceOpt -> targetOptions.flatMap(targetOpt -> {
+            final Provider<RegularFile> fileProvider = project.getLayout()
+                .getBuildDirectory()
+                .file(targetMappingsId
+                    .map(id -> "migrate-class-tweaker-mappings-" + Checksum.of(id).sha256().hex(16) + ".tiny"));
+            return fileProvider.map(file -> {
+                final Path path = file.getAsFile().toPath();
 
-	private static Provider<RegularFile> createMergedMappingFile(Project project, Provider<String> targetMappingsId, Provider<MappingsService.Options> sourceOptions, Provider<TinyMappingsService.Options> targetOptions) {
-		return sourceOptions.flatMap(sourceOpt -> targetOptions.flatMap(targetOpt -> {
-			final Provider<RegularFile> fileProvider = project.getLayout()
-					.getBuildDirectory()
-					.file(targetMappingsId.map(id -> "migrate-class-tweaker-mappings-" + Checksum.of(id).sha256().hex(16) + ".tiny"));
-			return fileProvider.map(file -> {
-				final Path path = file.getAsFile().toPath();
+                if (!Files.exists(path) || LoomGradleExtension.get(project).refreshDeps()) {
+                    try {
+                        final MemoryMappingTree tree = mergeMappings(sourceOpt, targetOpt);
+                        Files.createDirectories(path.getParent());
 
-				if (!Files.exists(path) || LoomGradleExtension.get(project).refreshDeps()) {
-					try {
-						final MemoryMappingTree tree = mergeMappings(sourceOpt, targetOpt);
-						Files.createDirectories(path.getParent());
+                        try (var writer = new Tiny2FileWriter(Files.newBufferedWriter(path, StandardCharsets.UTF_8),
+                            false))
+                        {
+                            tree.accept(writer);
+                        }
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                }
 
-						try (var writer = new Tiny2FileWriter(Files.newBufferedWriter(path, StandardCharsets.UTF_8), false)) {
-							tree.accept(writer);
-						}
-					} catch (IOException e) {
-						throw new UncheckedIOException(e);
-					}
-				}
+                return file;
+            });
+        }));
+    }
 
-				return file;
-			});
-		}));
-	}
+    private static MemoryMappingTree mergeMappings(MappingsService.Options sourceOptions,
+        TinyMappingsService.Options targetOptions) throws IOException
+    {
+        final var tree = new MemoryMappingTree();
+        MappingReader.read(sourceOptions.getMappingsFile().get().getAsFile().toPath(), tree);
+        final var renamer = new MappingNsRenamer(tree, Map.of(MappingsNamespace.NAMED.toString(), MIGRATION_TARGET_NS));
+        final Path mappingFile = targetOptions.getMappings().get().getAsFile().toPath();
 
-	private static MemoryMappingTree mergeMappings(MappingsService.Options sourceOptions, TinyMappingsService.Options targetOptions) throws IOException {
-		final var tree = new MemoryMappingTree();
-		MappingReader.read(sourceOptions.getMappingsFile().get().getAsFile().toPath(), tree);
-		final var renamer = new MappingNsRenamer(tree, Map.of(MappingsNamespace.NAMED.toString(), MIGRATION_TARGET_NS));
-		final Path mappingFile = targetOptions.getMappings().get().getAsFile().toPath();
+        if (targetOptions.getZipEntryPath().isPresent()) {
+            try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(mappingFile)) {
+                MappingReader.read(fs.getPath(targetOptions.getZipEntryPath().get()), renamer);
+            }
+        } else {
+            MappingReader.read(mappingFile, renamer);
+        }
 
-		if (targetOptions.getZipEntryPath().isPresent()) {
-			try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(mappingFile)) {
-				MappingReader.read(fs.getPath(targetOptions.getZipEntryPath().get()), renamer);
-			}
-		} else {
-			MappingReader.read(mappingFile, renamer);
-		}
+        return tree;
+    }
 
-		return tree;
-	}
+    @Override
+    public void close() throws IOException {
+        Files.deleteIfExists(getOptions().getMergedMappings().get().getAsFile().toPath());
+    }
 
-	@Override
-	public void close() throws IOException {
-		Files.deleteIfExists(getOptions().getMergedMappings().get().getAsFile().toPath());
-	}
+    public Remapper getRemapper() {
+        final TinyRemapperService service = getServiceFactory().get(getOptions().getTinyRemapperOptions());
+        return service.getTinyRemapperForRemapping().getEnvironment().getRemapper();
+    }
+
+    public interface Options extends Service.Options {
+        @Nested
+        Property<MigrateMappingsService.Options> getMappings();
+
+        @InputFile
+        @PathSensitive(PathSensitivity.NONE)
+        RegularFileProperty getMergedMappings();
+
+        @Nested
+        Property<TinyRemapperService.Options> getTinyRemapperOptions();
+    }
 }

@@ -56,68 +56,68 @@ import dev.aoqia.leaf.loom.util.Platform;
  * A processor to add support for ARM64.
  */
 public class ArmNativesLibraryProcessor extends LibraryProcessor {
-	private static final String LWJGL_GROUP = "org.lwjgl";
+    private static final String LWJGL_GROUP = "org.lwjgl";
 
-	public ArmNativesLibraryProcessor(Platform platform, LibraryContext context) {
-		super(platform, context);
-	}
+    public ArmNativesLibraryProcessor(Platform platform, LibraryContext context) {
+        super(platform, context);
+    }
 
-	@Override
-	public ApplicationResult getApplicationResult() {
-		if (!context.usesLWJGL3()) {
-			// Only supports LWJGL 3
-			return ApplicationResult.DONT_APPLY;
-		}
+    @Override
+    public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
+        final String osName = switch (platform.getOperatingSystem()) {
+            case MAC_OS -> "macos";
+            case WINDOWS -> "windows";
+            case LINUX -> "linux";
+        };
 
-		if (!platform.getArchitecture().isArm() || !platform.getArchitecture().is64Bit()) {
-			// Not an arm64 platform, can never apply this.
-			return ApplicationResult.DONT_APPLY;
-		}
+        return library -> {
+            if (library.is(LWJGL_GROUP) && library.target() == Library.Target.NATIVES
+                && (library.classifier() != null && library.classifier().equals("natives-" + osName)))
+            {
+                // Add the arm64 natives.
+                dependencyConsumer.accept(library.withClassifier(library.classifier() + "-arm64"));
 
-		if (context.supportsArm64(platform.getOperatingSystem())) {
-			// This version already supports arm64, nothing to do.
-			return ApplicationResult.DONT_APPLY;
-		}
+                // Remove the none arm64 natives when extracting.
+                return context.hasClasspathNatives();
+            }
 
-		if (platform.getOperatingSystem().isMacOS()) {
-			// Must upgrade natives to support macos ARM, even if not using classpath natives.
-			return ApplicationResult.MUST_APPLY;
-		}
+            return true;
+        };
+    }
 
-		if (!context.hasClasspathNatives()) {
-			// Only support updating linux and windows versions that have the natives on the classpath.
-			return ApplicationResult.DONT_APPLY;
-		}
+    @Override
+    public void applyRepositories(RepositoryHandler repositories) {
+        LoomRepositoryPlugin.forceLWJGLFromMavenCentral(repositories);
+    }
 
-		// Must add arm 64 to Windows and Linux for versions that use classpath natives.
-		return ApplicationResult.MUST_APPLY;
-	}
+    @Override
+    public ApplicationResult getApplicationResult() {
+        if (!context.usesLWJGL3()) {
+            // Only supports LWJGL 3
+            return ApplicationResult.DONT_APPLY;
+        }
 
-	@Override
-	public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
-		final String osName = switch (platform.getOperatingSystem()) {
-		case MAC_OS -> "macos";
-		case WINDOWS -> "windows";
-		case LINUX -> "linux";
-		};
+        if (!platform.getArchitecture().isArm() || !platform.getArchitecture().is64Bit()) {
+            // Not an arm64 platform, can never apply this.
+            return ApplicationResult.DONT_APPLY;
+        }
 
-		return library -> {
-			if (library.is(LWJGL_GROUP) && library.target() == Library.Target.NATIVES && (library.classifier() != null && library.classifier().equals("natives-" + osName))) {
-				// Add the arm64 natives.
-				dependencyConsumer.accept(library.withClassifier(library.classifier() + "-arm64"));
+        if (context.supportsArm64(platform.getOperatingSystem())) {
+            // This version already supports arm64, nothing to do.
+            return ApplicationResult.DONT_APPLY;
+        }
 
-				if (!context.hasClasspathNatives()) {
-					// Remove the none arm64 natives when extracting.
-					return false;
-				}
-			}
+        if (platform.getOperatingSystem().isMacOS()) {
+            // Must upgrade natives to support macos ARM, even if not using classpath natives.
+            return ApplicationResult.MUST_APPLY;
+        }
 
-			return true;
-		};
-	}
+        if (!context.hasClasspathNatives()) {
+            // Only support updating linux and windows versions that have the natives on the classpath.
+            return ApplicationResult.DONT_APPLY;
+        }
 
-	@Override
-	public void applyRepositories(RepositoryHandler repositories) {
-		LoomRepositoryPlugin.forceLWJGLFromMavenCentral(repositories);
-	}
+        // Must add arm 64 to Windows and Linux for versions that use classpath natives.
+        return ApplicationResult.MUST_APPLY;
+    }
 }

@@ -55,109 +55,110 @@ import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.LoomGradlePlugin;
 
 public final class GradleUtils {
-	private GradleUtils() {
-	}
+    private GradleUtils() {
+    }
 
-	// For some crazy reason afterEvaluate is still invoked when the configuration fails
-	public static void afterSuccessfulEvaluation(Project project, Runnable afterEvaluate) {
-		project.afterEvaluate(p -> {
-			if (p.getState().getFailure() != null) {
-				// Let gradle handle the failure
-				return;
-			}
+    // For some crazy reason afterEvaluate is still invoked when the configuration fails
+    public static void afterSuccessfulEvaluation(Project project, Runnable afterEvaluate) {
+        project.afterEvaluate(p -> {
+            if (p.getState().getFailure() != null) {
+                // Let gradle handle the failure
+                return;
+            }
 
-			afterEvaluate.run();
-		});
-	}
+            afterEvaluate.run();
+        });
+    }
 
-	public static void allLoomProjects(Gradle gradle, Consumer<Project> consumer) {
-		gradle.allprojects(project -> {
-			if (isLoomProject(project)) {
-				consumer.accept(project);
-			}
-		});
-	}
+    public static void allLoomProjects(Gradle gradle, Consumer<Project> consumer) {
+        gradle.allprojects(project -> {
+            if (isLoomProject(project)) {
+                consumer.accept(project);
+            }
+        });
+    }
 
-	public static boolean isLoomProject(Project project) {
-		return project.getPluginManager().hasPlugin(LoomGradlePlugin.NAME);
-	}
+    // A hack to include the given file in the configuration cache input
+    // this ensures that configuration cache is invalidated when the file changes
+    public static File configurationInputFile(Project project, File file) {
+        final RegularFileProperty property = project.getObjects().fileProperty();
+        property.set(file);
+        return property.getAsFile().get();
+    }
 
-	public static boolean isLoomCompanionProject(Project project) {
-		return project.getPluginManager().hasPlugin(LoomCompanionGradlePlugin.NAME);
-	}
+    public static boolean getBooleanProperty(Project project, String key) {
+        return getBooleanProperty(project, key, false);
+    }
 
-	public static Provider<Boolean> getBooleanPropertyProvider(Project project, String key) {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
+    public static boolean getBooleanProperty(Project project, String key, boolean defaultValue) {
+        return getBooleanPropertyProvider(project, key).getOrElse(defaultValue);
+    }
 
-		if (extension.isProjectIsolationActive()) {
-			return project.getProviders().gradleProperty(key).map(s -> {
-				try {
-					return Boolean.parseBoolean(s);
-				} catch (final IllegalArgumentException ex) {
-					return false;
-				}
-			});
-		}
+    public static Provider<Boolean> getBooleanPropertyProvider(Project project, String key) {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-		// Works around https://github.com/gradle/gradle/issues/23572
-		return project.provider(() -> {
-			final Object value = project.findProperty(key);
+        if (extension.isProjectIsolationActive()) {
+            return project.getProviders().gradleProperty(key).map(s -> {
+                try {
+                    return Boolean.parseBoolean(s);
+                } catch (final IllegalArgumentException ex) {
+                    return false;
+                }
+            });
+        }
 
-			if (value instanceof String str) {
-				try {
-					return Boolean.parseBoolean(str);
-				} catch (final IllegalArgumentException ex) {
-					return false;
-				}
-			} else {
-				return false;
-			}
-		});
-	}
+        // Works around https://github.com/gradle/gradle/issues/23572
+        return project.provider(() -> {
+            final Object value = project.findProperty(key);
 
-	public static Provider<Integer> getIntegerPropertyProvider(Project project, String key) {
-		return project.provider(() -> {
-			final Object value = project.findProperty(key);
+            if (value instanceof String str) {
+                try {
+                    return Boolean.parseBoolean(str);
+                } catch (final IllegalArgumentException ex) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        });
+    }
 
-			if (value == null) {
-				return null;
-			}
+    public static Provider<Integer> getIntegerPropertyProvider(Project project, String key) {
+        return project.provider(() -> {
+            final Object value = project.findProperty(key);
 
-			try {
-				return Integer.parseInt(value.toString());
-			} catch (final NumberFormatException ex) {
-				throw new IllegalArgumentException("Property " + key + " must be an integer", ex);
-			}
-		});
-	}
+            if (value == null) {
+                return null;
+            }
 
-	public static boolean getBooleanProperty(Project project, String key) {
-		return getBooleanProperty(project, key, false);
-	}
+            try {
+                return Integer.parseInt(value.toString());
+            } catch (final NumberFormatException ex) {
+                throw new IllegalArgumentException("Property " + key + " must be an integer", ex);
+            }
+        });
+    }
 
-	public static boolean getBooleanProperty(Project project, String key, boolean defaultValue) {
-		return getBooleanPropertyProvider(project, key).getOrElse(defaultValue);
-	}
+    @Nullable
+    public static Object getProperty(Project project, String key) {
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-	@Nullable public static Object getProperty(Project project, String key) {
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
+        if (extension.isProjectIsolationActive()) {
+            return project.getProviders().gradleProperty(key).getOrNull();
+        }
 
-		if (extension.isProjectIsolationActive()) {
-			return project.getProviders().gradleProperty(key).getOrNull();
-		}
+        return project.findProperty(key);
+    }
 
-		return project.findProperty(key);
-	}
+    public static boolean isLoomCompanionProject(Project project) {
+        return project.getPluginManager().hasPlugin(LoomCompanionGradlePlugin.NAME);
+    }
 
-	// A hack to include the given file in the configuration cache input
-	// this ensures that configuration cache is invalidated when the file changes
-	public static File configurationInputFile(Project project, File file) {
-		final RegularFileProperty property = project.getObjects().fileProperty();
-		property.set(file);
-		return property.getAsFile().get();
-	}
+    public static boolean isLoomProject(Project project) {
+        return project.getPluginManager().hasPlugin(LoomGradlePlugin.NAME);
+    }
 
-	public static boolean isRootProject(Project project) {
-		return project.getRootProject() == project;
-	}
+    public static boolean isRootProject(Project project) {
+        return project.getRootProject() == project;
+    }
 }

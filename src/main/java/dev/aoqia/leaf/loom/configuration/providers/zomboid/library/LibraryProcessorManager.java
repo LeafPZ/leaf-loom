@@ -59,87 +59,86 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.library.processors.Ru
 import dev.aoqia.leaf.loom.util.Platform;
 
 public class LibraryProcessorManager {
-	public static final List<LibraryProcessorFactory> DEFAULT_LIBRARY_PROCESSORS = List.of(
-			ArmNativesLibraryProcessor::new,
-			RiscVNativesLibraryProcessor::new,
-			LegacyASMLibraryProcessor::new,
-			LoomNativeSupportLibraryProcessor::new,
-			ObjcBridgeUpgradeLibraryProcessor::new,
-			RuntimeLog4jLibraryProcessor::new
-	);
+    public static final List<
+        LibraryProcessorFactory> DEFAULT_LIBRARY_PROCESSORS = List.of(ArmNativesLibraryProcessor::new,
+            RiscVNativesLibraryProcessor::new, LegacyASMLibraryProcessor::new, LoomNativeSupportLibraryProcessor::new,
+            ObjcBridgeUpgradeLibraryProcessor::new, RuntimeLog4jLibraryProcessor::new);
 
-	private final Platform platform;
-	private final RepositoryHandler repositories;
-	private final List<LibraryProcessorFactory> libraryProcessorFactories;
-	private final List<String> enabledProcessors;
+    private final List<String> enabledProcessors;
+    private final List<LibraryProcessorFactory> libraryProcessorFactories;
+    private final Platform platform;
+    private final RepositoryHandler repositories;
 
-	public LibraryProcessorManager(Platform platform, RepositoryHandler repositories, List<LibraryProcessorFactory> libraryProcessorFactories, List<String> enabledProcessors) {
-		this.platform = platform;
-		this.repositories = repositories;
-		this.libraryProcessorFactories = libraryProcessorFactories;
-		this.enabledProcessors = enabledProcessors;
-	}
+    @VisibleForTesting
+    public LibraryProcessorManager(Platform platform, RepositoryHandler repositories) {
+        this(platform, repositories, DEFAULT_LIBRARY_PROCESSORS, Collections.emptyList());
+    }
 
-	@VisibleForTesting
-	public LibraryProcessorManager(Platform platform, RepositoryHandler repositories) {
-		this(platform, repositories, DEFAULT_LIBRARY_PROCESSORS, Collections.emptyList());
-	}
+    public LibraryProcessorManager(Platform platform, RepositoryHandler repositories,
+        List<LibraryProcessorFactory> libraryProcessorFactories, List<String> enabledProcessors)
+    {
+        this.platform = platform;
+        this.repositories = repositories;
+        this.libraryProcessorFactories = libraryProcessorFactories;
+        this.enabledProcessors = enabledProcessors;
+    }
 
-	private List<LibraryProcessor> getProcessors(LibraryContext context) {
-		var processors = new ArrayList<LibraryProcessor>();
+    public List<Library> processLibraries(List<Library> librariesIn, LibraryContext libraryContext) {
+        final List<LibraryProcessor> processors = getProcessors(libraryContext);
 
-		for (LibraryProcessorFactory factory : libraryProcessorFactories) {
-			final LibraryProcessor processor = factory.apply(platform, context);
-			final LibraryProcessor.ApplicationResult applicationResult = processor.getApplicationResult();
+        if (processors.isEmpty()) {
+            return librariesIn;
+        }
 
-			switch (applicationResult) {
-			case MUST_APPLY -> {
-				processors.add(processor);
-			}
-			case CAN_APPLY -> {
-				if (enabledProcessors.contains(processor.getClass().getSimpleName())) {
-					processors.add(processor);
-				}
-			}
-			case DONT_APPLY -> { }
-			}
-		}
+        return processLibraries(processors, librariesIn);
+    }
 
-		return Collections.unmodifiableList(processors);
-	}
+    @VisibleForTesting
+    public List<Library> processLibraries(List<LibraryProcessor> processors, List<Library> librariesIn) {
+        var libraries = new ArrayList<>(librariesIn);
 
-	public List<Library> processLibraries(List<Library> librariesIn, LibraryContext libraryContext) {
-		final List<LibraryProcessor> processors = getProcessors(libraryContext);
+        for (LibraryProcessor processor : processors) {
+            var processedLibraries = new ArrayList<Library>();
+            final Predicate<Library> predicate = processor.apply(processedLibraries::add);
 
-		if (processors.isEmpty()) {
-			return librariesIn;
-		}
+            for (Library library : libraries) {
+                if (predicate.test(library)) {
+                    processedLibraries.add(library);
+                }
+            }
 
-		return processLibraries(processors, librariesIn);
-	}
+            processor.applyRepositories(repositories);
 
-	@VisibleForTesting
-	public List<Library> processLibraries(List<LibraryProcessor> processors, List<Library> librariesIn) {
-		var libraries = new ArrayList<>(librariesIn);
+            libraries = processedLibraries;
+        }
 
-		for (LibraryProcessor processor : processors) {
-			var processedLibraries = new ArrayList<Library>();
-			final Predicate<Library> predicate = processor.apply(processedLibraries::add);
+        return Collections.unmodifiableList(libraries);
+    }
 
-			for (Library library : libraries) {
-				if (predicate.test(library)) {
-					processedLibraries.add(library);
-				}
-			}
+    private List<LibraryProcessor> getProcessors(LibraryContext context) {
+        var processors = new ArrayList<LibraryProcessor>();
 
-			processor.applyRepositories(repositories);
+        for (LibraryProcessorFactory factory : libraryProcessorFactories) {
+            final LibraryProcessor processor = factory.apply(platform, context);
+            final LibraryProcessor.ApplicationResult applicationResult = processor.getApplicationResult();
 
-			libraries = processedLibraries;
-		}
+            switch (applicationResult) {
+                case MUST_APPLY -> {
+                    processors.add(processor);
+                }
+                case CAN_APPLY -> {
+                    if (enabledProcessors.contains(processor.getClass().getSimpleName())) {
+                        processors.add(processor);
+                    }
+                }
+                case DONT_APPLY -> {
+                }
+            }
+        }
 
-		return Collections.unmodifiableList(libraries);
-	}
+        return Collections.unmodifiableList(processors);
+    }
 
-	public interface LibraryProcessorFactory extends BiFunction<Platform, LibraryContext, LibraryProcessor> {
-	}
+    public interface LibraryProcessorFactory extends BiFunction<Platform, LibraryContext, LibraryProcessor> {
+    }
 }

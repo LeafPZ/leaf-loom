@@ -61,81 +61,86 @@ import dev.aoqia.leaf.loom.util.AsyncZipProcessor;
 import dev.aoqia.leaf.loom.util.Constants;
 
 public record LineNumberRemapper(ClassLineNumbers lineNumbers) {
-	private static final Logger LOGGER = LoggerFactory.getLogger(LineNumberRemapper.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(LineNumberRemapper.class);
 
-	public void process(Path input, Path output) throws IOException {
-		AsyncZipProcessor.processEntries(input, output, new AsyncZipProcessor() {
-			private final Set<Path> createdParents = new HashSet<>();
+    public void process(Path input, Path output) throws IOException {
+        AsyncZipProcessor.processEntries(input, output, new AsyncZipProcessor() {
+            private final Set<Path> createdParents = new HashSet<>();
 
-			@Override
-			public void processEntryAsync(Path file, Path dst) throws IOException {
-				Path parent = dst.getParent();
+            @Override
+            public void processEntryAsync(Path file, Path dst) throws IOException {
+                Path parent = dst.getParent();
 
-				synchronized (createdParents) {
-					if (parent != null && createdParents.add(parent)) {
-						Files.createDirectories(parent);
-					}
-				}
+                synchronized (createdParents) {
+                    if (parent != null && createdParents.add(parent)) {
+                        Files.createDirectories(parent);
+                    }
+                }
 
-				String fileName = file.toAbsolutePath().toString();
+                String fileName = file.toAbsolutePath().toString();
 
-				if (fileName.endsWith(".class")) {
-					// Strip the leading slash and the .class extension
-					String idx = fileName.substring(1, fileName.length() - 6);
+                if (fileName.endsWith(".class")) {
+                    // Strip the leading slash and the .class extension
+                    String idx = fileName.substring(1, fileName.length() - 6);
 
-					int dollarPos = idx.indexOf('$'); //This makes the assumption that only Java classes are to be remapped.
+                    // This makes the assumption that only Java classes are to be remapped.
+                    int dollarPos = idx.indexOf('$');
 
-					if (dollarPos >= 0) {
-						idx = idx.substring(0, dollarPos);
-					}
+                    if (dollarPos >= 0) {
+                        idx = idx.substring(0, dollarPos);
+                    }
 
-					if (lineNumbers.lineMap().containsKey(idx)) {
-						LOGGER.debug("Remapping line numbers for class: {}", idx);
+                    if (lineNumbers.lineMap().containsKey(idx)) {
+                        LOGGER.debug("Remapping line numbers for class: {}", idx);
 
-						try (InputStream is = Files.newInputStream(file)) {
-							ClassReader reader = new ClassReader(is);
-							ClassWriter writer = new ClassWriter(0);
+                        try (InputStream is = Files.newInputStream(file)) {
+                            ClassReader reader = new ClassReader(is);
+                            ClassWriter writer = new ClassWriter(0);
 
-							reader.accept(new LineNumberVisitor(Constants.ASM_VERSION, writer, lineNumbers.lineMap().get(idx)), 0);
-							Files.write(dst, writer.toByteArray());
-							return;
-						}
-					} else {
-						LOGGER.debug("No linemap found for: {}", idx);
-					}
-				}
+                            reader.accept(
+                                new LineNumberVisitor(Constants.ASM_VERSION, writer, lineNumbers.lineMap().get(idx)),
+                                0);
+                            Files.write(dst, writer.toByteArray());
+                            return;
+                        }
+                    } else {
+                        LOGGER.debug("No linemap found for: {}", idx);
+                    }
+                }
 
-				Files.copy(file, dst, StandardCopyOption.REPLACE_EXISTING);
-			}
-		});
-	}
+                Files.copy(file, dst, StandardCopyOption.REPLACE_EXISTING);
+            }
+        });
+    }
 
-	private static class LineNumberVisitor extends ClassVisitor {
-		private final ClassLineNumbers.Entry lineNumbers;
+    private static class LineNumberVisitor extends ClassVisitor {
+        private final ClassLineNumbers.Entry lineNumbers;
 
-		LineNumberVisitor(int api, ClassVisitor classVisitor, ClassLineNumbers.Entry lineNumbers) {
-			super(api, classVisitor);
-			this.lineNumbers = lineNumbers;
-		}
+        LineNumberVisitor(int api, ClassVisitor classVisitor, ClassLineNumbers.Entry lineNumbers) {
+            super(api, classVisitor);
+            this.lineNumbers = lineNumbers;
+        }
 
-		@Override
-		public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
-			return new MethodVisitor(api, super.visitMethod(access, name, descriptor, signature, exceptions)) {
-				@Override
-				public void visitLineNumber(int line, Label start) {
-					if (line <= 0) {
-						super.visitLineNumber(line, start);
-					} else if (line >= lineNumbers.maxLine()) {
-						super.visitLineNumber(lineNumbers.maxLineDest(), start);
-					} else {
-						Integer matchedLine = lineNumbers.lineMap().get(line);
+        @Override
+        public MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
+            String[] exceptions)
+        {
+            return new MethodVisitor(api, super.visitMethod(access, name, descriptor, signature, exceptions)) {
+                @Override
+                public void visitLineNumber(int line, Label start) {
+                    if (line <= 0) {
+                        super.visitLineNumber(line, start);
+                    } else if (line >= lineNumbers.maxLine()) {
+                        super.visitLineNumber(lineNumbers.maxLineDest(), start);
+                    } else {
+                        Integer matchedLine = lineNumbers.lineMap().get(line);
 
-						if (matchedLine != null) {
-							super.visitLineNumber(matchedLine, start);
-						}
-					}
-				}
-			};
-		}
-	}
+                        if (matchedLine != null) {
+                            super.visitLineNumber(matchedLine, start);
+                        }
+                    }
+                }
+            };
+        }
+    }
 }

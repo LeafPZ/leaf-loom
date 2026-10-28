@@ -61,150 +61,158 @@ import dev.aoqia.leaf.loom.api.LoomGradleExtensionAPI;
 import dev.aoqia.leaf.loom.api.MixinExtensionAPI;
 
 public abstract class MixinExtensionApiImpl implements MixinExtensionAPI {
-	private static final String MIXIN_AP_DISABLED_ERROR = "The mixin annotation is no longer enabled by default, you should remove any loom.mixin configuration. If you wish to continue to use the mixin AP you can set useLegacyMixinAp = true.";
-	private static final Logger LOGGER = LoggerFactory.getLogger(MixinExtensionApiImpl.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MixinExtensionApiImpl.class);
 
-	protected final Project project;
-	protected final Property<Boolean> useMixinAp;
-	private final Property<String> refmapTargetNamespace;
-	private final MapProperty<String, String> messages;
-	private final Property<Boolean> showMessageTypes;
+    private static final String MIXIN_AP_DISABLED_ERROR = "The mixin annotation is no longer enabled by default, you "
+        + "should remove any loom.mixin configuration. If you wish to continue to use the mixin AP you can set "
+        + "useLegacyMixinAp = true.";
 
-	public MixinExtensionApiImpl(Project project) {
-		this.project = Objects.requireNonNull(project);
-		this.useMixinAp = project.getObjects().property(Boolean.class)
-				.convention(false);
+    protected final Project project;
+    protected final Property<Boolean> useMixinAp;
+    private final MapProperty<String, String> messages;
+    private final Property<String> refmapTargetNamespace;
+    private final Property<Boolean> showMessageTypes;
 
-		this.refmapTargetNamespace = project.getObjects().property(String.class);
-		this.refmapTargetNamespace.convention(project.provider(() -> LoomGradleExtension.get(project)).flatMap(LoomGradleExtensionAPI::getProductionNamespace));
-		this.refmapTargetNamespace.finalizeValueOnRead();
+    public MixinExtensionApiImpl(Project project) {
+        this.project = Objects.requireNonNull(project);
+        this.useMixinAp = project.getObjects().property(Boolean.class).convention(false);
 
-		this.messages = project.getObjects().mapProperty(String.class, String.class);
-		this.messages.finalizeValueOnRead();
+        this.refmapTargetNamespace = project.getObjects().property(String.class);
+        this.refmapTargetNamespace.convention(project.provider(() -> LoomGradleExtension.get(project))
+            .flatMap(LoomGradleExtensionAPI::getProductionNamespace));
+        this.refmapTargetNamespace.finalizeValueOnRead();
 
-		this.showMessageTypes = project.getObjects().property(Boolean.class);
-		this.showMessageTypes.convention(false).finalizeValueOnRead();
-	}
+        this.messages = project.getObjects().mapProperty(String.class, String.class);
+        this.messages.finalizeValueOnRead();
 
-	protected final PatternSet add0(SourceSet sourceSet, String refmapName) {
-		return add0(sourceSet, project.provider(() -> refmapName));
-	}
+        this.showMessageTypes = project.getObjects().property(Boolean.class);
+        this.showMessageTypes.convention(false).finalizeValueOnRead();
+    }
 
-	protected abstract PatternSet add0(SourceSet sourceSet, Provider<String> refmapName);
+    @Override
+    public void add(SourceSet sourceSet) {
+        add(sourceSet, x -> {});
+    }
 
-	@Override
-	public Property<Boolean> getUseLegacyMixinAp() {
-		return useMixinAp;
-	}
+    @Override
+    public void add(SourceSet sourceSet, Action<PatternSet> action) {
+        add(sourceSet, getDefaultRefmapName(), action);
+    }
 
-	@Override
-	public Property<String> getRefmapTargetNamespace() {
-		if (!getUseLegacyMixinAp().get()) logLegacyMixinAPConfiguration();
+    public void add(SourceSet sourceSet, Provider<String> refmapName, Action<PatternSet> action) {
+        PatternSet pattern = add0(sourceSet, refmapName);
+        action.execute(pattern);
+    }
 
-		return refmapTargetNamespace;
-	}
+    @Override
+    public void add(SourceSet sourceSet, String refmapName) {
+        add(sourceSet, refmapName, x -> {});
+    }
 
-	@Override
-	public void add(SourceSet sourceSet, String refmapName, Action<PatternSet> action) {
-		PatternSet pattern = add0(sourceSet, refmapName);
-		action.execute(pattern);
-	}
+    @Override
+    public void add(SourceSet sourceSet, String refmapName, Action<PatternSet> action) {
+        PatternSet pattern = add0(sourceSet, refmapName);
+        action.execute(pattern);
+    }
 
-	@Override
-	public void add(SourceSet sourceSet, String refmapName) {
-		add(sourceSet, refmapName, x -> { });
-	}
+    @Override
+    public void add(String sourceSetName) {
+        add(sourceSetName, x -> {});
+    }
 
-	@Override
-	public void add(String sourceSetName, String refmapName, Action<PatternSet> action) {
-		add(sourceSetName, project.provider(() -> refmapName), action);
-	}
+    @Override
+    public void add(String sourceSetName, Action<PatternSet> action) {
+        add(sourceSetName, getDefaultRefmapName(), action);
+    }
 
-	public void add(String sourceSetName, Provider<String> refmapName, Action<PatternSet> action) {
-		add(resolveSourceSet(sourceSetName), refmapName, action);
-	}
+    public void add(String sourceSetName, Provider<String> refmapName, Action<PatternSet> action) {
+        add(resolveSourceSet(sourceSetName), refmapName, action);
+    }
 
-	public void add(SourceSet sourceSet, Provider<String> refmapName, Action<PatternSet> action) {
-		PatternSet pattern = add0(sourceSet, refmapName);
-		action.execute(pattern);
-	}
+    @Override
+    public void add(String sourceSetName, String refmapName) {
+        add(sourceSetName, refmapName, x -> {});
+    }
 
-	@Override
-	public void add(String sourceSetName, String refmapName) {
-		add(sourceSetName, refmapName, x -> { });
-	}
+    @Override
+    public void add(String sourceSetName, String refmapName, Action<PatternSet> action) {
+        add(sourceSetName, project.provider(() -> refmapName), action);
+    }
 
-	@Override
-	public void add(SourceSet sourceSet, Action<PatternSet> action) {
-		add(sourceSet, getDefaultRefmapName(), action);
-	}
+    @Override
+    public MapProperty<String, String> getMessages() {
+        return messages;
+    }
 
-	@Override
-	public void add(SourceSet sourceSet) {
-		add(sourceSet, x -> { });
-	}
+    @Override
+    public Property<String> getRefmapTargetNamespace() {
+        if (!getUseLegacyMixinAp().get()) {
+            logLegacyMixinAPConfiguration();
+        }
 
-	@Override
-	public void add(String sourceSetName, Action<PatternSet> action) {
-		add(sourceSetName, getDefaultRefmapName(), action);
-	}
+        return refmapTargetNamespace;
+    }
 
-	@Override
-	public void add(String sourceSetName) {
-		add(sourceSetName, x -> { });
-	}
+    @Override
+    public Property<Boolean> getShowMessageTypes() {
+        return showMessageTypes;
+    }
 
-	@Override
-	public MapProperty<String, String> getMessages() {
-		return messages;
-	}
+    @Override
+    public Property<Boolean> getUseLegacyMixinAp() {
+        return useMixinAp;
+    }
 
-	@Override
-	public Property<Boolean> getShowMessageTypes() {
-		return showMessageTypes;
-	}
+    @Override
+    public void messages(Action<MapProperty<String, String>> action) {
+        action.execute(messages);
+    }
 
-	@Override
-	public void messages(Action<MapProperty<String, String>> action) {
-		action.execute(messages);
-	}
+    protected abstract PatternSet add0(SourceSet sourceSet, Provider<String> refmapName);
 
-	private SourceSet resolveSourceSet(String sourceSetName) {
-		// try to find sourceSet with name sourceSetName in this project
-		SourceSet sourceSet = project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().findByName(sourceSetName);
+    protected final PatternSet add0(SourceSet sourceSet, String refmapName) {
+        return add0(sourceSet, project.provider(() -> refmapName));
+    }
 
-		if (sourceSet == null) {
-			throw new InvalidUserDataException("No sourceSet " + sourceSetName + " was found");
-		}
+    final void logLegacyMixinAPConfiguration() {
+        final WarningMode warningMode = project.getGradle().getStartParameter().getWarningMode();
 
-		return sourceSet;
-	}
+        if (warningMode == WarningMode.Fail) {
+            throw new IllegalStateException(MIXIN_AP_DISABLED_ERROR);
+        } else if (warningMode != WarningMode.None) {
+            LOGGER.warn(MIXIN_AP_DISABLED_ERROR);
+        }
+    }
 
-	// This is here to ensure that LoomGradleExtensionApiImpl compiles without any unimplemented methods
-	private final class EnsureCompile extends MixinExtensionApiImpl {
-		private EnsureCompile() {
-			super(null);
-			throw new RuntimeException();
-		}
+    private SourceSet resolveSourceSet(String sourceSetName) {
+        // try to find sourceSet with name sourceSetName in this project
+        SourceSet sourceSet = project.getExtensions()
+            .getByType(JavaPluginExtension.class)
+            .getSourceSets()
+            .findByName(sourceSetName);
 
-		@Override
-		public Property<String> getDefaultRefmapName() {
-			throw new RuntimeException("Yeah... something is really wrong");
-		}
+        if (sourceSet == null) {
+            throw new InvalidUserDataException("No sourceSet " + sourceSetName + " was found");
+        }
 
-		@Override
-		protected PatternSet add0(SourceSet sourceSet, Provider<String> refmapName) {
-			throw new RuntimeException("Yeah... something is really wrong");
-		}
-	}
+        return sourceSet;
+    }
 
-	final void logLegacyMixinAPConfiguration() {
-		final WarningMode warningMode = project.getGradle().getStartParameter().getWarningMode();
+    // This is here to ensure that LoomGradleExtensionApiImpl compiles without any unimplemented methods
+    private final class EnsureCompile extends MixinExtensionApiImpl {
+        private EnsureCompile() {
+            super(null);
+            throw new RuntimeException();
+        }
 
-		if (warningMode == WarningMode.Fail) {
-			throw new IllegalStateException(MIXIN_AP_DISABLED_ERROR);
-		} else if (warningMode != WarningMode.None) {
-			LOGGER.warn(MIXIN_AP_DISABLED_ERROR);
-		}
-	}
+        @Override
+        public Property<String> getDefaultRefmapName() {
+            throw new RuntimeException("Yeah... something is really wrong");
+        }
+
+        @Override
+        protected PatternSet add0(SourceSet sourceSet, Provider<String> refmapName) {
+            throw new RuntimeException("Yeah... something is really wrong");
+        }
+    }
 }

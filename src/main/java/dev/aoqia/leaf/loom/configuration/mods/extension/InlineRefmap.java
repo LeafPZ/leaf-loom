@@ -55,24 +55,24 @@ import dev.aoqia.leaf.loom.configuration.mods.dependency.refmap.MixinRefmapInlin
 import dev.aoqia.leaf.loom.configuration.mods.dependency.refmap.MixinRefmapInlinerApplyVisitorProvider;
 
 final class InlineRefmap implements ModProcessorExtension {
-	static final InlineRefmap INSTANCE = new InlineRefmap();
+    static final InlineRefmap INSTANCE = new InlineRefmap();
 
-	private InlineRefmap() {
-	}
+    private InlineRefmap() {
+    }
 
-	@Override
-	public boolean appliesTo(ModDependency modDependency) {
-		return modDependency.getOptions().getInlineRefmap().get()
-				&& modDependency.getMetadata().mixinRemapType() == ArtifactMetadata.MixinRemapType.MIXIN;
-	}
+    @Override
+    public boolean appliesTo(ModDependency modDependency) {
+        return modDependency.getOptions().getInlineRefmap().get()
+            && modDependency.getMetadata().mixinRemapType() == ArtifactMetadata.MixinRemapType.MIXIN;
+    }
 
-	@Override
-	public TinyRemapper.Extension createExtension(Context ctx, Predicate<InputTag> applyPredicate) throws IOException {
-		MixinReferenceRemapper refmapRemapper = MixinRefmapInliner.createRemapper(ctx.from(), ctx.to(), ctx.mods());
-		return new MixinRefmapInlinerApplyVisitorProvider(refmapRemapper, applyPredicate);
-	}
+    @Override
+    public TinyRemapper.Extension createExtension(Context ctx, Predicate<InputTag> applyPredicate) throws IOException {
+        MixinReferenceRemapper refmapRemapper = MixinRefmapInliner.createRemapper(ctx.from(), ctx.to(), ctx.mods());
+        return new MixinRefmapInlinerApplyVisitorProvider(refmapRemapper, applyPredicate);
+    }
 
-	@Override
-	public void finalise(ModDependency modDependency, Path path) throws IOException {
-	}
+    @Override
+    public void finalise(ModDependency modDependency, Path path) throws IOException {
+    }
 }

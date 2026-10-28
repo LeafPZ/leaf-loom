@@ -58,42 +58,44 @@ import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
 import dev.aoqia.leaf.loom.util.fmj.LeafModJsonFactory;
 
 public class DebofInstallerData {
-	private static final Logger LOGGER = LoggerFactory.getLogger(DebofInstallerData.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DebofInstallerData.class);
 
-	public static void findAndApply(Project project) {
-		for (DebofConfiguration debofConfiguration : DebofConfiguration.ALL) {
-			for (Configuration configuration : debofConfiguration.getConfigurations(project)) {
-				Optional<InstallerData> installerData = configuration.getFiles().parallelStream()
-						.filter(File::isFile)
-						.map(DebofInstallerData::getInstaller)
-						.filter(Objects::nonNull)
-						.findFirst();
+    public static void findAndApply(Project project) {
+        for (DebofConfiguration debofConfiguration : DebofConfiguration.ALL) {
+            for (Configuration configuration : debofConfiguration.getConfigurations(project)) {
+                Optional<InstallerData> installerData = configuration.getFiles()
+                    .parallelStream()
+                    .filter(File::isFile)
+                    .map(DebofInstallerData::getInstaller)
+                    .filter(Objects::nonNull)
+                    .findFirst();
 
-				if (installerData.isPresent()) {
-					LOGGER.info("Applying installer data from configuration '{}'", configuration.getName());
-					installerData.get().applyToProject(project);
-					return;
-				}
-			}
-		}
+                if (installerData.isPresent()) {
+                    LOGGER.info("Applying installer data from configuration '{}'", configuration.getName());
+                    installerData.get().applyToProject(project);
+                    return;
+                }
+            }
+        }
 
-		LOGGER.info("No installer data found in any configuration.");
-	}
+        LOGGER.info("No installer data found in any configuration.");
+    }
 
-	@Nullable private static InstallerData getInstaller(File file) {
-		try {
-			byte[] installerData = ZipUtils.unpackNullable(file.toPath(), InstallerData.INSTALLER_PATH);
+    @Nullable
+    private static InstallerData getInstaller(File file) {
+        try {
+            byte[] installerData = ZipUtils.unpackNullable(file.toPath(), InstallerData.INSTALLER_PATH);
 
-			if (installerData == null) {
-				return null;
-			}
+            if (installerData == null) {
+                return null;
+            }
 
-			LeafModJson LeafModJson = LeafModJsonFactory.createFromZip(file.toPath());
-			LOGGER.info("Found installer in mod {} version {}", LeafModJson.getId(), LeafModJson.getModVersion());
-			return InstallerData.fromBytes(installerData, LeafModJson.getModVersion());
-		} catch (IOException e) {
-			LOGGER.debug("Failed to read installer data from file '{}'", file, e);
-			return null;
-		}
-	}
+            LeafModJson LeafModJson = LeafModJsonFactory.createFromZip(file.toPath());
+            LOGGER.info("Found installer in mod {} version {}", LeafModJson.getId(), LeafModJson.getModVersion());
+            return InstallerData.fromBytes(installerData, LeafModJson.getModVersion());
+        } catch (IOException e) {
+            LOGGER.debug("Failed to read installer data from file '{}'", file, e);
+            return null;
+        }
+    }
 }

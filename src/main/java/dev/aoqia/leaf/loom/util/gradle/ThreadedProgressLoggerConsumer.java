@@ -53,70 +53,72 @@ import org.gradle.internal.logging.progress.ProgressLogger;
 import org.gradle.internal.logging.progress.ProgressLoggerFactory;
 
 public class ThreadedProgressLoggerConsumer implements Consumer<String>, AutoCloseable {
-	public static final String CLOSE_LOGGERS = "LOOM_CLOSE_LOGGERS";
+    public static final String CLOSE_LOGGERS = "LOOM_CLOSE_LOGGERS";
 
-	private final Logger logger;
-	private final String name;
-	private final String desc;
+    private final String desc;
+    private final Logger logger;
+    private final Map<String, ProgressLogger> loggers = Collections.synchronizedMap(new HashMap<>());
 
-	private final ProgressLoggerFactory progressLoggerFactory;
-	private final ProgressLogger progressGroup;
-	private final Map<String, ProgressLogger> loggers = Collections.synchronizedMap(new HashMap<>());
+    private final String name;
+    private final ProgressLogger progressGroup;
+    private final ProgressLoggerFactory progressLoggerFactory;
 
-	public ThreadedProgressLoggerConsumer(Project project, String name, String desc) {
-		this.logger = project.getLogger();
-		this.name = name;
-		this.desc = desc;
+    public ThreadedProgressLoggerConsumer(Logger logger, ProgressLoggerFactory progressLoggerFactory, String name,
+        String desc)
+    {
+        this.logger = logger;
+        this.name = name;
+        this.desc = desc;
+        this.progressLoggerFactory = progressLoggerFactory;
+        this.progressGroup = this.progressLoggerFactory.newOperation(name).setDescription(desc);
+        progressGroup.started();
+    }
 
-		this.progressLoggerFactory = ((ProjectInternal) project).getServices().get(ProgressLoggerFactory.class);
-		this.progressGroup = this.progressLoggerFactory.newOperation(name).setDescription(desc);
-		progressGroup.started();
-	}
+    public ThreadedProgressLoggerConsumer(Project project, String name, String desc) {
+        this.logger = project.getLogger();
+        this.name = name;
+        this.desc = desc;
 
-	public ThreadedProgressLoggerConsumer(Logger logger, ProgressLoggerFactory progressLoggerFactory, String name, String desc) {
-		this.logger = logger;
-		this.name = name;
-		this.desc = desc;
-		this.progressLoggerFactory = progressLoggerFactory;
-		this.progressGroup = this.progressLoggerFactory.newOperation(name).setDescription(desc);
-		progressGroup.started();
-	}
+        this.progressLoggerFactory = ((ProjectInternal) project).getServices().get(ProgressLoggerFactory.class);
+        this.progressGroup = this.progressLoggerFactory.newOperation(name).setDescription(desc);
+        progressGroup.started();
+    }
 
-	@Override
-	public void accept(String line) {
-		if (!line.contains("::")) {
-			logger.debug("Malformed threaded IPC log message: " + line);
-			return;
-		}
+    @Override
+    public void accept(String line) {
+        if (!line.contains("::")) {
+            logger.debug("Malformed threaded IPC log message: " + line);
+            return;
+        }
 
-		int idx = line.indexOf("::");
-		String id = line.substring(0, idx).trim();
-		String data = line.substring(idx + 2).trim();
+        int idx = line.indexOf("::");
+        String id = line.substring(0, idx).trim();
+        String data = line.substring(idx + 2).trim();
 
-		if (data.equals(CLOSE_LOGGERS)) {
-			resetLoggers();
-			return;
-		}
+        if (data.equals(CLOSE_LOGGERS)) {
+            resetLoggers();
+            return;
+        }
 
-		loggers.computeIfAbsent(id, this::createLogger).progress(data);
-	}
+        loggers.computeIfAbsent(id, this::createLogger).progress(data);
+    }
 
-	private ProgressLogger createLogger(String id) {
-		ProgressLogger progressLogger = progressLoggerFactory.newOperation(getClass(), progressGroup);
-		progressLogger.setDescription(desc);
-		progressLogger.started();
-		return progressLogger;
-	}
+    @Override
+    public void close() {
+        resetLoggers();
 
-	private void resetLoggers() {
-		loggers.values().forEach(ProgressLogger::completed);
-		loggers.clear();
-	}
+        progressGroup.completed();
+    }
 
-	@Override
-	public void close() {
-		resetLoggers();
+    private ProgressLogger createLogger(String id) {
+        ProgressLogger progressLogger = progressLoggerFactory.newOperation(getClass(), progressGroup);
+        progressLogger.setDescription(desc);
+        progressLogger.started();
+        return progressLogger;
+    }
 
-		progressGroup.completed();
-	}
+    private void resetLoggers() {
+        loggers.values().forEach(ProgressLogger::completed);
+        loggers.clear();
+    }
 }

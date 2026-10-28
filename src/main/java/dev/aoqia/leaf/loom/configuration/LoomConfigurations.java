@@ -56,118 +56,129 @@ import dev.aoqia.leaf.loom.util.LoomVersions;
 import dev.aoqia.leaf.loom.util.gradle.SourceSetHelper;
 
 public abstract class LoomConfigurations implements Runnable {
-	@Inject
-	protected abstract Project getProject();
+    public void extendsFrom(String a, String b) {
+        getConfigurations().named(a, configuration -> configuration.extendsFrom(getConfigurations().named(b)));
+    }
 
-	@Inject
-	protected abstract ConfigurationContainer getConfigurations();
+    @Override
+    public void run() {
+        final LoomGradleExtension extension = LoomGradleExtension.get(getProject());
 
-	@Inject
-	protected abstract DependencyHandler getDependencies();
+        register(Constants.Configurations.MOD_COMPILE_CLASSPATH, Role.RESOLVABLE);
+        registerNonTransitive(Constants.Configurations.MOD_COMPILE_CLASSPATH_MAPPED, Role.RESOLVABLE);
 
-	@Override
-	public void run() {
-		final LoomGradleExtension extension = LoomGradleExtension.get(getProject());
+        // Set up the compile configurations.
+        var clientCompile = registerNonTransitive(Constants.Configurations.ZOMBOID_CLIENT_COMPILE_LIBRARIES,
+            Role.RESOLVABLE);
+        var serverCompile = registerNonTransitive(Constants.Configurations.ZOMBOID_SERVER_COMPILE_LIBRARIES,
+            Role.RESOLVABLE);
+        var zomboidCompile = registerNonTransitive(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES, Role.RESOLVABLE);
+        zomboidCompile.configure(configuration -> {
+            configuration.extendsFrom(clientCompile);
+            configuration.extendsFrom(serverCompile);
+        });
 
-		register(Constants.Configurations.MOD_COMPILE_CLASSPATH, Role.RESOLVABLE);
-		registerNonTransitive(Constants.Configurations.MOD_COMPILE_CLASSPATH_MAPPED, Role.RESOLVABLE);
+        // Set up the runtime configurations, this extends from the compile configurations.
+        var zomboidClientRuntime = registerNonTransitive(Constants.Configurations.ZOMBOID_CLIENT_RUNTIME_LIBRARIES,
+            Role.RESOLVABLE);
+        var zomboidServerRuntime = registerNonTransitive(Constants.Configurations.ZOMBOID_SERVER_RUNTIME_LIBRARIES,
+            Role.RESOLVABLE);
 
-		// Set up the compile configurations.
-		var clientCompile = registerNonTransitive(Constants.Configurations.ZOMBOID_CLIENT_COMPILE_LIBRARIES, Role.RESOLVABLE);
-		var serverCompile = registerNonTransitive(Constants.Configurations.ZOMBOID_SERVER_COMPILE_LIBRARIES, Role.RESOLVABLE);
-		var zomboidCompile = registerNonTransitive(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES, Role.RESOLVABLE);
-		zomboidCompile.configure(configuration -> {
-			configuration.extendsFrom(clientCompile);
-			configuration.extendsFrom(serverCompile);
-		});
+        // Runtime extends from compile
+        zomboidClientRuntime.configure(configuration -> configuration.extendsFrom(clientCompile));
+        zomboidServerRuntime.configure(configuration -> configuration.extendsFrom(serverCompile));
 
-		// Set up the runtime configurations, this extends from the compile configurations.
-		var zomboidClientRuntime = registerNonTransitive(Constants.Configurations.ZOMBOID_CLIENT_RUNTIME_LIBRARIES, Role.RESOLVABLE);
-		var zomboidServerRuntime = registerNonTransitive(Constants.Configurations.ZOMBOID_SERVER_RUNTIME_LIBRARIES, Role.RESOLVABLE);
+        registerNonTransitive(Constants.Configurations.ZOMBOID_RUNTIME_LIBRARIES, Role.RESOLVABLE)
+            .configure(runtime -> {
+                runtime.extendsFrom(zomboidClientRuntime);
+                runtime.extendsFrom(zomboidServerRuntime);
+            });
 
-		// Runtime extends from compile
-		zomboidClientRuntime.configure(configuration -> configuration.extendsFrom(clientCompile));
-		zomboidServerRuntime.configure(configuration -> configuration.extendsFrom(serverCompile));
+        registerNonTransitive(Constants.Configurations.ZOMBOID_NATIVES, Role.RESOLVABLE);
+        registerNonTransitive(Constants.Configurations.LOADER_DEPENDENCIES, Role.RESOLVABLE);
 
-		registerNonTransitive(Constants.Configurations.ZOMBOID_RUNTIME_LIBRARIES, Role.RESOLVABLE).configure(runtime -> {
-			runtime.extendsFrom(zomboidClientRuntime);
-			runtime.extendsFrom(zomboidServerRuntime);
-		});
+        registerNonTransitive(Constants.Configurations.ZOMBOID, Role.NONE);
 
-		registerNonTransitive(Constants.Configurations.ZOMBOID_NATIVES, Role.RESOLVABLE);
-		registerNonTransitive(Constants.Configurations.LOADER_DEPENDENCIES, Role.RESOLVABLE);
+        register(Constants.Configurations.INCLUDE, Role.NONE);
+        registerNonTransitive(Constants.Configurations.MAPPING_CONSTANTS, Role.RESOLVABLE);
+        extendsFrom(JavaPlugin.COMPILE_ONLY_CONFIGURATION_NAME, Constants.Configurations.MAPPING_CONSTANTS);
 
-		registerNonTransitive(Constants.Configurations.ZOMBOID, Role.NONE);
+        if (!extension.disableObfuscation()) {
+            register(Constants.Configurations.NAMED_ELEMENTS, Role.CONSUMABLE).configure(configuration -> {
+                configuration.extendsFrom(getConfigurations().named(JavaPlugin.API_CONFIGURATION_NAME));
+            });
 
-		register(Constants.Configurations.INCLUDE, Role.NONE);
-		registerNonTransitive(Constants.Configurations.MAPPING_CONSTANTS, Role.RESOLVABLE);
-		extendsFrom(JavaPlugin.COMPILE_ONLY_CONFIGURATION_NAME, Constants.Configurations.MAPPING_CONSTANTS);
+            register(Constants.Configurations.MAPPINGS, Role.RESOLVABLE);
+            register(Constants.Configurations.MAPPINGS_FINAL, Role.RESOLVABLE);
+            extendsFrom(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME, Constants.Configurations.MAPPINGS_FINAL);
+            extendsFrom(JavaPlugin.TEST_RUNTIME_CLASSPATH_CONFIGURATION_NAME, Constants.Configurations.MAPPINGS_FINAL);
 
-		if (!extension.disableObfuscation()) {
-			register(Constants.Configurations.NAMED_ELEMENTS, Role.CONSUMABLE).configure(configuration -> {
-				configuration.extendsFrom(getConfigurations().named(JavaPlugin.API_CONFIGURATION_NAME));
-			});
+            extension.createRemapConfigurations(SourceSetHelper.getMainSourceSet(getProject()));
+        } else {
+            registerNonTransitive(Constants.Configurations.ANNOTATIONS, Role.RESOLVABLE);
+        }
 
-			register(Constants.Configurations.MAPPINGS, Role.RESOLVABLE);
-			register(Constants.Configurations.MAPPINGS_FINAL, Role.RESOLVABLE);
-			extendsFrom(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME, Constants.Configurations.MAPPINGS_FINAL);
-			extendsFrom(JavaPlugin.TEST_RUNTIME_CLASSPATH_CONFIGURATION_NAME, Constants.Configurations.MAPPINGS_FINAL);
+        register(Constants.Configurations.LOOM_DEVELOPMENT_DEPENDENCIES, Role.RESOLVABLE);
+        register(Constants.Configurations.LOCAL_RUNTIME, Role.RESOLVABLE);
+        extendsFrom(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME, Constants.Configurations.LOCAL_RUNTIME);
 
-			extension.createRemapConfigurations(SourceSetHelper.getMainSourceSet(getProject()));
-		} else {
-			registerNonTransitive(Constants.Configurations.ANNOTATIONS, Role.RESOLVABLE);
-		}
+        extendsFrom(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME,
+            Constants.Configurations.ZOMBOID_RUNTIME_LIBRARIES);
 
-		register(Constants.Configurations.LOOM_DEVELOPMENT_DEPENDENCIES, Role.RESOLVABLE);
-		register(Constants.Configurations.LOCAL_RUNTIME, Role.RESOLVABLE);
-		extendsFrom(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME, Constants.Configurations.LOCAL_RUNTIME);
+        // Add the dev time dependencies
+        getDependencies().add(Constants.Configurations.LOOM_DEVELOPMENT_DEPENDENCIES,
+            LoomVersions.DEV_LAUNCH_INJECTOR.mavenNotation());
+        getDependencies().add(Constants.Configurations.LOOM_DEVELOPMENT_DEPENDENCIES,
+            LoomVersions.FABRIC_LOG4J_UTIL.mavenNotation());
+        getDependencies().add(JavaPlugin.COMPILE_ONLY_CONFIGURATION_NAME,
+            LoomVersions.JETBRAINS_ANNOTATIONS.mavenNotation());
+        getDependencies().add(JavaPlugin.TEST_COMPILE_ONLY_CONFIGURATION_NAME,
+            LoomVersions.JETBRAINS_ANNOTATIONS.mavenNotation());
 
-		extendsFrom(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME, Constants.Configurations.ZOMBOID_RUNTIME_LIBRARIES);
+        register(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES, Role.RESOLVABLE);
+        extendsFrom(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES,
+            Constants.Configurations.ZOMBOID_NATIVES);
+        extendsFrom(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES,
+            Constants.Configurations.ZOMBOID_CLIENT_RUNTIME_LIBRARIES);
+        extendsFrom(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES,
+            Constants.Configurations.LOADER_DEPENDENCIES);
 
-		// Add the dev time dependencies
-		getDependencies().add(Constants.Configurations.LOOM_DEVELOPMENT_DEPENDENCIES, LoomVersions.DEV_LAUNCH_INJECTOR.mavenNotation());
-		getDependencies().add(Constants.Configurations.LOOM_DEVELOPMENT_DEPENDENCIES, LoomVersions.FABRIC_LOG4J_UTIL.mavenNotation());
-		getDependencies().add(JavaPlugin.COMPILE_ONLY_CONFIGURATION_NAME, LoomVersions.JETBRAINS_ANNOTATIONS.mavenNotation());
-		getDependencies().add(JavaPlugin.TEST_COMPILE_ONLY_CONFIGURATION_NAME, LoomVersions.JETBRAINS_ANNOTATIONS.mavenNotation());
+        register(Constants.Configurations.PRODUCTION_RUNTIME_MODS, Role.RESOLVABLE);
+    }
 
-		register(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES, Role.RESOLVABLE);
-		extendsFrom(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES, Constants.Configurations.ZOMBOID_NATIVES);
-		extendsFrom(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES, Constants.Configurations.ZOMBOID_CLIENT_RUNTIME_LIBRARIES);
-		extendsFrom(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES, Constants.Configurations.LOADER_DEPENDENCIES);
+    @Inject
+    protected abstract ConfigurationContainer getConfigurations();
 
-		register(Constants.Configurations.PRODUCTION_RUNTIME_MODS, Role.RESOLVABLE);
-	}
+    @Inject
+    protected abstract DependencyHandler getDependencies();
 
-	private NamedDomainObjectProvider<Configuration> register(String name, Role role) {
-		return getConfigurations().register(name, role::apply);
-	}
+    @Inject
+    protected abstract Project getProject();
 
-	private NamedDomainObjectProvider<Configuration> registerNonTransitive(String name, Role role) {
-		final NamedDomainObjectProvider<Configuration> provider = register(name, role);
-		provider.configure(configuration -> configuration.setTransitive(false));
-		return provider;
-	}
+    private NamedDomainObjectProvider<Configuration> register(String name, Role role) {
+        return getConfigurations().register(name, role::apply);
+    }
 
-	public void extendsFrom(String a, String b) {
-		getConfigurations().named(a, configuration -> configuration.extendsFrom(getConfigurations().named(b)));
-	}
+    private NamedDomainObjectProvider<Configuration> registerNonTransitive(String name, Role role) {
+        final NamedDomainObjectProvider<Configuration> provider = register(name, role);
+        provider.configure(configuration -> configuration.setTransitive(false));
+        return provider;
+    }
 
-	public enum Role {
-		NONE(false, false),
-		CONSUMABLE(true, false),
-		RESOLVABLE(false, true);
+    public enum Role {
+        CONSUMABLE(true, false), NONE(false, false), RESOLVABLE(false, true);
 
-		private final boolean canBeConsumed;
-		private final boolean canBeResolved;
+        private final boolean canBeConsumed;
+        private final boolean canBeResolved;
 
-		Role(boolean canBeConsumed, boolean canBeResolved) {
-			this.canBeConsumed = canBeConsumed;
-			this.canBeResolved = canBeResolved;
-		}
+        Role(boolean canBeConsumed, boolean canBeResolved) {
+            this.canBeConsumed = canBeConsumed;
+            this.canBeResolved = canBeResolved;
+        }
 
-		public void apply(Configuration configuration) {
-			configuration.setCanBeConsumed(canBeConsumed);
-			configuration.setCanBeResolved(canBeResolved);
-		}
-	}
+        public void apply(Configuration configuration) {
+            configuration.setCanBeConsumed(canBeConsumed);
+            configuration.setCanBeResolved(canBeResolved);
+        }
+    }
 }

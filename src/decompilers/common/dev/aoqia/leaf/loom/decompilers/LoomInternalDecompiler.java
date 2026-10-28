@@ -50,35 +50,35 @@ import dev.aoqia.leaf.loom.api.decompilers.JavadocStyle;
 
 // This is an internal interface to loom, DO NOT USE this in your own plugins.
 public interface LoomInternalDecompiler {
-	void decompile(Context context);
+    void decompile(Context context);
 
-	interface Context {
-		Path compiledJar();
+    interface Context {
+        Path compiledJar();
 
-		Path sourcesDestination();
+        Path javaDocs();
 
-		Path linemapDestination();
+        JavadocStyle javadocStyle();
 
-		int numberOfThreads();
+        Collection<Path> libraries();
 
-		Path javaDocs();
+        Path linemapDestination();
 
-		Collection<Path> libraries();
+        Logger logger();
 
-		Logger logger();
+        int numberOfThreads();
 
-		Map<String, String> options();
+        Map<String, String> options();
 
-		byte[] unpackZip(Path zip, String path) throws IOException;
+        String runtimeNamespace();
 
-		String runtimeNamespace();
+        Path sourcesDestination();
 
-		JavadocStyle javadocStyle();
-	}
+        byte[] unpackZip(Path zip, String path) throws IOException;
+    }
 
-	interface Logger {
-		void accept(String data) throws IOException;
+    interface Logger {
+        void accept(String data) throws IOException;
 
-		void error(String msg);
-	}
+        void error(String msg);
+    }
 }

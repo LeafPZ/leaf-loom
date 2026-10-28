@@ -57,46 +57,49 @@ import dev.aoqia.leaf.loom.util.LazyCloseable;
 import dev.aoqia.leaf.loom.util.fmj.ModEnvironment;
 
 public record LocalAccessWidenerEntry(Path path, String hash) implements AccessWidenerEntry {
-	public static LocalAccessWidenerEntry create(Path path) {
-		return new LocalAccessWidenerEntry(path, Checksum.of(path).sha1().hex());
-	}
+    public static LocalAccessWidenerEntry create(Path path) {
+        return new LocalAccessWidenerEntry(path, Checksum.of(path).sha1().hex());
+    }
 
-	@Override
-	public void read(ClassTweakerVisitor visitor, LazyCloseable<TinyRemapper> remapper, MappingsNamespace productionNamespace) throws IOException {
-		var reader = ClassTweakerReader.create(visitor);
-		reader.read(Files.readAllBytes(path));
-	}
+    @Override
+    public void read(ClassTweakerVisitor visitor, LazyCloseable<TinyRemapper> remapper,
+        MappingsNamespace productionNamespace) throws IOException
+    {
+        var reader = ClassTweakerReader.create(visitor);
+        reader.read(Files.readAllBytes(path));
+    }
 
-	@Override
-	public void readOfficial(ClassTweakerVisitor visitor) throws IOException {
-		final byte[] data = Files.readAllBytes(path);
-		final ClassTweakerReader.Header header = ClassTweakerReader.readHeader(data);
+    @Override
+    public void readOfficial(ClassTweakerVisitor visitor) throws IOException {
+        final byte[] data = Files.readAllBytes(path);
+        final ClassTweakerReader.Header header = ClassTweakerReader.readHeader(data);
 
-		if (!header.getNamespace().equals(MappingsNamespace.OFFICIAL.toString())) {
-			throw new IOException("Expected official namespace for access widener entry, found: " + header.getNamespace());
-		}
+        if (!header.getNamespace().equals(MappingsNamespace.OFFICIAL.toString())) {
+            throw new IOException(
+                "Expected official namespace for access widener entry, found: " + header.getNamespace());
+        }
 
-		var reader = ClassTweakerReader.create(visitor);
-		reader.read(data);
-	}
+        var reader = ClassTweakerReader.create(visitor);
+        reader.read(data);
+    }
 
-	@Override
-	public ModEnvironment environment() {
-		return ModEnvironment.UNIVERSAL;
-	}
+    @Override
+    public ModEnvironment environment() {
+        return ModEnvironment.UNIVERSAL;
+    }
 
-	@Override
-	public @Nullable String mappingId() {
-		return null;
-	}
+    @Override
+    public @Nullable String mappingId() {
+        return null;
+    }
 
-	@Override
-	public String getSortKey() {
-		return "local";
-	}
+    @Override
+    public String getSortKey() {
+        return "local";
+    }
 
-	@Override
-	public int hashCode() {
-		return hash.hashCode();
-	}
+    @Override
+    public int hashCode() {
+        return hash.hashCode();
+    }
 }

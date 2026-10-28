@@ -42,6 +42,6 @@
 package dev.aoqia.leaf.loom.test.unit.processor.classes;
 
 public class SimpleTargetClass {
-	public static class Inner {
-	}
+    public static class Inner {
+    }
 }

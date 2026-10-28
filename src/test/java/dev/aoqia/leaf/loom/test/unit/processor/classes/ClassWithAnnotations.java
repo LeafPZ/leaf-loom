@@ -43,9 +43,10 @@ package dev.aoqia.leaf.loom.test.unit.processor.classes;
 
 @AnnPresent
 public class ClassWithAnnotations {
-	@AnnPresent
-	public int bar;
+    @AnnPresent
+    public int bar;
 
-	@AnnPresent
-	public void method(@AnnPresent String param) { }
+    @AnnPresent
+    public void method(@AnnPresent String param) {
+    }
 }

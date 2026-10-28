@@ -48,36 +48,36 @@ import java.util.function.Consumer;
  * Created by covers1624 on 20/12/18.
  */
 public class ConsumingOutputStream extends OutputStream {
-	private final Consumer<String> consumer;
+    private StringBuilder buffer = new StringBuilder();
 
-	private StringBuilder buffer = new StringBuilder();
+    private final Consumer<String> consumer;
 
-	public ConsumingOutputStream(Consumer<String> consumer) {
-		this.consumer = consumer;
-	}
+    public ConsumingOutputStream(Consumer<String> consumer) {
+        this.consumer = consumer;
+    }
 
-	@Override
-	public void write(int b) {
-		char ch = (char) (b & 0xFF);
-		buffer.append(ch);
+    @Override
+    public void flush() {
+        String str = buffer.toString();
 
-		if (ch == '\n' || ch == '\r') {
-			flush();
-		}
-	}
+        if (str.endsWith("\r") || str.endsWith("\n")) {
+            str = str.trim();
 
-	@Override
-	public void flush() {
-		String str = buffer.toString();
+            if (!str.isEmpty()) {
+                consumer.accept(str);
+            }
 
-		if (str.endsWith("\r") || str.endsWith("\n")) {
-			str = str.trim();
+            buffer = new StringBuilder();
+        }
+    }
 
-			if (!str.isEmpty()) {
-				consumer.accept(str);
-			}
+    @Override
+    public void write(int b) {
+        char ch = (char) (b & 0xFF);
+        buffer.append(ch);
 
-			buffer = new StringBuilder();
-		}
-	}
+        if (ch == '\n' || ch == '\r') {
+            flush();
+        }
+    }
 }

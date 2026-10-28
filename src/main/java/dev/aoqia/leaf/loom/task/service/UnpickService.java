@@ -93,198 +93,213 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public class UnpickService extends Service<UnpickService.Options> {
-	private static final Logger LOGGER = LoggerFactory.getLogger(UnpickService.class);
-	private static final java.util.logging.Logger JAVA_LOGGER = java.util.logging.Logger.getLogger("loom-unpick-service");
+    public static final ServiceType<Options,
+        UnpickService> TYPE = new ServiceType<>(Options.class, UnpickService.class);
 
-	static {
-		JAVA_LOGGER.setUseParentHandlers(false);
-		JAVA_LOGGER.addHandler(new SLF4JAdapterHandler(LOGGER, true));
-	}
+    private static final java.util.logging.Logger JAVA_LOGGER = java.util.logging.Logger
+        .getLogger("loom-unpick-service");
 
-	public static final ServiceType<Options, UnpickService> TYPE = new ServiceType<>(Options.class, UnpickService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(UnpickService.class);
 
-	public interface Options extends Service.Options {
-		@Input
-		Property<byte[]> getUnpickDefinitions();
+    static {
+        JAVA_LOGGER.setUseParentHandlers(false);
+        JAVA_LOGGER.addHandler(new SLF4JAdapterHandler(LOGGER, true));
+    }
 
-		@Optional
-		@Nested
-		Property<UnpickRemapperService.Options> getUnpickRemapperService();
+    public UnpickService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-		@Classpath
-		ConfigurableFileCollection getUnpickConstantJar();
+    public static Provider<Options> createOptions(GenerateSourcesTask task) {
+        final Project project = task.getProject();
+        return TYPE.maybeCreate(project, options -> {
+            LoomGradleExtension extension = LoomGradleExtension.get(project);
+            MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
 
-		@Classpath
-		ConfigurableFileCollection getUnpickClasspath();
+            if (mappingConfiguration == null || !mappingConfiguration.hasUnpickDefinitions()) {
+                return false;
+            }
 
-		@OutputFile
-		RegularFileProperty getUnpickOutputJar();
+            UnpickMetadata unpickMetadata = mappingConfiguration.getUnpickMetadata();
+            MappingsNamespace runtimeNamespace = mappingConfiguration.getRuntimeNamespace();
 
-		@Input
-		Property<Boolean> getLenient();
-	}
+            if (unpickMetadata instanceof UnpickMetadata.V2 v2) {
+                if (!Objects.equals(v2.namespace(), runtimeNamespace.toString())) {
+                    options.getUnpickRemapperService().set(UnpickRemapperService.createOptions(project, v2));
+                }
+            }
 
-	public static Provider<Options> createOptions(GenerateSourcesTask task) {
-		final Project project = task.getProject();
-		return TYPE.maybeCreate(project, options -> {
-			LoomGradleExtension extension = LoomGradleExtension.get(project);
-			MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
+            ConfigurationContainer configurations = project.getConfigurations();
+            options.getUnpickDefinitions().set(mappingConfiguration.getUnpickDefinitions());
 
-			if (mappingConfiguration == null || !mappingConfiguration.hasUnpickDefinitions()) {
-				return false;
-			}
+            options.getUnpickOutputJar()
+                .set(task.getInputJarName()
+                    .map(s -> project.getLayout()
+                        .dir(project.provider(() -> extension.getFiles()
+                            .getProjectPersistentCache()
+                            .toPath()
+                            .resolve("unpick")
+                            .resolve(mappingConfiguration.mappingsIdentifier())
+                            .toFile()))
+                        .get()
+                        .file(s + "-unpicked.jar")));
+            options.getUnpickConstantJar().setFrom(configurations.named(Constants.Configurations.MAPPING_CONSTANTS));
+            options.getUnpickClasspath()
+                .setFrom(configurations.named(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES));
+            options.getUnpickClasspath()
+                .from(configurations.named(Constants.Configurations.MOD_COMPILE_CLASSPATH_MAPPED));
+            options.getLenient().set(unpickMetadata instanceof UnpickMetadata.V1);
+            extension.getZomboidJars(runtimeNamespace).forEach(options.getUnpickClasspath()::from);
+            return true;
+        });
+    }
 
-			UnpickMetadata unpickMetadata = mappingConfiguration.getUnpickMetadata();
-			MappingsNamespace runtimeNamespace = mappingConfiguration.getRuntimeNamespace();
+    public String getUnpickCacheKey() {
+        return Checksum.of(List.of(Checksum.of(getOptions().getUnpickDefinitions().get()),
+            Checksum.of(getOptions().getUnpickConstantJar()),
+            Checksum.of(getOptions().getUnpickRemapperService()
+                .flatMap(options -> options.getTinyRemapper().flatMap(TinyRemapperService.Options::getFrom))
+                .getOrElse("named"))))
+            .sha256()
+            .hex();
+    }
 
-			if (unpickMetadata instanceof UnpickMetadata.V2 v2) {
-				if (!Objects.equals(v2.namespace(), runtimeNamespace.toString())) {
-					options.getUnpickRemapperService().set(UnpickRemapperService.createOptions(project, v2));
-				}
-			}
+    public Path unpickJar(Path inputJar, @Nullable Path existingClasses) throws IOException {
+        final List<
+            Path> classpath = Stream
+                .of(getOptions().getUnpickClasspath().getFiles().stream().map(File::toPath),
+                    getOptions().getUnpickConstantJar().getFiles().stream().map(File::toPath), Stream.of(inputJar),
+                    Stream.ofNullable(existingClasses))
+                .flatMap(Function.identity())
+                .toList();
+        final Path outputJar = getOptions().getUnpickOutputJar().get().getAsFile().toPath();
+        Files.createDirectories(outputJar.getParent());
+        Files.deleteIfExists(outputJar);
 
-			ConfigurationContainer configurations = project.getConfigurations();
-			options.getUnpickDefinitions().set(mappingConfiguration.getUnpickDefinitions());
+        try (ZipFsClasspath zipFsClasspath = ZipFsClasspath.create(classpath);
+             InputStream unpickDefinitions = getUnpickDefinitionsInputStream())
+        {
+            IClassResolver classResolver = zipFsClasspath.createClassResolver().chain(ClassResolvers.classpath());
+            ConstantUninliner uninliner = ConstantUninliner.builder()
+                .logger(JAVA_LOGGER)
+                .classResolver(classResolver)
+                .grouper(ConstantGroupers.dataDriven()
+                    .logger(JAVA_LOGGER)
+                    .lenient(getOptions().getLenient().get())
+                    .classResolver(classResolver)
+                    .mappingSource(unpickDefinitions)
+                    .build())
+                .build();
 
-			options.getUnpickOutputJar().set(task.getInputJarName().map(s -> project.getLayout()
-					.dir(project.provider(() -> extension.getFiles().getProjectPersistentCache().toPath()
-							.resolve("unpick").resolve(mappingConfiguration.mappingsIdentifier()).toFile()))
-					.get().file(s + "-unpicked.jar")));
-			options.getUnpickConstantJar().setFrom(configurations.named(Constants.Configurations.MAPPING_CONSTANTS));
-			options.getUnpickClasspath().setFrom(configurations.named(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES));
-			options.getUnpickClasspath().from(configurations.named(Constants.Configurations.MOD_COMPILE_CLASSPATH_MAPPED));
-			options.getLenient().set(unpickMetadata instanceof UnpickMetadata.V1);
-			extension.getZomboidJars(runtimeNamespace).forEach(options.getUnpickClasspath()::from);
-			return true;
-		});
-	}
+            AsyncZipProcessor.processEntries(inputJar, outputJar, new UnpickZipProcessor(uninliner));
+        }
 
-	public UnpickService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+        return outputJar;
+    }
 
-	public Path unpickJar(Path inputJar, @Nullable Path existingClasses) throws IOException {
-		final List<Path> classpath = Stream.of(
-				getOptions().getUnpickClasspath().getFiles().stream().map(File::toPath),
-				getOptions().getUnpickConstantJar().getFiles().stream().map(File::toPath),
-				Stream.of(inputJar),
-				Stream.ofNullable(existingClasses)
-			).flatMap(Function.identity()).toList();
-		final Path outputJar = getOptions().getUnpickOutputJar().get().getAsFile().toPath();
-		Files.createDirectories(outputJar.getParent());
-		Files.deleteIfExists(outputJar);
+    private InputStream getUnpickDefinitionsInputStream() throws IOException {
+        final byte[] definitions = getOptions().getUnpickDefinitions().get();
 
-		try (ZipFsClasspath zipFsClasspath = ZipFsClasspath.create(classpath);
-				InputStream unpickDefinitions = getUnpickDefinitionsInputStream()) {
-			IClassResolver classResolver = zipFsClasspath.createClassResolver().chain(ClassResolvers.classpath());
-			ConstantUninliner uninliner = ConstantUninliner.builder()
-					.logger(JAVA_LOGGER)
-					.classResolver(classResolver)
-					.grouper(ConstantGroupers.dataDriven()
-							.logger(JAVA_LOGGER)
-							.lenient(getOptions().getLenient().get())
-							.classResolver(classResolver)
-							.mappingSource(unpickDefinitions)
-							.build())
-					.build();
+        if (getOptions().getUnpickRemapperService().isPresent()) {
+            LOGGER.info("Remapping unpick definitions");
 
-			AsyncZipProcessor.processEntries(inputJar, outputJar, new UnpickZipProcessor(uninliner));
-		}
+            UnpickRemapperService unpickRemapperService = getServiceFactory()
+                .get(getOptions().getUnpickRemapperService());
+            String remapped = unpickRemapperService
+                .remap(new InputStreamReader(new ByteArrayInputStream(definitions), StandardCharsets.UTF_8));
 
-		return outputJar;
-	}
+            return new ByteArrayInputStream(remapped.getBytes(StandardCharsets.UTF_8));
+        }
 
-	private InputStream getUnpickDefinitionsInputStream() throws IOException {
-		final byte[] definitions = getOptions().getUnpickDefinitions().get();
+        LOGGER.debug("Using unpick definitions");
 
-		if (getOptions().getUnpickRemapperService().isPresent()) {
-			LOGGER.info("Remapping unpick definitions");
+        return new ByteArrayInputStream(definitions);
+    }
 
-			UnpickRemapperService unpickRemapperService = getServiceFactory().get(getOptions().getUnpickRemapperService());
-			String remapped = unpickRemapperService.remap(new InputStreamReader(new ByteArrayInputStream(definitions), StandardCharsets.UTF_8));
+    public interface Options extends Service.Options {
+        @Input
+        Property<Boolean> getLenient();
 
-			return new ByteArrayInputStream(remapped.getBytes(StandardCharsets.UTF_8));
-		}
+        @Classpath
+        ConfigurableFileCollection getUnpickClasspath();
 
-		LOGGER.debug("Using unpick definitions");
+        @Classpath
+        ConfigurableFileCollection getUnpickConstantJar();
 
-		return new ByteArrayInputStream(definitions);
-	}
+        @Input
+        Property<byte[]> getUnpickDefinitions();
 
-	public String getUnpickCacheKey() {
-		return Checksum.of(List.of(
-				Checksum.of(getOptions().getUnpickDefinitions().get()),
-				Checksum.of(getOptions().getUnpickConstantJar()),
-				Checksum.of(getOptions().getUnpickRemapperService()
-						.flatMap(options -> options.getTinyRemapper()
-								.flatMap(TinyRemapperService.Options::getFrom))
-						.getOrElse("named"))
-		)).sha256().hex();
-	}
+        @OutputFile
+        RegularFileProperty getUnpickOutputJar();
 
-	private record UnpickZipProcessor(ConstantUninliner uninliner) implements AsyncZipProcessor {
-		@Override
-		public void processEntryAsync(Path input, Path output) throws IOException {
-			Files.createDirectories(output.getParent());
+        @Optional
+        @Nested
+        Property<UnpickRemapperService.Options> getUnpickRemapperService();
+    }
 
-			String fileName = input.toAbsolutePath().toString();
+    private record UnpickZipProcessor(ConstantUninliner uninliner) implements AsyncZipProcessor {
+        @Override
+        public void processEntryAsync(Path input, Path output) throws IOException {
+            Files.createDirectories(output.getParent());
 
-			if (!fileName.endsWith(".class")) {
-				// Copy non-class files
-				Files.copy(input, output);
-				return;
-			}
+            String fileName = input.toAbsolutePath().toString();
 
-			ClassNode classNode = new ClassNode();
+            if (!fileName.endsWith(".class")) {
+                // Copy non-class files
+                Files.copy(input, output);
+                return;
+            }
 
-			try (InputStream is = Files.newInputStream(input)) {
-				ClassReader reader = new ClassReader(is);
-				reader.accept(classNode, 0);
-			}
+            ClassNode classNode = new ClassNode();
 
-			LOGGER.debug("Unpick class: {}", classNode.name);
-			uninliner.transform(classNode);
+            try (InputStream is = Files.newInputStream(input)) {
+                ClassReader reader = new ClassReader(is);
+                reader.accept(classNode, 0);
+            }
 
-			ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-			classNode.accept(writer);
+            LOGGER.debug("Unpick class: {}", classNode.name);
+            uninliner.transform(classNode);
 
-			Files.write(output, writer.toByteArray());
-		}
-	}
+            ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            classNode.accept(writer);
 
-	private record ZipFsClasspath(List<FileSystemUtil.Delegate> fileSystems) implements Closeable {
-		private ZipFsClasspath {
-			if (fileSystems.isEmpty()) {
-				throw new IllegalArgumentException("No resolvers provided");
-			}
-		}
+            Files.write(output, writer.toByteArray());
+        }
+    }
 
-		public static ZipFsClasspath create(List<Path> classpath) throws IOException {
-			var fileSystems = new ArrayList<FileSystemUtil.Delegate>();
+    private record ZipFsClasspath(List<FileSystemUtil.Delegate> fileSystems) implements Closeable {
+        private ZipFsClasspath {
+            if (fileSystems.isEmpty()) {
+                throw new IllegalArgumentException("No resolvers provided");
+            }
+        }
 
-			for (Path path : classpath) {
-				FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(path, false);
-				fileSystems.add(fs);
-			}
+        public static ZipFsClasspath create(List<Path> classpath) throws IOException {
+            var fileSystems = new ArrayList<FileSystemUtil.Delegate>();
 
-			return new ZipFsClasspath(fileSystems);
-		}
+            for (Path path : classpath) {
+                FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(path, false);
+                fileSystems.add(fs);
+            }
 
-		public IClassResolver createClassResolver() {
-			IClassResolver resolver = ClassResolvers.fromDirectory(fileSystems.getFirst().getRoot());
+            return new ZipFsClasspath(fileSystems);
+        }
 
-			for (int i = 1; i < fileSystems.size(); i++) {
-				resolver = resolver.chain(ClassResolvers.fromDirectory(fileSystems.get(i).getRoot()));
-			}
+        public IClassResolver createClassResolver() {
+            IClassResolver resolver = ClassResolvers.fromDirectory(fileSystems.getFirst().getRoot());
 
-			return resolver;
-		}
+            for (int i = 1; i < fileSystems.size(); i++) {
+                resolver = resolver.chain(ClassResolvers.fromDirectory(fileSystems.get(i).getRoot()));
+            }
 
-		@Override
-		public void close() throws IOException {
-			for (FileSystemUtil.Delegate fileSystem : fileSystems) {
-				fileSystem.close();
-			}
-		}
-	}
+            return resolver;
+        }
+
+        @Override
+        public void close() throws IOException {
+            for (FileSystemUtil.Delegate fileSystem : fileSystems) {
+                fileSystem.close();
+            }
+        }
+    }
 }

@@ -74,86 +74,89 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public final class MigrateSourceCodeMappingsService extends Service<MigrateSourceCodeMappingsService.Options> {
-	private static final ServiceType<Options, MigrateSourceCodeMappingsService> TYPE = new ServiceType<>(Options.class, MigrateSourceCodeMappingsService.class);
+    private static final ServiceType<Options, MigrateSourceCodeMappingsService> TYPE = new ServiceType<>(Options.class,
+        MigrateSourceCodeMappingsService.class);
 
-	public MigrateSourceCodeMappingsService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    public MigrateSourceCodeMappingsService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	public interface Options extends Service.Options {
-		@Nested
-		Property<MigrateMappingsService.Options> getMappings();
-		@InputDirectory
-		@PathSensitive(PathSensitivity.ABSOLUTE)
-		DirectoryProperty getInputDir();
-		@Input
-		Property<String> getSourceCompatibility();
-		@OutputDirectory
-		DirectoryProperty getOutputDir();
-	}
+    public static Provider<Options> createOptions(Project project, Provider<String> targetMappings,
+        DirectoryProperty inputDir, DirectoryProperty outputDir)
+    {
+        final JavaVersion javaVersion = project.getExtensions()
+            .getByType(JavaPluginExtension.class)
+            .getSourceCompatibility();
 
-	public static Provider<Options> createOptions(Project project, Provider<String> targetMappings, DirectoryProperty inputDir, DirectoryProperty outputDir) {
-		final JavaVersion javaVersion = project.getExtensions().getByType(JavaPluginExtension.class).getSourceCompatibility();
+        return TYPE.create(project, (o) -> {
+            o.getMappings().set(MigrateMappingsService.createOptions(project, targetMappings));
+            o.getSourceCompatibility().set(javaVersion.toString());
+            o.getInputDir().set(inputDir);
+            o.getOutputDir().set(outputDir);
+        });
+    }
 
-		return TYPE.create(project, (o) -> {
-			o.getMappings().set(MigrateMappingsService.createOptions(project, targetMappings));
-			o.getSourceCompatibility().set(javaVersion.toString());
-			o.getInputDir().set(inputDir);
-			o.getOutputDir().set(outputDir);
-		});
-	}
+    public void migrateMappings() throws IOException {
+        final Path inputDir = getOptions().getInputDir().get().getAsFile().toPath();
+        final Path outputDir = getOptions().getOutputDir().get().getAsFile().toPath();
 
-	public void migrateMappings() throws IOException {
-		final Path inputDir = getOptions().getInputDir().get().getAsFile().toPath();
-		final Path outputDir = getOptions().getOutputDir().get().getAsFile().toPath();
+        if (!Files.exists(inputDir) || !Files.isDirectory(inputDir)) {
+            throw new IllegalArgumentException("Could not find input directory: " + inputDir.toAbsolutePath());
+        }
 
-		if (!Files.exists(inputDir) || !Files.isDirectory(inputDir)) {
-			throw new IllegalArgumentException("Could not find input directory: " + inputDir.toAbsolutePath());
-		}
+        if (Files.exists(outputDir)) {
+            DeletingFileVisitor.deleteDirectory(outputDir);
+        }
 
-		if (Files.exists(outputDir)) {
-			DeletingFileVisitor.deleteDirectory(outputDir);
-		}
+        Files.createDirectories(outputDir);
 
-		Files.createDirectories(outputDir);
+        Mercury mercury = new Mercury();
+        mercury.setGracefulClasspathChecks(true);
+        mercury.setSourceCompatibility(getOptions().getSourceCompatibility().get());
 
-		Mercury mercury = new Mercury();
-		mercury.setGracefulClasspathChecks(true);
-		mercury.setSourceCompatibility(getOptions().getSourceCompatibility().get());
+        final MigrateMappingsService migrateMappingsService = getServiceFactory().get(getOptions().getMappings());
+        final MappingsService sourceMappingsService = migrateMappingsService.getSourceMappingsService();
+        final TinyMappingsService targetMappingsService = migrateMappingsService.getTargetMappingsService();
 
-		final MigrateMappingsService migrateMappingsService = getServiceFactory().get(getOptions().getMappings());
-		final MappingsService sourceMappingsService = migrateMappingsService.getSourceMappingsService();
-		final TinyMappingsService targetMappingsService = migrateMappingsService.getTargetMappingsService();
+        final MappingSet mappingSet = new TinyMappingsJoiner(sourceMappingsService.getMemoryMappingTree(),
+            MappingsNamespace.NAMED.toString(), targetMappingsService.getMappingTree(),
+            MappingsNamespace.NAMED.toString(), MappingsNamespace.INTERMEDIARY.toString()).read();
 
-		final MappingSet mappingSet = new TinyMappingsJoiner(
-				sourceMappingsService.getMemoryMappingTree(), MappingsNamespace.NAMED.toString(),
-				targetMappingsService.getMappingTree(), MappingsNamespace.NAMED.toString(),
-				MappingsNamespace.INTERMEDIARY.toString()
-		).read();
+        mercury.getProcessors().add(MixinRemapper.create(mappingSet));
+        mercury.getProcessors().add(MercuryRemapper.create(mappingSet));
 
-		mercury.getProcessors().add(MixinRemapper.create(mappingSet));
-		mercury.getProcessors().add(MercuryRemapper.create(mappingSet));
+        for (File file : migrateMappingsService.getClasspath().getFiles()) {
+            mercury.getClassPath().add(file.toPath());
+        }
 
-		for (File file : migrateMappingsService.getClasspath().getFiles()) {
-			mercury.getClassPath().add(file.toPath());
-		}
+        try {
+            mercury.rewrite(inputDir, outputDir);
+        } catch (Exception e) {
+            try {
+                DeletingFileVisitor.deleteDirectory(outputDir);
+            } catch (IOException ignored) {
+                // Nope
+            }
 
-		try {
-			mercury.rewrite(
-					inputDir,
-					outputDir
-			);
-		} catch (Exception e) {
-			try {
-				DeletingFileVisitor.deleteDirectory(outputDir);
-			} catch (IOException ignored) {
-				// Nope
-			}
+            throw ExceptionUtil.createDescriptiveWrapper(RuntimeException::new, "Failed to migrate mappings", e);
+        }
 
-			throw ExceptionUtil.createDescriptiveWrapper(RuntimeException::new, "Failed to migrate mappings", e);
-		}
+        // clean file descriptors
+        System.gc();
+    }
 
-		// clean file descriptors
-		System.gc();
-	}
+    public interface Options extends Service.Options {
+        @InputDirectory
+        @PathSensitive(PathSensitivity.ABSOLUTE)
+        DirectoryProperty getInputDir();
+
+        @Nested
+        Property<MigrateMappingsService.Options> getMappings();
+
+        @OutputDirectory
+        DirectoryProperty getOutputDir();
+
+        @Input
+        Property<String> getSourceCompatibility();
+    }
 }

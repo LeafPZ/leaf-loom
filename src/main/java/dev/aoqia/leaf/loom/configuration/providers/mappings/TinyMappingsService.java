@@ -68,64 +68,66 @@ import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 import dev.aoqia.leaf.loom.util.service.ServiceType;
 
 public final class TinyMappingsService extends Service<TinyMappingsService.Options> {
-	public static final ServiceType<Options, TinyMappingsService> TYPE = new ServiceType<>(Options.class, TinyMappingsService.class);
+    public static final ServiceType<Options,
+        TinyMappingsService> TYPE = new ServiceType<>(Options.class, TinyMappingsService.class);
 
-	public interface Options extends Service.Options {
-		@InputFile
-		@PathSensitive(PathSensitivity.NONE)
-		RegularFileProperty getMappings(); // Only a single file
+    private final Supplier<MemoryMappingTree> mappingTree = Lazy.of(() -> {
+        Path mappings = getOptions().getMappings().getAsFile().get().toPath();
 
-		/**
-		 * When present, the mappings will be read from the specified zip entry path.
-		 */
-		@Optional
-		@Input
-		Property<String> getZipEntryPath();
-	}
+        if (getOptions().getZipEntryPath().isPresent()) {
+            try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(mappings)) {
+                return readMappings(delegate.fs().getPath(getOptions().getZipEntryPath().get()));
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to read mappings from zip", e);
+            }
+        }
 
-	public static Provider<Options> createOptions(Project project, Path mappings) {
-		return TYPE.create(project, options -> {
-			options.getMappings().fileValue(project.file(mappings));
-			options.getZipEntryPath().unset();
-		});
-	}
+        return readMappings(mappings);
+    });
 
-	public static Provider<Options> createOptions(Project project, Provider<File> mappings, @Nullable String zipEntryPath) {
-		return TYPE.create(project, options -> {
-			options.getMappings().fileProvider(mappings);
-			options.getZipEntryPath().set(zipEntryPath);
-		});
-	}
+    public TinyMappingsService(Options options, ServiceFactory serviceFactory) {
+        super(options, serviceFactory);
+    }
 
-	public TinyMappingsService(Options options, ServiceFactory serviceFactory) {
-		super(options, serviceFactory);
-	}
+    public static Provider<Options> createOptions(Project project, Path mappings) {
+        return TYPE.create(project, options -> {
+            options.getMappings().fileValue(project.file(mappings));
+            options.getZipEntryPath().unset();
+        });
+    }
 
-	private final Supplier<MemoryMappingTree> mappingTree = Lazy.of(() -> {
-		Path mappings = getOptions().getMappings().getAsFile().get().toPath();
+    public static Provider<Options> createOptions(Project project, Provider<File> mappings,
+        @Nullable String zipEntryPath)
+    {
+        return TYPE.create(project, options -> {
+            options.getMappings().fileProvider(mappings);
+            options.getZipEntryPath().set(zipEntryPath);
+        });
+    }
 
-		if (getOptions().getZipEntryPath().isPresent()) {
-			try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(mappings)) {
-				return readMappings(delegate.fs().getPath(getOptions().getZipEntryPath().get()));
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to read mappings from zip", e);
-			}
-		}
+    public MemoryMappingTree getMappingTree() {
+        return mappingTree.get();
+    }
 
-		return readMappings(mappings);
-	});
+    private MemoryMappingTree readMappings(Path mappings) {
+        try {
+            MemoryMappingTree mappingTree = new MemoryMappingTree();
+            MappingReader.read(mappings, mappingTree);
+            return mappingTree;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read mappings", e);
+        }
+    }
 
-	private MemoryMappingTree readMappings(Path mappings) {
-		try {
-			MemoryMappingTree mappingTree = new MemoryMappingTree();
-			MappingReader.read(mappings, mappingTree);
-			return mappingTree;
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to read mappings", e);
-		}
-	}
+    public interface Options extends Service.Options {
+        /// Only a single file
+        @InputFile
+        @PathSensitive(PathSensitivity.NONE)
+        RegularFileProperty getMappings();
 
-	public MemoryMappingTree getMappingTree() {
-		return mappingTree.get();
-	}
+        /// When present, the mappings will be read from the specified zip entry path.
+        @Optional
+        @Input
+        Property<String> getZipEntryPath();
+    }
 }

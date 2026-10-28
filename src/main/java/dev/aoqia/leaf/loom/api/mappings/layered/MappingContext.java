@@ -55,38 +55,39 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.util.copygamefile.CopyGameFileBuilder;
 import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
 
-@ApiStatus.Experimental /* Very Experimental and not cleanly separated from the impl atm */
+/// Very Experimental and not cleanly separated from the impl atm
+@ApiStatus.Experimental
 public interface MappingContext {
-	Path resolveDependency(Dependency dependency);
+    CopyGameFileBuilder copyGameFile(String url);
 
-	Path resolveDependency(MinimalExternalModuleDependency dependency);
+    DownloadBuilder download(String url);
 
-	Path resolveMavenDependency(String mavenNotation);
+    Logger getLogger();
 
-	Supplier<MemoryMappingTree> intermediaryTree();
+    boolean hasProperty(String property);
 
-	boolean isUsingIntermediateMappings();
+    Supplier<MemoryMappingTree> intermediaryTree();
 
-	String productionNamespace();
+    boolean isUsingIntermediateMappings();
 
-	ZomboidProvider zomboidProvider();
+    String productionNamespace();
 
-	default String zomboidVersion() {
-		return zomboidProvider().gameVersion();
-	}
+    boolean refreshDeps();
 
-	/**
-	 * Creates a temporary working dir to be used to store working files.
-	 */
-	Path workingDirectory(String name);
+    Path resolveDependency(Dependency dependency);
 
-	Logger getLogger();
+    Path resolveDependency(MinimalExternalModuleDependency dependency);
 
-	CopyGameFileBuilder copyGameFile(String url);
+    Path resolveMavenDependency(String mavenNotation);
 
-	DownloadBuilder download(String url);
+    /**
+     * Creates a temporary working dir to be used to store working files.
+     */
+    Path workingDirectory(String name);
 
-	boolean refreshDeps();
+    ZomboidProvider zomboidProvider();
 
-	boolean hasProperty(String property);
+    default String zomboidVersion() {
+        return zomboidProvider().gameVersion();
+    }
 }

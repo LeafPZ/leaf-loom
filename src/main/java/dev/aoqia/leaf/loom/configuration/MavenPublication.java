@@ -67,108 +67,112 @@ import dev.aoqia.leaf.loom.util.GroovyXmlUtil;
 import dev.aoqia.leaf.loom.util.gradle.GradleUtils;
 
 public abstract class MavenPublication implements Runnable {
-	// ImmutableMap is needed since it guarantees ordering
-	// (compile must go before runtime, or otherwise dependencies might get the "weaker" runtime scope).
-	private static final Map<String, String> CONFIGURATION_TO_SCOPE = Map.of(
-			JavaPlugin.API_ELEMENTS_CONFIGURATION_NAME, "compile",
-			JavaPlugin.RUNTIME_ELEMENTS_CONFIGURATION_NAME, "runtime"
-	);
-	private static final Set<Publication> EXCLUDED_PUBLICATIONS = Collections.newSetFromMap(new WeakHashMap<>());
+    // ImmutableMap is needed since it guarantees ordering
+    // (compile must go before runtime, or otherwise dependencies might get the "weaker" runtime scope).
+    private static final Map<String, String> CONFIGURATION_TO_SCOPE = Map.of(JavaPlugin.API_ELEMENTS_CONFIGURATION_NAME,
+        "compile", JavaPlugin.RUNTIME_ELEMENTS_CONFIGURATION_NAME, "runtime");
+    private static final Set<Publication> EXCLUDED_PUBLICATIONS = Collections.newSetFromMap(new WeakHashMap<>());
 
-	@Inject
-	protected abstract Project getProject();
+    public static void excludePublication(Publication publication) {
+        EXCLUDED_PUBLICATIONS.add(publication);
+    }
 
-	@Override
-	public void run() {
-		GradleUtils.afterSuccessfulEvaluation(getProject(), () -> {
-			AtomicBoolean reportedDeprecation = new AtomicBoolean(false);
+    private static boolean hasSoftwareComponent(Publication publication) {
+        try {
+            Method getComponent = publication.getClass().getMethod("getComponent");
+            return getComponent.invoke(publication) != null;
+        } catch (ReflectiveOperationException e) {
+            // our hacks have broken!
+            return false;
+        }
+    }
 
-			CONFIGURATION_TO_SCOPE.forEach((configurationName, scope) -> {
-				Configuration config = getProject().getConfigurations().getByName(configurationName);
+    @Override
+    public void run() {
+        GradleUtils.afterSuccessfulEvaluation(getProject(), () -> {
+            AtomicBoolean reportedDeprecation = new AtomicBoolean(false);
 
-				// add modsCompile to maven-publish
-				PublishingExtension mavenPublish = getProject().getExtensions().findByType(PublishingExtension.class);
+            CONFIGURATION_TO_SCOPE.forEach((configurationName, scope) -> {
+                Configuration config = getProject().getConfigurations().getByName(configurationName);
 
-				if (mavenPublish != null) {
-					processEntry(scope, config, mavenPublish, reportedDeprecation);
-				}
-			});
-		});
-	}
+                // add modsCompile to maven-publish
+                PublishingExtension mavenPublish = getProject().getExtensions().findByType(PublishingExtension.class);
 
-	private static boolean hasSoftwareComponent(Publication publication) {
-		try {
-			Method getComponent = publication.getClass().getMethod("getComponent");
-			return getComponent.invoke(publication) != null;
-		} catch (ReflectiveOperationException e) {
-			// our hacks have broken!
-			return false;
-		}
-	}
+                if (mavenPublish != null) {
+                    processEntry(scope, config, mavenPublish, reportedDeprecation);
+                }
+            });
+        });
+    }
 
-	private void processEntry(String scope, Configuration config, PublishingExtension mavenPublish, AtomicBoolean reportedDeprecation) {
-		mavenPublish.publications((publications) -> {
-			for (Publication publication : publications) {
-				if (!(publication instanceof org.gradle.api.publish.maven.MavenPublication mavenPublication)) {
-					continue;
-				}
+    @Inject
+    protected abstract Project getProject();
 
-				if (hasSoftwareComponent(publication) || EXCLUDED_PUBLICATIONS.contains(publication)) {
-					continue;
-				} else if (!reportedDeprecation.get()) {
-					DeprecationHelper deprecationHelper = LoomGradleExtension.get(getProject()).getDeprecationHelper();
-					deprecationHelper.warn("Loom is applying dependency data manually to publications instead of using a software component (from(components[\"java\"])). This is deprecated.");
-					reportedDeprecation.set(true);
-				}
+    private void processEntry(String scope, Configuration config, PublishingExtension mavenPublish,
+        AtomicBoolean reportedDeprecation)
+    {
+        mavenPublish.publications((publications) -> {
+            for (Publication publication : publications) {
+                if (!(publication instanceof org.gradle.api.publish.maven.MavenPublication mavenPublication)) {
+                    continue;
+                }
 
-				mavenPublication.pom((pom) -> pom.withXml((xml) -> {
-					Node dependencies = GroovyXmlUtil.getOrCreateNode(xml.asNode(), "dependencies");
-					Set<String> foundArtifacts = new HashSet<>();
+                if (hasSoftwareComponent(publication) || EXCLUDED_PUBLICATIONS.contains(publication)) {
+                    continue;
+                } else if (!reportedDeprecation.get()) {
+                    DeprecationHelper deprecationHelper = LoomGradleExtension.get(getProject()).getDeprecationHelper();
+                    deprecationHelper
+                        .warn("Loom is applying dependency data manually to publications instead of using a software "
+                            + "component (from(components[\"java\"])). This is deprecated.");
+                    reportedDeprecation.set(true);
+                }
 
-					GroovyXmlUtil.childrenNodesStream(dependencies).filter((n) -> "dependency".equals(n.name())).forEach((n) -> {
-						Optional<Node> groupId = GroovyXmlUtil.getNode(n, "groupId");
-						Optional<Node> artifactId = GroovyXmlUtil.getNode(n, "artifactId");
+                mavenPublication.pom((pom) -> pom.withXml((xml) -> {
+                    Node dependencies = GroovyXmlUtil.getOrCreateNode(xml.asNode(), "dependencies");
+                    Set<String> foundArtifacts = new HashSet<>();
 
-						if (groupId.isPresent() && artifactId.isPresent()) {
-							foundArtifacts.add(groupId.get().text() + ":" + artifactId.get().text());
-						}
-					});
+                    GroovyXmlUtil.childrenNodesStream(dependencies)
+                        .filter((n) -> "dependency".equals(n.name()))
+                        .forEach((n) -> {
+                            Optional<Node> groupId = GroovyXmlUtil.getNode(n, "groupId");
+                            Optional<Node> artifactId = GroovyXmlUtil.getNode(n, "artifactId");
 
-					for (Dependency dependency : config.getAllDependencies()) {
-						if (foundArtifacts.contains(dependency.getGroup() + ":" + dependency.getName())) {
-							continue;
-						}
+                            if (groupId.isPresent() && artifactId.isPresent()) {
+                                foundArtifacts.add(groupId.get().text() + ":" + artifactId.get().text());
+                            }
+                        });
 
-						Node depNode = dependencies.appendNode("dependency");
-						depNode.appendNode("groupId", dependency.getGroup());
-						depNode.appendNode("artifactId", dependency.getName());
-						depNode.appendNode("version", dependency.getVersion());
-						depNode.appendNode("scope", scope);
+                    for (Dependency dependency : config.getAllDependencies()) {
+                        if (foundArtifacts.contains(dependency.getGroup() + ":" + dependency.getName())) {
+                            continue;
+                        }
 
-						if (!(dependency instanceof ModuleDependency)) {
-							continue;
-						}
+                        Node depNode = dependencies.appendNode("dependency");
+                        depNode.appendNode("groupId", dependency.getGroup());
+                        depNode.appendNode("artifactId", dependency.getName());
+                        depNode.appendNode("version", dependency.getVersion());
+                        depNode.appendNode("scope", scope);
 
-						final Set<ExcludeRule> exclusions = ((ModuleDependency) dependency).getExcludeRules();
+                        if (!(dependency instanceof ModuleDependency)) {
+                            continue;
+                        }
 
-						if (exclusions.isEmpty()) {
-							continue;
-						}
+                        final Set<ExcludeRule> exclusions = ((ModuleDependency) dependency).getExcludeRules();
 
-						Node exclusionsNode = depNode.appendNode("exclusions");
+                        if (exclusions.isEmpty()) {
+                            continue;
+                        }
 
-						for (ExcludeRule rule : exclusions) {
-							Node exclusionNode = exclusionsNode.appendNode("exclusion");
-							exclusionNode.appendNode("groupId", rule.getGroup() == null ? "*" : rule.getGroup());
-							exclusionNode.appendNode("artifactId", rule.getModule() == null ? "*" : rule.getModule());
-						}
-					}
-				}));
-			}
-		});
-	}
+                        Node exclusionsNode = depNode.appendNode("exclusions");
 
-	public static void excludePublication(Publication publication) {
-		EXCLUDED_PUBLICATIONS.add(publication);
-	}
+                        for (ExcludeRule rule : exclusions) {
+                            Node exclusionNode = exclusionsNode.appendNode("exclusion");
+                            exclusionNode.appendNode("groupId", rule.getGroup() == null ? "*" : rule.getGroup());
+                            exclusionNode.appendNode("artifactId", rule.getModule() == null ? "*" : rule.getModule());
+                        }
+                    }
+                }));
+            }
+        });
+    }
 }

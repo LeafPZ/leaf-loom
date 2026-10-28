@@ -62,38 +62,39 @@ import dev.aoqia.leaf.loom.util.service.ScopedServiceFactory;
 
 @UntrackedTask(because = "Always rerun this task.")
 public abstract class MigrateMappingsTask extends AbstractMigrateMappingsTask {
-	@InputDirectory
-	@PathSensitive(PathSensitivity.ABSOLUTE)
-	@SkipWhenEmpty
-	@Option(option = "input", description = "Java source file directory")
-	public abstract DirectoryProperty getInputDir();
+    public MigrateMappingsTask() {
+        getInputDir().convention(getProject().getLayout().getProjectDirectory().dir("src/main/java"));
+        getOutputDir().convention(getProject().getLayout().getProjectDirectory().dir("remappedSrc"));
+        getMigrationServiceOptions().set(
+            MigrateSourceCodeMappingsService.createOptions(getProject(), getMappings(), getInputDir(), getOutputDir()));
+    }
 
-	@OutputDirectory
-	@Option(option = "output", description = "Remapped source output directory")
-	public abstract DirectoryProperty getOutputDir();
+    @TaskAction
+    public void doTask() throws Throwable {
+        try (var serviceFactory = new ScopedServiceFactory()) {
+            MigrateSourceCodeMappingsService service = serviceFactory.get(getMigrationServiceOptions().get());
+            service.migrateMappings();
+        }
 
-	@Nested
-	protected abstract Property<MigrateSourceCodeMappingsService.Options> getMigrationServiceOptions();
+        if (getOverrideInputs().get()) {
+            Path inputPath = getInputDir().getAsFile().get().toPath();
+            Path outputPath = getOutputDir().getAsFile().get().toPath();
 
-	public MigrateMappingsTask() {
-		getInputDir().convention(getProject().getLayout().getProjectDirectory().dir("src/main/java"));
-		getOutputDir().convention(getProject().getLayout().getProjectDirectory().dir("remappedSrc"));
-		getMigrationServiceOptions().set(MigrateSourceCodeMappingsService.createOptions(getProject(), getMappings(), getInputDir(), getOutputDir()));
-	}
+            DeletingFileVisitor.deleteDirectory(inputPath);
+            Files.move(outputPath, inputPath);
+        }
+    }
 
-	@TaskAction
-	public void doTask() throws Throwable {
-		try (var serviceFactory = new ScopedServiceFactory()) {
-			MigrateSourceCodeMappingsService service = serviceFactory.get(getMigrationServiceOptions().get());
-			service.migrateMappings();
-		}
+    @InputDirectory
+    @PathSensitive(PathSensitivity.ABSOLUTE)
+    @SkipWhenEmpty
+    @Option(option = "input", description = "Java source file directory")
+    public abstract DirectoryProperty getInputDir();
 
-		if (getOverrideInputs().get()) {
-			Path inputPath = getInputDir().getAsFile().get().toPath();
-			Path outputPath = getOutputDir().getAsFile().get().toPath();
+    @OutputDirectory
+    @Option(option = "output", description = "Remapped source output directory")
+    public abstract DirectoryProperty getOutputDir();
 
-			DeletingFileVisitor.deleteDirectory(inputPath);
-			Files.move(outputPath, inputPath);
-		}
-	}
+    @Nested
+    protected abstract Property<MigrateSourceCodeMappingsService.Options> getMigrationServiceOptions();
 }

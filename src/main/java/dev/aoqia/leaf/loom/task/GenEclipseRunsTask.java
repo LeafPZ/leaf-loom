@@ -73,89 +73,95 @@ import dev.aoqia.leaf.loom.util.Constants;
 
 @DisableCachingByDefault
 public abstract class GenEclipseRunsTask extends AbstractLoomTask {
-	@Nested
-	protected abstract ListProperty<EclipseRunConfig> getEclipseRunConfigs();
+    @Inject
+    public GenEclipseRunsTask() {
+        setGroup(Constants.TaskGroup.IDE);
+        getEclipseRunConfigs().set(getProject().provider(() -> getRunConfigs(getProject())));
+    }
 
-	@Inject
-	public GenEclipseRunsTask() {
-		setGroup(Constants.TaskGroup.IDE);
-		getEclipseRunConfigs().set(getProject().provider(() -> getRunConfigs(getProject())));
-	}
+    private static String fromTemplate(RunConfiguration run, Project project) throws IOException {
+        String dummyConfig;
 
-	@TaskAction
-	public void genRuns() throws IOException {
-		for (EclipseRunConfig runConfig : getEclipseRunConfigs().get()) {
-			runConfig.writeLaunchFile();
-		}
-	}
-
-	private static List<EclipseRunConfig> getRunConfigs(Project project) throws IOException {
-		EclipseModel eclipseModel = project.getExtensions().getByType(EclipseModel.class);
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
-
-		List<EclipseRunConfig> runConfigs = new ArrayList<>();
-
-		for (RunConfiguration settings : extension.getRunConfigs()) {
-			if (!settings.getGenerateRunConfig().get()) {
-				continue;
-			}
-
-			final String name = settings.getName();
-			final File configs = new File(project.getProjectDir(), eclipseModel.getProject().getName() + "_" + name + ".launch");
-			final RunConfiguration runConfiguration = DefaultRunConfigurationSettings.finialise(settings, project);
-			final String config;
-
-			try {
-				config = fromTemplate(runConfiguration, project);
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to generate Eclipse run configuration", e);
-			}
-
-			EclipseRunConfig eclipseRunConfig = project.getObjects().newInstance(EclipseRunConfig.class);
-			eclipseRunConfig.getLaunchContent().set(config);
-			eclipseRunConfig.getLaunchFile().set(project.file(configs));
-			runConfigs.add(eclipseRunConfig);
-
-			RunConfigUtils.createRunDirectory(settings);
-		}
-
-		return runConfigs;
-	}
-
-	private static String fromTemplate(RunConfiguration run, Project project) throws IOException {
-		String dummyConfig;
-
-		try (InputStream input = IdeaSyncTask.class.getClassLoader().getResourceAsStream("eclipse_run_config_template.xml")) {
-			dummyConfig = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-		}
+        try (InputStream input = IdeaSyncTask.class.getClassLoader()
+            .getResourceAsStream("eclipse_run_config_template.xml"))
+        {
+            dummyConfig = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
 
         String workingDir = run.getWorkingDirectory().get().getAsFile().getAbsolutePath();
-		String eclipseProjectName = project.getExtensions().getByType(EclipseModel.class).getProject().getName();
+        String eclipseProjectName = project.getExtensions().getByType(EclipseModel.class).getProject().getName();
 
-		dummyConfig = dummyConfig.replace("%NAME%", RunConfigUtils.getDisplayName(run, project));
-		dummyConfig = dummyConfig.replace("%MAIN_CLASS%", run.getDevLaunchMainClass().get());
-		dummyConfig = dummyConfig.replace("%WORKING_DIRECTORY%", workingDir);
-		dummyConfig = dummyConfig.replace("%ECLIPSE_PROJECT%", eclipseProjectName);
-		dummyConfig = dummyConfig.replace("%PROGRAM_ARGS%", Arguments.join(run.getProgramArguments().get()).replaceAll("\"", "&quot;"));
-		dummyConfig = dummyConfig.replace("%VM_ARGS%", Arguments.join(run.getJvmArguments().get()).replaceAll("\"", "&quot;"));
-		dummyConfig = dummyConfig.replace("%ECLIPSE_ENV_VARS%", RunConfigUtils.formatEnvVars(run, "<mapEntry key=\"%s\" value=\"%s\"/>"));
+        dummyConfig = dummyConfig.replace("%NAME%", RunConfigUtils.getDisplayName(run, project));
+        dummyConfig = dummyConfig.replace("%MAIN_CLASS%", run.getDevLaunchMainClass().get());
+        dummyConfig = dummyConfig.replace("%WORKING_DIRECTORY%", workingDir);
+        dummyConfig = dummyConfig.replace("%ECLIPSE_PROJECT%", eclipseProjectName);
+        dummyConfig = dummyConfig.replace("%PROGRAM_ARGS%",
+            Arguments.join(run.getProgramArguments().get()).replaceAll("\"", "&quot;"));
+        dummyConfig = dummyConfig.replace("%VM_ARGS%",
+            Arguments.join(run.getJvmArguments().get()).replaceAll("\"", "&quot;"));
+        dummyConfig = dummyConfig.replace("%ECLIPSE_ENV_VARS%",
+            RunConfigUtils.formatEnvVars(run, "<mapEntry key=\"%s\" value=\"%s\"/>"));
 
-		return dummyConfig;
-	}
+        return dummyConfig;
+    }
 
-	public interface EclipseRunConfig {
-		@Input
-		Property<String> getLaunchContent();
+    private static List<EclipseRunConfig> getRunConfigs(Project project) throws IOException {
+        EclipseModel eclipseModel = project.getExtensions().getByType(EclipseModel.class);
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-		@OutputFile
-		RegularFileProperty getLaunchFile();
+        List<EclipseRunConfig> runConfigs = new ArrayList<>();
 
-		default void writeLaunchFile() throws IOException {
-			Path launchFile = getLaunchFile().get().getAsFile().toPath();
+        for (RunConfiguration settings : extension.getRunConfigs()) {
+            if (!settings.getGenerateRunConfig().get()) {
+                continue;
+            }
 
-			if (Files.notExists(launchFile)) {
-				Files.writeString(launchFile, getLaunchContent().get(), StandardCharsets.UTF_8);
-			}
-		}
-	}
+            final String name = settings.getName();
+            final File configs = new File(project.getProjectDir(),
+                eclipseModel.getProject().getName() + "_" + name + ".launch");
+            final RunConfiguration runConfiguration = DefaultRunConfigurationSettings.finialise(settings, project);
+            final String config;
+
+            try {
+                config = fromTemplate(runConfiguration, project);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to generate Eclipse run configuration", e);
+            }
+
+            EclipseRunConfig eclipseRunConfig = project.getObjects().newInstance(EclipseRunConfig.class);
+            eclipseRunConfig.getLaunchContent().set(config);
+            eclipseRunConfig.getLaunchFile().set(project.file(configs));
+            runConfigs.add(eclipseRunConfig);
+
+            RunConfigUtils.createRunDirectory(settings);
+        }
+
+        return runConfigs;
+    }
+
+    @TaskAction
+    public void genRuns() throws IOException {
+        for (EclipseRunConfig runConfig : getEclipseRunConfigs().get()) {
+            runConfig.writeLaunchFile();
+        }
+    }
+
+    @Nested
+    protected abstract ListProperty<EclipseRunConfig> getEclipseRunConfigs();
+
+    public interface EclipseRunConfig {
+        @Input
+        Property<String> getLaunchContent();
+
+        @OutputFile
+        RegularFileProperty getLaunchFile();
+
+        default void writeLaunchFile() throws IOException {
+            Path launchFile = getLaunchFile().get().getAsFile().toPath();
+
+            if (Files.notExists(launchFile)) {
+                Files.writeString(launchFile, getLaunchContent().get(), StandardCharsets.UTF_8);
+            }
+        }
+    }
 }

@@ -57,89 +57,87 @@ import org.objectweb.asm.tree.TypeAnnotationNode;
 import net.fabricmc.tinyremapper.TinyRemapper;
 
 public record MethodAnnotationData(
-		@SerializedName("remove")
-		Set<String> annotationsToRemove,
-		@SerializedName("add")
-		List<AnnotationNode> annotationsToAdd,
-		@SerializedName("type_remove")
-		Set<TypeAnnotationKey> typeAnnotationsToRemove,
-		@SerializedName("type_add")
-		List<TypeAnnotationNode> typeAnnotationsToAdd,
-		Map<Integer, GenericAnnotationData> parameters
-) implements BaseAnnotationData {
-	public MethodAnnotationData {
-		if (annotationsToRemove == null) {
-			annotationsToRemove = new LinkedHashSet<>();
-		}
+    @SerializedName("remove") Set<String> annotationsToRemove,
+    @SerializedName("add") List<AnnotationNode> annotationsToAdd,
+    @SerializedName("type_remove") Set<TypeAnnotationKey> typeAnnotationsToRemove,
+    @SerializedName("type_add") List<TypeAnnotationNode> typeAnnotationsToAdd,
+    Map<Integer, GenericAnnotationData> parameters
+) implements BaseAnnotationData
+{
+    public MethodAnnotationData {
+        if (annotationsToRemove == null) {
+            annotationsToRemove = new LinkedHashSet<>();
+        }
 
-		if (annotationsToAdd == null) {
-			annotationsToAdd = new ArrayList<>();
-		}
+        if (annotationsToAdd == null) {
+            annotationsToAdd = new ArrayList<>();
+        }
 
-		if (typeAnnotationsToRemove == null) {
-			typeAnnotationsToRemove = new LinkedHashSet<>();
-		}
+        if (typeAnnotationsToRemove == null) {
+            typeAnnotationsToRemove = new LinkedHashSet<>();
+        }
 
-		if (typeAnnotationsToAdd == null) {
-			typeAnnotationsToAdd = new ArrayList<>();
-		}
+        if (typeAnnotationsToAdd == null) {
+            typeAnnotationsToAdd = new ArrayList<>();
+        }
 
-		if (parameters == null) {
-			parameters = new LinkedHashMap<>();
-		}
-	}
+        if (parameters == null) {
+            parameters = new LinkedHashMap<>();
+        }
+    }
 
-	public MethodAnnotationData() {
-		this(new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashMap<>());
-	}
+    public MethodAnnotationData() {
+        this(new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashMap<>());
+    }
 
-	public MethodAnnotationData(MethodAnnotationData other) {
-		this(
-				new LinkedHashSet<>(other.annotationsToRemove),
-				AnnotationsData.copyAnnotations(other.annotationsToAdd),
-				new LinkedHashSet<>(other.typeAnnotationsToRemove),
-				AnnotationsData.copyTypeAnnotations(other.typeAnnotationsToAdd),
-				AnnotationsData.copyMap(other.parameters, GenericAnnotationData::new)
-		);
-	}
+    public MethodAnnotationData(MethodAnnotationData other) {
+        this(new LinkedHashSet<>(other.annotationsToRemove), AnnotationsData.copyAnnotations(other.annotationsToAdd),
+            new LinkedHashSet<>(other.typeAnnotationsToRemove),
+            AnnotationsData.copyTypeAnnotations(other.typeAnnotationsToAdd),
+            AnnotationsData.copyMap(other.parameters, GenericAnnotationData::new));
+    }
 
-	MethodAnnotationData merge(MethodAnnotationData other) {
-		Set<String> newAnnotationsToRemove = new LinkedHashSet<>(annotationsToRemove);
-		newAnnotationsToRemove.addAll(other.annotationsToRemove);
-		List<AnnotationNode> newAnnotationsToAdd = new ArrayList<>(annotationsToAdd);
-		newAnnotationsToAdd.addAll(other.annotationsToAdd);
-		Set<TypeAnnotationKey> newTypeAnnotationsToRemove = new LinkedHashSet<>(typeAnnotationsToRemove);
-		newTypeAnnotationsToRemove.addAll(other.typeAnnotationsToRemove);
-		List<TypeAnnotationNode> newTypeAnnotationsToAdd = new ArrayList<>(typeAnnotationsToAdd);
-		newTypeAnnotationsToAdd.addAll(other.typeAnnotationsToAdd);
-		Map<Integer, GenericAnnotationData> newParameters = new LinkedHashMap<>(parameters);
-		other.parameters.forEach((key, value) -> newParameters.merge(key, value, GenericAnnotationData::merge));
-		return new MethodAnnotationData(newAnnotationsToRemove, newAnnotationsToAdd, newTypeAnnotationsToRemove, newTypeAnnotationsToAdd, newParameters);
-	}
+    MethodAnnotationData merge(MethodAnnotationData other) {
+        Set<String> newAnnotationsToRemove = new LinkedHashSet<>(annotationsToRemove);
+        newAnnotationsToRemove.addAll(other.annotationsToRemove);
+        List<AnnotationNode> newAnnotationsToAdd = new ArrayList<>(annotationsToAdd);
+        newAnnotationsToAdd.addAll(other.annotationsToAdd);
+        Set<TypeAnnotationKey> newTypeAnnotationsToRemove = new LinkedHashSet<>(typeAnnotationsToRemove);
+        newTypeAnnotationsToRemove.addAll(other.typeAnnotationsToRemove);
+        List<TypeAnnotationNode> newTypeAnnotationsToAdd = new ArrayList<>(typeAnnotationsToAdd);
+        newTypeAnnotationsToAdd.addAll(other.typeAnnotationsToAdd);
+        Map<Integer, GenericAnnotationData> newParameters = new LinkedHashMap<>(parameters);
+        other.parameters.forEach((key, value) -> newParameters.merge(key, value, GenericAnnotationData::merge));
+        return new MethodAnnotationData(newAnnotationsToRemove, newAnnotationsToAdd, newTypeAnnotationsToRemove,
+            newTypeAnnotationsToAdd, newParameters);
+    }
 
-	MethodAnnotationData remap(TinyRemapper remapper) {
-		return new MethodAnnotationData(
-				annotationsToRemove.stream().map(remapper.getEnvironment().getRemapper()::map).collect(Collectors.toCollection(LinkedHashSet::new)),
-				annotationsToAdd.stream().map(ann -> AnnotationsData.remap(ann, remapper)).collect(Collectors.toCollection(ArrayList::new)),
-				typeAnnotationsToRemove.stream().map(key -> key.remap(remapper)).collect(Collectors.toCollection(LinkedHashSet::new)),
-				typeAnnotationsToAdd.stream().map(ann -> AnnotationsData.remap(ann, remapper)).collect(Collectors.toCollection(ArrayList::new)),
-				AnnotationsData.remapMap(
-						parameters,
-						Map.Entry::getKey,
-						entry -> entry.getValue().remap(remapper)
-				)
-		);
-	}
+    MethodAnnotationData remap(TinyRemapper remapper) {
+        return new MethodAnnotationData(
+            annotationsToRemove.stream()
+                .map(remapper.getEnvironment().getRemapper()::map)
+                .collect(Collectors.toCollection(LinkedHashSet::new)),
+            annotationsToAdd.stream()
+                .map(ann -> AnnotationsData.remap(ann, remapper))
+                .collect(Collectors.toCollection(ArrayList::new)),
+            typeAnnotationsToRemove.stream()
+                .map(key -> key.remap(remapper))
+                .collect(Collectors.toCollection(LinkedHashSet::new)),
+            typeAnnotationsToAdd.stream()
+                .map(ann -> AnnotationsData.remap(ann, remapper))
+                .collect(Collectors.toCollection(ArrayList::new)),
+            AnnotationsData.remapMap(parameters, Map.Entry::getKey, entry -> entry.getValue().remap(remapper)));
+    }
 
-	public int modifyAccessFlags(int access) {
-		if (annotationsToRemove.contains("java/lang/Deprecated")) {
-			access &= ~Opcodes.ACC_DEPRECATED;
-		}
+    public int modifyAccessFlags(int access) {
+        if (annotationsToRemove.contains("java/lang/Deprecated")) {
+            access &= ~Opcodes.ACC_DEPRECATED;
+        }
 
-		if (annotationsToAdd.stream().anyMatch(ann -> "Ljava/lang/Deprecated;".equals(ann.desc))) {
-			access |= Opcodes.ACC_DEPRECATED;
-		}
+        if (annotationsToAdd.stream().anyMatch(ann -> "Ljava/lang/Deprecated;".equals(ann.desc))) {
+            access |= Opcodes.ACC_DEPRECATED;
+        }
 
-		return access;
-	}
+        return access;
+    }
 }

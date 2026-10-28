@@ -59,159 +59,161 @@ import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.addArray;
 import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.addRequired;
 import static dev.aoqia.leaf.loom.util.fmj.gen.GeneratorUtils.addStringOrArray;
 
-// Opposite of https://github.com/FabricMC/fabric-loader/blob/master/src/main/java/net/fabricmc/loader/impl/metadata/V1ModMetadataParser.java
+// Opposite of
+// https://github.com/FabricMC/fabric-loader/blob/master/src/main/java/net/fabricmc/loader/impl/metadata/V1ModMetadataParser.java
 public final class LeafModJsonV1Generator implements LeafModJsonGenerator<LeafModJsonV1Spec> {
-	private static final int VERSION = 1;
+    public static final LeafModJsonV1Generator INSTANCE = new LeafModJsonV1Generator();
 
-	public static final LeafModJsonV1Generator INSTANCE = new LeafModJsonV1Generator();
+    private static final int VERSION = 1;
 
-	private LeafModJsonV1Generator() {
-	}
+    private LeafModJsonV1Generator() {
+    }
 
-	public String generate(LeafModJsonV1Spec spec) {
-		Objects.requireNonNull(spec);
+    public String generate(LeafModJsonV1Spec spec) {
+        Objects.requireNonNull(spec);
 
-		JsonObject fmj = new JsonObject();
-		fmj.addProperty("schemaVersion", VERSION);
+        JsonObject fmj = new JsonObject();
+        fmj.addProperty("schemaVersion", VERSION);
 
-		// Required
-		addRequired(fmj, "id", spec.getModId());
-		addRequired(fmj, "version", spec.getVersion());
+        // Required
+        addRequired(fmj, "id", spec.getModId());
+        addRequired(fmj, "version", spec.getVersion());
 
-		// All other fields are optional
-		// Match the order as specified in V1ModMetadataParser to make it easier to compare
+        // All other fields are optional
+        // Match the order as specified in V1ModMetadataParser to make it easier to compare
 
-		addArray(fmj, "provides", spec.getProvides(), JsonPrimitive::new);
-		add(fmj, "environment", spec.getEnvironment());
-		add(fmj, "entrypoints", spec.getEntrypoints(), this::generateEntrypoints);
-		addArray(fmj, "jars", spec.getJars(), this::generateJar);
-		addArray(fmj, "mixins", spec.getMixins(), this::generateMixins);
-		add(fmj, "accessWidener", spec.getAccessWidener());
-		add(fmj, "depends", spec.getDepends(), this::generateDependencies);
-		add(fmj, "recommends", spec.getRecommends(), this::generateDependencies);
-		add(fmj, "suggests", spec.getSuggests(), this::generateDependencies);
-		add(fmj, "conflicts", spec.getConflicts(), this::generateDependencies);
-		add(fmj, "breaks", spec.getBreaks(), this::generateDependencies);
-		add(fmj, "name", spec.getName());
-		add(fmj, "description", spec.getDescription());
-		addArray(fmj, "authors", spec.getAuthors(), this::generatePerson);
-		addArray(fmj, "contributors", spec.getContributors(), this::generatePerson);
-		add(fmj, "contact", spec.getContactInformation());
-		addStringOrArray(fmj, "license", spec.getLicenses());
-		add(fmj, "icon", spec.getIcons(), this::generateIcon);
-		add(fmj, "languageAdapters", spec.getLanguageAdapters());
-		add(fmj, "custom", spec.getCustomData(), this::generateCustomData);
+        addArray(fmj, "provides", spec.getProvides(), JsonPrimitive::new);
+        add(fmj, "environment", spec.getEnvironment());
+        add(fmj, "entrypoints", spec.getEntrypoints(), this::generateEntrypoints);
+        addArray(fmj, "jars", spec.getJars(), this::generateJar);
+        addArray(fmj, "mixins", spec.getMixins(), this::generateMixins);
+        add(fmj, "accessWidener", spec.getAccessWidener());
+        add(fmj, "depends", spec.getDepends(), this::generateDependencies);
+        add(fmj, "recommends", spec.getRecommends(), this::generateDependencies);
+        add(fmj, "suggests", spec.getSuggests(), this::generateDependencies);
+        add(fmj, "conflicts", spec.getConflicts(), this::generateDependencies);
+        add(fmj, "breaks", spec.getBreaks(), this::generateDependencies);
+        add(fmj, "name", spec.getName());
+        add(fmj, "description", spec.getDescription());
+        addArray(fmj, "authors", spec.getAuthors(), this::generatePerson);
+        addArray(fmj, "contributors", spec.getContributors(), this::generatePerson);
+        add(fmj, "contact", spec.getContactInformation());
+        addStringOrArray(fmj, "license", spec.getLicenses());
+        add(fmj, "icon", spec.getIcons(), this::generateIcon);
+        add(fmj, "languageAdapters", spec.getLanguageAdapters());
+        add(fmj, "custom", spec.getCustomData(), this::generateCustomData);
 
-		return LoomGradlePlugin.GSON.toJson(fmj);
-	}
+        return LoomGradlePlugin.GSON.toJson(fmj);
+    }
 
-	private JsonElement generatePerson(LeafModJsonV1Spec.Person person) {
-		if (person.getContactInformation().get().isEmpty()) {
-			return new JsonPrimitive(person.getName().get());
-		}
+    private JsonObject generateCustomData(Map<String, Object> customData) {
+        JsonObject json = new JsonObject();
+        customData.forEach((name, o) -> json.add(name, LoomGradlePlugin.GSON.toJsonTree(o)));
+        return json;
+    }
 
-		JsonObject json = new JsonObject();
-		addRequired(json, "name", person.getName());
-		add(json, "contact", person.getContactInformation());
+    private JsonObject generateDependencies(List<LeafModJsonV1Spec.Dependency> dependencies) {
+        JsonObject json = new JsonObject();
 
-		return json;
-	}
+        for (LeafModJsonV1Spec.Dependency dependency : dependencies) {
+            json.add(dependency.getModId().get(), generateDependency(dependency));
+        }
 
-	private JsonObject generateEntrypoints(List<LeafModJsonV1Spec.Entrypoint> entrypoints) {
-		Map<String, List<LeafModJsonV1Spec.Entrypoint>> entrypointsMap = entrypoints.stream()
-				.collect(Collectors.groupingBy(entrypoint -> entrypoint.getEntrypoint().get()));
+        return json;
+    }
 
-		JsonObject json = new JsonObject();
-		entrypointsMap.forEach((entrypoint, entries) -> json.add(entrypoint, generateEntrypoint(entries)));
-		return json;
-	}
+    private JsonElement generateDependency(LeafModJsonV1Spec.Dependency dependency) {
+        List<String> requirements = dependency.getVersionRequirements().get();
 
-	private JsonArray generateEntrypoint(List<LeafModJsonV1Spec.Entrypoint> entries) {
-		JsonArray json = new JsonArray();
+        if (requirements.isEmpty()) {
+            throw new IllegalStateException(
+                "Dependency " + dependency.getModId().get() + " must have at least one version requirement");
+        }
 
-		for (LeafModJsonV1Spec.Entrypoint entry : entries) {
-			json.add(generateEntrypointEntry(entry));
-		}
+        if (requirements.size() == 1) {
+            return new JsonPrimitive(requirements.getFirst());
+        }
 
-		return json;
-	}
+        JsonArray json = new JsonArray();
 
-	private JsonElement generateEntrypointEntry(LeafModJsonV1Spec.Entrypoint entrypoint) {
-		if (!entrypoint.getAdapter().isPresent()) {
-			return new JsonPrimitive(entrypoint.getValue().get());
-		}
+        for (String s : requirements) {
+            json.add(s);
+        }
 
-		JsonObject json = new JsonObject();
-		addRequired(json, "value", entrypoint.getValue());
-		addRequired(json, "adapter", entrypoint.getAdapter());
-		return json;
-	}
+        return json;
+    }
 
-	private JsonObject generateJar(String jar) {
-		JsonObject json = new JsonObject();
-		json.addProperty("file", jar);
-		return json;
-	}
+    private JsonArray generateEntrypoint(List<LeafModJsonV1Spec.Entrypoint> entries) {
+        JsonArray json = new JsonArray();
 
-	private JsonElement generateMixins(LeafModJsonV1Spec.Mixin mixin) {
-		if (!mixin.getEnvironment().isPresent()) {
-			return new JsonPrimitive(mixin.getValue().get());
-		}
+        for (LeafModJsonV1Spec.Entrypoint entry : entries) {
+            json.add(generateEntrypointEntry(entry));
+        }
 
-		JsonObject json = new JsonObject();
-		addRequired(json, "config", mixin.getValue());
-		addRequired(json, "environment", mixin.getEnvironment());
-		return json;
-	}
+        return json;
+    }
 
-	private JsonObject generateDependencies(List<LeafModJsonV1Spec.Dependency> dependencies) {
-		JsonObject json = new JsonObject();
+    private JsonElement generateEntrypointEntry(LeafModJsonV1Spec.Entrypoint entrypoint) {
+        if (!entrypoint.getAdapter().isPresent()) {
+            return new JsonPrimitive(entrypoint.getValue().get());
+        }
 
-		for (LeafModJsonV1Spec.Dependency dependency : dependencies) {
-			json.add(dependency.getModId().get(), generateDependency(dependency));
-		}
+        JsonObject json = new JsonObject();
+        addRequired(json, "value", entrypoint.getValue());
+        addRequired(json, "adapter", entrypoint.getAdapter());
+        return json;
+    }
 
-		return json;
-	}
+    private JsonObject generateEntrypoints(List<LeafModJsonV1Spec.Entrypoint> entrypoints) {
+        Map<String, List<LeafModJsonV1Spec.Entrypoint>> entrypointsMap = entrypoints.stream()
+            .collect(Collectors.groupingBy(entrypoint -> entrypoint.getEntrypoint().get()));
 
-	private JsonElement generateDependency(LeafModJsonV1Spec.Dependency dependency) {
-		List<String> requirements = dependency.getVersionRequirements().get();
+        JsonObject json = new JsonObject();
+        entrypointsMap.forEach((entrypoint, entries) -> json.add(entrypoint, generateEntrypoint(entries)));
+        return json;
+    }
 
-		if (requirements.isEmpty()) {
-			throw new IllegalStateException("Dependency " + dependency.getModId().get() + " must have at least one version requirement");
-		}
+    private JsonElement generateIcon(List<LeafModJsonV1Spec.Icon> icons) {
+        if (icons.size() == 1 && !icons.getFirst().getSize().isPresent()) {
+            return new JsonPrimitive(icons.getFirst().getPath().get());
+        }
 
-		if (requirements.size() == 1) {
-			return new JsonPrimitive(requirements.getFirst());
-		}
+        JsonObject json = new JsonObject();
 
-		JsonArray json = new JsonArray();
+        for (LeafModJsonV1Spec.Icon icon : icons) {
+            String size = String.valueOf(icon.getSize().get());
+            json.addProperty(size, icon.getPath().get());
+        }
 
-		for (String s : requirements) {
-			json.add(s);
-		}
+        return json;
+    }
 
-		return json;
-	}
+    private JsonObject generateJar(String jar) {
+        JsonObject json = new JsonObject();
+        json.addProperty("file", jar);
+        return json;
+    }
 
-	private JsonElement generateIcon(List<LeafModJsonV1Spec.Icon> icons) {
-		if (icons.size() == 1 && !icons.getFirst().getSize().isPresent()) {
-			return new JsonPrimitive(icons.getFirst().getPath().get());
-		}
+    private JsonElement generateMixins(LeafModJsonV1Spec.Mixin mixin) {
+        if (!mixin.getEnvironment().isPresent()) {
+            return new JsonPrimitive(mixin.getValue().get());
+        }
 
-		JsonObject json = new JsonObject();
+        JsonObject json = new JsonObject();
+        addRequired(json, "config", mixin.getValue());
+        addRequired(json, "environment", mixin.getEnvironment());
+        return json;
+    }
 
-		for (LeafModJsonV1Spec.Icon icon : icons) {
-			String size = String.valueOf(icon.getSize().get());
-			json.addProperty(size, icon.getPath().get());
-		}
+    private JsonElement generatePerson(LeafModJsonV1Spec.Person person) {
+        if (person.getContactInformation().get().isEmpty()) {
+            return new JsonPrimitive(person.getName().get());
+        }
 
-		return json;
-	}
+        JsonObject json = new JsonObject();
+        addRequired(json, "name", person.getName());
+        add(json, "contact", person.getContactInformation());
 
-	private JsonObject generateCustomData(Map<String, Object> customData) {
-		JsonObject json = new JsonObject();
-		customData.forEach((name, o) -> json.add(name, LoomGradlePlugin.GSON.toJsonTree(o)));
-		return json;
-	}
+        return json;
+    }
 }

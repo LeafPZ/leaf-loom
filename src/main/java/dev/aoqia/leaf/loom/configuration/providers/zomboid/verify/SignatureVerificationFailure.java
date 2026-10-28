@@ -42,11 +42,11 @@
 package dev.aoqia.leaf.loom.configuration.providers.zomboid.verify;
 
 public final class SignatureVerificationFailure extends Exception {
-	public SignatureVerificationFailure(String message) {
-		super(message);
-	}
+    public SignatureVerificationFailure(String message) {
+        super(message);
+    }
 
-	public SignatureVerificationFailure(String message, Throwable cause) {
-		super(message, cause);
-	}
+    public SignatureVerificationFailure(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

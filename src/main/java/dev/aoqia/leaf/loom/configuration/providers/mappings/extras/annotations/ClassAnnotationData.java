@@ -59,133 +59,132 @@ import net.fabricmc.tinyremapper.TinyRemapper;
 import net.fabricmc.tinyremapper.api.TrRemapper;
 
 public record ClassAnnotationData(
-		@SerializedName("remove")
-		Set<String> annotationsToRemove,
-		@SerializedName("add")
-		List<AnnotationNode> annotationsToAdd,
-		@SerializedName("type_remove")
-		Set<TypeAnnotationKey> typeAnnotationsToRemove,
-		@SerializedName("type_add")
-		List<TypeAnnotationNode> typeAnnotationsToAdd,
-		Map<String, GenericAnnotationData> fields,
-		Map<String, MethodAnnotationData> methods
-) implements BaseAnnotationData {
-	public ClassAnnotationData {
-		if (annotationsToRemove == null) {
-			annotationsToRemove = new LinkedHashSet<>();
-		}
+    @SerializedName("remove") Set<String> annotationsToRemove,
+    @SerializedName("add") List<AnnotationNode> annotationsToAdd,
+    @SerializedName("type_remove") Set<TypeAnnotationKey> typeAnnotationsToRemove,
+    @SerializedName("type_add") List<TypeAnnotationNode> typeAnnotationsToAdd,
+    Map<String, GenericAnnotationData> fields,
+    Map<String, MethodAnnotationData> methods
+) implements BaseAnnotationData
+{
+    public ClassAnnotationData {
+        if (annotationsToRemove == null) {
+            annotationsToRemove = new LinkedHashSet<>();
+        }
 
-		if (annotationsToAdd == null) {
-			annotationsToAdd = new ArrayList<>();
-		}
+        if (annotationsToAdd == null) {
+            annotationsToAdd = new ArrayList<>();
+        }
 
-		if (typeAnnotationsToRemove == null) {
-			typeAnnotationsToRemove = new LinkedHashSet<>();
-		}
+        if (typeAnnotationsToRemove == null) {
+            typeAnnotationsToRemove = new LinkedHashSet<>();
+        }
 
-		if (typeAnnotationsToAdd == null) {
-			typeAnnotationsToAdd = new ArrayList<>();
-		}
+        if (typeAnnotationsToAdd == null) {
+            typeAnnotationsToAdd = new ArrayList<>();
+        }
 
-		if (fields == null) {
-			fields = new LinkedHashMap<>();
-		}
+        if (fields == null) {
+            fields = new LinkedHashMap<>();
+        }
 
-		if (methods == null) {
-			methods = new LinkedHashMap<>();
-		}
-	}
+        if (methods == null) {
+            methods = new LinkedHashMap<>();
+        }
+    }
 
-	public ClassAnnotationData() {
-		this(new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashMap<>(), new LinkedHashMap<>());
-	}
+    public ClassAnnotationData() {
+        this(new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashSet<>(), new ArrayList<>(), new LinkedHashMap<>(),
+            new LinkedHashMap<>());
+    }
 
-	public ClassAnnotationData(ClassAnnotationData other) {
-		this(
-				new LinkedHashSet<>(other.annotationsToRemove),
-				AnnotationsData.copyAnnotations(other.annotationsToAdd),
-				new LinkedHashSet<>(other.typeAnnotationsToRemove),
-				AnnotationsData.copyTypeAnnotations(other.typeAnnotationsToAdd),
-				AnnotationsData.copyMap(other.fields, GenericAnnotationData::new),
-				AnnotationsData.copyMap(other.methods, MethodAnnotationData::new)
-		);
-	}
+    public ClassAnnotationData(ClassAnnotationData other) {
+        this(new LinkedHashSet<>(other.annotationsToRemove), AnnotationsData.copyAnnotations(other.annotationsToAdd),
+            new LinkedHashSet<>(other.typeAnnotationsToRemove),
+            AnnotationsData.copyTypeAnnotations(other.typeAnnotationsToAdd),
+            AnnotationsData.copyMap(other.fields, GenericAnnotationData::new),
+            AnnotationsData.copyMap(other.methods, MethodAnnotationData::new));
+    }
 
-	ClassAnnotationData merge(ClassAnnotationData other) {
-		Set<String> newAnnotationsToRemove = new LinkedHashSet<>(annotationsToRemove);
-		newAnnotationsToRemove.addAll(other.annotationsToRemove);
-		List<AnnotationNode> newAnnotationsToAdd = new ArrayList<>(annotationsToAdd);
-		newAnnotationsToAdd.addAll(other.annotationsToAdd);
-		Set<TypeAnnotationKey> newTypeAnnotationsToRemove = new LinkedHashSet<>(typeAnnotationsToRemove);
-		newTypeAnnotationsToRemove.addAll(other.typeAnnotationsToRemove);
-		List<TypeAnnotationNode> newTypeAnnotationsToAdd = new ArrayList<>(typeAnnotationsToAdd);
-		Map<String, GenericAnnotationData> newFields = new LinkedHashMap<>(fields);
-		other.fields.forEach((key, value) -> newFields.merge(key, value, GenericAnnotationData::merge));
-		Map<String, MethodAnnotationData> newMethods = new LinkedHashMap<>(methods);
-		other.methods.forEach((key, value) -> newMethods.merge(key, value, MethodAnnotationData::merge));
-		return new ClassAnnotationData(newAnnotationsToRemove, newAnnotationsToAdd, newTypeAnnotationsToRemove, newTypeAnnotationsToAdd, newFields, newMethods);
-	}
+    private static String remapField(String className, String field, TinyRemapper remapper) {
+        String[] nameDesc = field.split(":", 2);
 
-	ClassAnnotationData remap(String className, TinyRemapper remapper) {
-		return new ClassAnnotationData(
-				annotationsToRemove.stream().map(remapper.getEnvironment().getRemapper()::map).collect(Collectors.toCollection(LinkedHashSet::new)),
-				annotationsToAdd.stream().map(ann -> AnnotationsData.remap(ann, remapper)).collect(Collectors.toCollection(ArrayList::new)),
-				typeAnnotationsToRemove.stream().map(key -> key.remap(remapper)).collect(Collectors.toCollection(LinkedHashSet::new)),
-				typeAnnotationsToAdd.stream().map(ann -> AnnotationsData.remap(ann, remapper)).collect(Collectors.toCollection(ArrayList::new)),
-				AnnotationsData.remapMap(
-						fields,
-						entry -> remapField(className, entry.getKey(), remapper),
-						entry -> entry.getValue().remap(remapper)
-				),
-				AnnotationsData.remapMap(
-						methods,
-						entry -> remapMethod(className, entry.getKey(), remapper),
-						entry -> entry.getValue().remap(remapper)
-				)
-		);
-	}
+        if (nameDesc.length != 2) {
+            return field;
+        }
 
-	private static String remapField(String className, String field, TinyRemapper remapper) {
-		String[] nameDesc = field.split(":", 2);
+        TrRemapper trRemapper = remapper.getEnvironment().getRemapper();
+        return trRemapper.mapFieldName(className, nameDesc[0], nameDesc[1]) + ":" + trRemapper.mapDesc(nameDesc[1]);
+    }
 
-		if (nameDesc.length != 2) {
-			return field;
-		}
+    private static String remapMethod(String className, String method, TinyRemapper remapper) {
+        int parenIndex = method.indexOf('(');
 
-		TrRemapper trRemapper = remapper.getEnvironment().getRemapper();
-		return trRemapper.mapFieldName(className, nameDesc[0], nameDesc[1]) + ":" + trRemapper.mapDesc(nameDesc[1]);
-	}
+        if (parenIndex == -1) {
+            return method;
+        }
 
-	private static String remapMethod(String className, String method, TinyRemapper remapper) {
-		int parenIndex = method.indexOf('(');
+        String name = method.substring(0, parenIndex);
+        String desc = method.substring(parenIndex);
+        TrRemapper trRemapper = remapper.getEnvironment().getRemapper();
+        return trRemapper.mapMethodName(className, name, desc) + trRemapper.mapMethodDesc(desc);
+    }
 
-		if (parenIndex == -1) {
-			return method;
-		}
+    ClassAnnotationData merge(ClassAnnotationData other) {
+        Set<String> newAnnotationsToRemove = new LinkedHashSet<>(annotationsToRemove);
+        newAnnotationsToRemove.addAll(other.annotationsToRemove);
+        List<AnnotationNode> newAnnotationsToAdd = new ArrayList<>(annotationsToAdd);
+        newAnnotationsToAdd.addAll(other.annotationsToAdd);
+        Set<TypeAnnotationKey> newTypeAnnotationsToRemove = new LinkedHashSet<>(typeAnnotationsToRemove);
+        newTypeAnnotationsToRemove.addAll(other.typeAnnotationsToRemove);
+        List<TypeAnnotationNode> newTypeAnnotationsToAdd = new ArrayList<>(typeAnnotationsToAdd);
+        Map<String, GenericAnnotationData> newFields = new LinkedHashMap<>(fields);
+        other.fields.forEach((key, value) -> newFields.merge(key, value, GenericAnnotationData::merge));
+        Map<String, MethodAnnotationData> newMethods = new LinkedHashMap<>(methods);
+        other.methods.forEach((key, value) -> newMethods.merge(key, value, MethodAnnotationData::merge));
+        return new ClassAnnotationData(newAnnotationsToRemove, newAnnotationsToAdd, newTypeAnnotationsToRemove,
+            newTypeAnnotationsToAdd, newFields, newMethods);
+    }
 
-		String name = method.substring(0, parenIndex);
-		String desc = method.substring(parenIndex);
-		TrRemapper trRemapper = remapper.getEnvironment().getRemapper();
-		return trRemapper.mapMethodName(className, name, desc) + trRemapper.mapMethodDesc(desc);
-	}
+    ClassAnnotationData remap(String className, TinyRemapper remapper) {
+        return new ClassAnnotationData(
+            annotationsToRemove.stream()
+                .map(remapper.getEnvironment().getRemapper()::map)
+                .collect(Collectors.toCollection(LinkedHashSet::new)),
+            annotationsToAdd.stream()
+                .map(ann -> AnnotationsData.remap(ann, remapper))
+                .collect(Collectors.toCollection(ArrayList::new)),
+            typeAnnotationsToRemove.stream()
+                .map(key -> key.remap(remapper))
+                .collect(Collectors.toCollection(LinkedHashSet::new)),
+            typeAnnotationsToAdd.stream()
+                .map(ann -> AnnotationsData.remap(ann, remapper))
+                .collect(Collectors.toCollection(ArrayList::new)),
+            AnnotationsData.remapMap(fields, entry -> remapField(className, entry.getKey(), remapper),
+                entry -> entry.getValue().remap(remapper)),
+            AnnotationsData.remapMap(methods, entry -> remapMethod(className, entry.getKey(), remapper),
+                entry -> entry.getValue().remap(remapper)));
+    }
 
-	public int modifyAccessFlags(int access) {
-		if (annotationsToRemove.contains("java/lang/Deprecated")) {
-			access &= ~Opcodes.ACC_DEPRECATED;
-		}
+    public int modifyAccessFlags(int access) {
+        if (annotationsToRemove.contains("java/lang/Deprecated")) {
+            access &= ~Opcodes.ACC_DEPRECATED;
+        }
 
-		if (annotationsToAdd.stream().anyMatch(ann -> "Ljava/lang/Deprecated;".equals(ann.desc))) {
-			access |= Opcodes.ACC_DEPRECATED;
-		}
+        if (annotationsToAdd.stream().anyMatch(ann -> "Ljava/lang/Deprecated;".equals(ann.desc))) {
+            access |= Opcodes.ACC_DEPRECATED;
+        }
 
-		return access;
-	}
+        return access;
+    }
 
-	@Nullable public GenericAnnotationData getFieldData(String fieldName, String fieldDesc) {
-		return fields.get(fieldName + ":" + fieldDesc);
-	}
+    @Nullable
+    public GenericAnnotationData getFieldData(String fieldName, String fieldDesc) {
+        return fields.get(fieldName + ":" + fieldDesc);
+    }
 
-	@Nullable public MethodAnnotationData getMethodData(String methodName, String methodDesc) {
-		return methods.get(methodName + methodDesc);
-	}
+    @Nullable
+    public MethodAnnotationData getMethodData(String methodName, String methodDesc) {
+        return methods.get(methodName + methodDesc);
+    }
 }

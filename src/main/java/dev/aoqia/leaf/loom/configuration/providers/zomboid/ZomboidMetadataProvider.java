@@ -64,51 +64,32 @@ import dev.aoqia.leaf.loom.util.Platform;
 import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
 
 public final class ZomboidMetadataProvider {
-	private final Options options;
-	private final Function<String, DownloadBuilder> download;
-
-	private ManifestEntryLocation versionEntry;
-	private ZomboidVersionMeta versionMeta;
     private AssetIndex clientAssetIndex;
 
-	private ZomboidMetadataProvider(Options options, Function<String, DownloadBuilder> download) {
-		this.options = options;
-		this.download = download;
-	}
+    private final Function<String, DownloadBuilder> download;
 
-	public static ZomboidMetadataProvider create(ConfigContext configContext) {
-		final String version = resolveZomboidVersion(configContext.project());
+    private final Options options;
 
-		return new ZomboidMetadataProvider(
-            ZomboidMetadataProvider.Options.create(version, configContext.project()),
-            configContext.extension()::download
-		);
-	}
+    private ManifestEntryLocation versionEntry;
 
-	private static String resolveZomboidVersion(Project project) {
-		final DependencyInfo dependency = DependencyInfo.create(project, Constants.Configurations.ZOMBOID);
-		return dependency.getDependency().getVersion();
-	}
+    private ZomboidVersionMeta versionMeta;
 
-	public String getZomboidVersion() {
-		return options.zomboidVersion();
-	}
+    private ZomboidMetadataProvider(Options options, Function<String, DownloadBuilder> download) {
+        this.options = options;
+        this.download = download;
+    }
 
-	public ZomboidVersionMeta getVersionMeta() {
-		try {
-			if (versionEntry == null) {
-				versionEntry = getVersionEntry();
-			}
+    public static ZomboidMetadataProvider create(ConfigContext configContext) {
+        final String version = resolveZomboidVersion(configContext.project());
 
-			if (versionMeta == null) {
-				versionMeta = readVersionMeta();
-			}
-		} catch (IOException e) {
-			throw new UncheckedIOException(e.getMessage(), e);
-		}
+        return new ZomboidMetadataProvider(ZomboidMetadataProvider.Options.create(version, configContext.project()),
+            configContext.extension()::download);
+    }
 
-		return versionMeta;
-	}
+    private static String resolveZomboidVersion(Project project) {
+        final DependencyInfo dependency = DependencyInfo.create(project, Constants.Configurations.ZOMBOID);
+        return dependency.getDependency().getVersion();
+    }
 
     public AssetIndex getClientAssetIndex() {
         try {
@@ -122,84 +103,99 @@ public final class ZomboidMetadataProvider {
         return clientAssetIndex;
     }
 
-	public boolean isUnobfuscated() {
-		return true;
-	}
+    public ZomboidVersionMeta getVersionMeta() {
+        try {
+            if (versionEntry == null) {
+                versionEntry = getVersionEntry();
+            }
 
-	private ManifestEntryLocation getVersionEntry() throws IOException {
-		// Custom URL always takes priority
-		if (options.customManifestUrl() != null) {
-			VersionsManifest.Version customVersion = new VersionsManifest.Version(
-                options.customManifestUrl(),
-                null
-			);
-			return new ManifestEntryLocation(null, options.zomboidVersion(), customVersion);
-		}
+            if (versionMeta == null) {
+                versionMeta = readVersionMeta();
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e.getMessage(), e);
+        }
 
-		final List<ManifestEntrySupplier> suppliers = new ArrayList<>();
+        return versionMeta;
+    }
 
-		// First try finding the version with caching
-		for (ManifestLocation location : options.versionsManifests()) {
-			suppliers.add(() -> getManifestEntry(location, false));
-		}
+    public String getZomboidVersion() {
+        return options.zomboidVersion();
+    }
 
-		// Then force download the manifest to find the version
-		for (ManifestLocation location : options.versionsManifests()) {
-			suppliers.add(() -> getManifestEntry(location, true));
-		}
+    public boolean isUnobfuscated() {
+        return true;
+    }
 
-		for (ManifestEntrySupplier supplier : suppliers) {
-			final ManifestEntryLocation version = supplier.get();
+    @Nullable
+    private ManifestEntryLocation getManifestEntry(ManifestLocation location, boolean forceDownload)
+        throws IOException
+    {
+        DownloadBuilder builder = download.apply(location.url());
 
-			if (version != null) {
-				return version;
-			}
-		}
+        if (forceDownload) {
+            builder = builder.forceDownload();
+        } else {
+            builder = builder.defaultCache();
+        }
 
-		throw new RuntimeException("Failed to find Zomboid version: " + options.zomboidVersion());
-	}
+        final Path cacheFile = location.cacheFile(options.userCache());
+        final String versionManifest = builder.downloadString(cacheFile);
+        final VersionsManifest manifest = LoomGradlePlugin.GSON.fromJson(versionManifest, VersionsManifest.class);
+        final VersionsManifest.Version version = manifest.getVersion(options.zomboidVersion());
 
-	@Nullable private ManifestEntryLocation getManifestEntry(ManifestLocation location, boolean forceDownload) throws IOException {
-		DownloadBuilder builder = download.apply(location.url());
+        if (version != null) {
+            return new ManifestEntryLocation(location, options.zomboidVersion(), version);
+        }
 
-		if (forceDownload) {
-			builder = builder.forceDownload();
-		} else {
-			builder = builder.defaultCache();
-		}
+        return null;
+    }
 
-		final Path cacheFile = location.cacheFile(options.userCache());
-		final String versionManifest = builder.downloadString(cacheFile);
-		final VersionsManifest manifest = LoomGradlePlugin.GSON.fromJson(versionManifest, VersionsManifest.class);
-		final VersionsManifest.Version version = manifest.getVersion(options.zomboidVersion());
+    private ManifestEntryLocation getVersionEntry() throws IOException {
+        // Custom URL always takes priority
+        if (options.customManifestUrl() != null) {
+            VersionsManifest.Version customVersion = new VersionsManifest.Version(options.customManifestUrl(), null);
+            return new ManifestEntryLocation(null, options.zomboidVersion(), customVersion);
+        }
 
-		if (version != null) {
-			return new ManifestEntryLocation(location, options.zomboidVersion(), version);
-		}
+        final List<ManifestEntrySupplier> suppliers = new ArrayList<>();
 
-		return null;
-	}
+        // First try finding the version with caching
+        for (ManifestLocation location : options.versionsManifests()) {
+            suppliers.add(() -> getManifestEntry(location, false));
+        }
 
-	private ZomboidVersionMeta readVersionMeta() throws IOException {
-		final DownloadBuilder builder = download.apply(versionEntry.entry.url());
+        // Then force download the manifest to find the version
+        for (ManifestLocation location : options.versionsManifests()) {
+            suppliers.add(() -> getManifestEntry(location, true));
+        }
 
-		if (versionEntry.entry.hash() != null) {
-			builder.sha1(versionEntry.entry.hash());
-		} else {
-			builder.defaultCache();
-		}
+        for (ManifestEntrySupplier supplier : suppliers) {
+            final ManifestEntryLocation version = supplier.get();
 
-		final String fileName = getVersionMetaFileName();
-		final Path cacheFile = options.workingDir().resolve(fileName);
-		final String json = builder.downloadString(cacheFile);
-		return LoomGradlePlugin.GSON.fromJson(json, ZomboidVersionMeta.class);
-	}
+            if (version != null) {
+                return version;
+            }
+        }
+
+        throw new RuntimeException("Failed to find Zomboid version: " + options.zomboidVersion());
+    }
+
+    private String getVersionMetaFileName() {
+        // custom version metadata
+        if (versionEntry.manifest == null) {
+            return "zomboid_info_" + Integer.toHexString(versionEntry.entry.url().hashCode()) + ".json";
+        }
+
+        // metadata url taken from versions manifest
+        return versionEntry.manifest.name() + "_version_info.json";
+    }
 
     private AssetIndex readClientAssetIndex() throws IOException {
         File indexFile = new File(options.workingDir()
             .resolve(versionEntry.entryKey)
-            .resolve(versionEntry.manifest.name() + "_client_asset_index.json").toUri()
-        );
+            .resolve(versionEntry.manifest.name() + "_client_asset_index.json")
+            .toUri());
 
         Platform.OperatingSystem os = Platform.CURRENT.getOperatingSystem();
         ZomboidVersionMeta.AssetIndexEntryValue index = versionMeta.assetIndexes().client().getFromOs(os);
@@ -208,44 +204,45 @@ public final class ZomboidMetadataProvider {
         return LoomGradlePlugin.GSON.fromJson(json, AssetIndex.class);
     }
 
-	private String getVersionMetaFileName() {
-		// custom version metadata
-		if (versionEntry.manifest == null) {
-			return "zomboid_info_" + Integer.toHexString(versionEntry.entry.url().hashCode()) + ".json";
-		}
+    private ZomboidVersionMeta readVersionMeta() throws IOException {
+        final DownloadBuilder builder = download.apply(versionEntry.entry.url());
 
-		// metadata url taken from versions manifest
-		return versionEntry.manifest.name() + "_version_info.json";
-	}
+        if (versionEntry.entry.hash() != null) {
+            builder.sha1(versionEntry.entry.hash());
+        } else {
+            builder.defaultCache();
+        }
 
-	public record Options(String zomboidVersion,
-					ManifestLocations versionsManifests,
-					@Nullable String customManifestUrl,
-					Path userCache,
-					Path workingDir) {
-		public static Options create(String version, Project project) {
-			final LoomGradleExtension extension = LoomGradleExtension.get(project);
-			final Path userCache = extension.getFiles().getUserCache().toPath();
-			final Path workingDir = ZomboidProvider.gameWorkingDirectory(project, version).toPath();
+        final String fileName = getVersionMetaFileName();
+        final Path cacheFile = options.workingDir().resolve(fileName);
+        final String json = builder.downloadString(cacheFile);
+        return LoomGradlePlugin.GSON.fromJson(json, ZomboidVersionMeta.class);
+    }
 
-			final ManifestLocations manifestLocations = extension.getVersionsManifests();
-			final Property<String> customMetaUrl = extension.getCustomZomboidMetadata();
+    public record Options(
+        String zomboidVersion,
+        ManifestLocations versionsManifests,
+        @Nullable String customManifestUrl,
+        Path userCache,
+        Path workingDir
+    )
+    {
+        public static Options create(String version, Project project) {
+            final LoomGradleExtension extension = LoomGradleExtension.get(project);
+            final Path userCache = extension.getFiles().getUserCache().toPath();
+            final Path workingDir = ZomboidProvider.gameWorkingDirectory(project, version).toPath();
 
-			return new Options(
-					version,
-					manifestLocations,
-					customMetaUrl.getOrNull(),
-					userCache,
-					workingDir
-			);
-		}
-	}
+            final ManifestLocations manifestLocations = extension.getVersionsManifests();
+            final Property<String> customMetaUrl = extension.getCustomZomboidMetadata();
 
-	@FunctionalInterface
-	private interface ManifestEntrySupplier {
-		ManifestEntryLocation get() throws IOException;
-	}
+            return new Options(version, manifestLocations, customMetaUrl.getOrNull(), userCache, workingDir);
+        }
+    }
 
-	private record ManifestEntryLocation(ManifestLocation manifest, String entryKey, VersionsManifest.Version entry) {
-	}
+    private record ManifestEntryLocation(ManifestLocation manifest, String entryKey, VersionsManifest.Version entry) {}
+
+    @FunctionalInterface
+    private interface ManifestEntrySupplier {
+        ManifestEntryLocation get() throws IOException;
+    }
 }

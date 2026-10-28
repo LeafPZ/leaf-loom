@@ -53,22 +53,25 @@ import dev.aoqia.leaf.loom.util.LazyCloseable;
 import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
 
 public final class ContextImplHelper {
-	private ContextImplHelper() {
-	}
+    private ContextImplHelper() {
+    }
 
-	public static LazyCloseable<TinyRemapper> createRemapper(ConfigContext configContext, MappingsNamespace from, MappingsNamespace to) {
-		return new LazyCloseable<>(() -> {
-			try {
-				TinyRemapper tinyRemapper = TinyRemapperHelper.getTinyRemapper(configContext.project(), configContext.serviceFactory(), from.toString(), to.toString());
+    public static LazyCloseable<TinyRemapper> createRemapper(ConfigContext configContext, MappingsNamespace from,
+        MappingsNamespace to)
+    {
+        return new LazyCloseable<>(() -> {
+            try {
+                TinyRemapper tinyRemapper = TinyRemapperHelper.getTinyRemapper(configContext.project(),
+                    configContext.serviceFactory(), from.toString(), to.toString());
 
-				for (Path minecraftJar : configContext.extension().getZomboidJars(from)) {
-					tinyRemapper.readClassPath(minecraftJar);
-				}
+                for (Path minecraftJar : configContext.extension().getZomboidJars(from)) {
+                    tinyRemapper.readClassPath(minecraftJar);
+                }
 
-				return tinyRemapper;
-			} catch (IOException e) {
-				throw new UncheckedIOException("Failed to create tiny remapper", e);
-			}
-		}, TinyRemapper::finish);
-	}
+                return tinyRemapper;
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to create tiny remapper", e);
+            }
+        }, TinyRemapper::finish);
+    }
 }

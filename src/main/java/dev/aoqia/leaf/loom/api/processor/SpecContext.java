@@ -54,47 +54,45 @@ import dev.aoqia.leaf.loom.configuration.processors.speccontext.ProjectView;
 import dev.aoqia.leaf.loom.util.fmj.LeafModJson;
 
 public interface SpecContext {
-	/**
-	 * Returns a list of all the external mods that this project depends on regardless of configuration.
-	 */
-	List<LeafModJson> modDependencies();
+    // Sort to ensure stable caching
+    static List<LeafModJson> distinctSorted(List<LeafModJson> mods) {
+        return mods.stream().distinct().sorted(Comparator.comparing(LeafModJson::getId)).toList();
+    }
 
-	List<LeafModJson> localMods();
+    // Returns all of the loom projects that are depended on in the main sourceset
+    // TODO make project isolation aware
+    static Stream<Project> getDependentProjects(ProjectView projectView) {
+        final Stream<Project> runtimeProjects = projectView
+            .getLoomProjectDependencies(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME);
+        final Stream<Project> compileProjects = projectView
+            .getLoomProjectDependencies(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME);
 
-	/**
-	 * Return a set of mods that should be used for transforms, that target EITHER the common or client.
-	 */
-	List<LeafModJson> modDependenciesCompileRuntime();
+        return Stream.concat(runtimeProjects, compileProjects).distinct();
+    }
 
-	/**
-	 * Return a set of mods that should be used for transforms, that target ONLY the client.
-	 */
-	List<LeafModJson> modDependenciesCompileRuntimeClient();
+    default List<LeafModJson> allMods() {
+        return Stream.concat(modDependencies().stream(), localMods().stream()).toList();
+    }
 
-	MappingsNamespace productionNamespace();
+    List<LeafModJson> localMods();
 
-	@ApiStatus.Experimental
-	MarkdownJavadocOption markdownJavadocOption();
+    @ApiStatus.Experimental
+    MarkdownJavadocOption markdownJavadocOption();
 
-	default List<LeafModJson> allMods() {
-		return Stream.concat(modDependencies().stream(), localMods().stream()).toList();
-	}
+    /**
+     * Returns a list of all the external mods that this project depends on regardless of configuration.
+     */
+    List<LeafModJson> modDependencies();
 
-	// Returns all of the loom projects that are depended on in the main sourceset
-	// TODO make project isolation aware
-	static Stream<Project> getDependentProjects(ProjectView projectView) {
-		final Stream<Project> runtimeProjects = projectView.getLoomProjectDependencies(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME);
-		final Stream<Project> compileProjects = projectView.getLoomProjectDependencies(JavaPlugin.COMPILE_CLASSPATH_CONFIGURATION_NAME);
+    /**
+     * Return a set of mods that should be used for transforms, that target EITHER the common or client.
+     */
+    List<LeafModJson> modDependenciesCompileRuntime();
 
-		return Stream.concat(runtimeProjects, compileProjects)
-				.distinct();
-	}
+    /**
+     * Return a set of mods that should be used for transforms, that target ONLY the client.
+     */
+    List<LeafModJson> modDependenciesCompileRuntimeClient();
 
-	// Sort to ensure stable caching
-	static List<LeafModJson> distinctSorted(List<LeafModJson> mods) {
-		return mods.stream()
-				.distinct()
-				.sorted(Comparator.comparing(LeafModJson::getId))
-				.toList();
-	}
+    MappingsNamespace productionNamespace();
 }

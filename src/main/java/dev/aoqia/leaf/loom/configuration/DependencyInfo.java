@@ -55,114 +55,118 @@ import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 
 public class DependencyInfo {
-	final Project project;
-	final Dependency dependency;
-	final Configuration sourceConfiguration;
+    final Dependency dependency;
 
-	private String resolvedVersion = null;
+    final Project project;
 
-	public static DependencyInfo create(Project project, String configuration) {
-		return create(project, project.getConfigurations().getByName(configuration));
-	}
+    final Configuration sourceConfiguration;
 
-	public static DependencyInfo create(Project project, Configuration configuration) {
-		DependencySet dependencies = configuration.getDependencies();
+    private String resolvedVersion = null;
 
-		if (dependencies.isEmpty()) {
-			throw new IllegalArgumentException(String.format("Configuration '%s' has no dependencies", configuration.getName()));
-		}
+    DependencyInfo(Project project, Dependency dependency, Configuration sourceConfiguration) {
+        this.project = project;
+        this.dependency = dependency;
+        this.sourceConfiguration = sourceConfiguration;
+    }
 
-		if (dependencies.size() != 1) {
-			throw new IllegalArgumentException(String.format("Configuration '%s' must only have 1 dependency", configuration.getName()));
-		}
+    public static DependencyInfo create(Project project, Configuration configuration) {
+        DependencySet dependencies = configuration.getDependencies();
 
-		return create(project, dependencies.iterator().next(), configuration);
-	}
+        if (dependencies.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format("Configuration '%s' has no dependencies", configuration.getName()));
+        }
 
-	public static DependencyInfo create(Project project, Dependency dependency, Configuration sourceConfiguration) {
-		if (dependency instanceof FileCollectionDependency fileCollectionDependency) {
-			return new FileDependencyInfo(project, fileCollectionDependency, sourceConfiguration);
-		} else {
-			return new DependencyInfo(project, dependency, sourceConfiguration);
-		}
-	}
+        if (dependencies.size() != 1) {
+            throw new IllegalArgumentException(
+                String.format("Configuration '%s' must only have 1 dependency", configuration.getName()));
+        }
 
-	DependencyInfo(Project project, Dependency dependency, Configuration sourceConfiguration) {
-		this.project = project;
-		this.dependency = dependency;
-		this.sourceConfiguration = sourceConfiguration;
-	}
+        return create(project, dependencies.iterator().next(), configuration);
+    }
 
-	public Dependency getDependency() {
-		return dependency;
-	}
+    public static DependencyInfo create(Project project, Dependency dependency, Configuration sourceConfiguration) {
+        if (dependency instanceof FileCollectionDependency fileCollectionDependency) {
+            return new FileDependencyInfo(project, fileCollectionDependency, sourceConfiguration);
+        } else {
+            return new DependencyInfo(project, dependency, sourceConfiguration);
+        }
+    }
 
-	public String getResolvedVersion() {
-		if (resolvedVersion != null) {
-			return resolvedVersion;
-		}
+    public static DependencyInfo create(Project project, String configuration) {
+        return create(project, project.getConfigurations().getByName(configuration));
+    }
 
-		for (ResolvedDependency rd : sourceConfiguration.getResolvedConfiguration().getFirstLevelModuleDependencies()) {
-			if (rd.getModuleGroup().equals(dependency.getGroup()) && rd.getModuleName().equals(dependency.getName())) {
-				resolvedVersion = rd.getModuleVersion();
-				return resolvedVersion;
-			}
-		}
+    public Dependency getDependency() {
+        return dependency;
+    }
 
-		resolvedVersion = dependency.getVersion();
-		return resolvedVersion;
-	}
+    public String getDepString() {
+        return dependency.getGroup() + ":" + dependency.getName() + ":" + dependency.getVersion();
+    }
 
-	public Configuration getSourceConfiguration() {
-		return sourceConfiguration;
-	}
+    public String getResolvedDepString() {
+        return dependency.getGroup() + ":" + dependency.getName() + ":" + getResolvedVersion();
+    }
 
-	private boolean matches(ComponentIdentifier identifier) {
-		if (identifier instanceof ModuleComponentIdentifier moduleComponentIdentifier) {
-			return moduleComponentIdentifier.getGroup().equals(dependency.getGroup())
-					&& moduleComponentIdentifier.getModule().equals(dependency.getName())
-					&& moduleComponentIdentifier.getVersion().equals(dependency.getVersion());
-		}
+    public String getResolvedVersion() {
+        if (resolvedVersion != null) {
+            return resolvedVersion;
+        }
 
-		return false;
-	}
+        for (ResolvedDependency rd : sourceConfiguration.getResolvedConfiguration().getFirstLevelModuleDependencies()) {
+            if (rd.getModuleGroup().equals(dependency.getGroup()) && rd.getModuleName().equals(dependency.getName())) {
+                resolvedVersion = rd.getModuleVersion();
+                return resolvedVersion;
+            }
+        }
 
-	public Set<File> resolve() {
-		return sourceConfiguration.getIncoming()
-				.artifactView(view -> view.componentFilter(this::matches))
-				.getFiles()
-				.getFiles();
-	}
+        resolvedVersion = dependency.getVersion();
+        return resolvedVersion;
+    }
 
-	public Optional<File> resolveFile() {
-		Set<File> files = resolve();
+    public Configuration getSourceConfiguration() {
+        return sourceConfiguration;
+    }
 
-		if (files.isEmpty()) {
-			return Optional.empty();
-		} else if (files.size() > 1) {
-			StringBuilder builder = new StringBuilder(this.toString());
-			builder.append(" resolves to more than one file:");
+    public Set<File> resolve() {
+        return sourceConfiguration.getIncoming()
+            .artifactView(view -> view.componentFilter(this::matches))
+            .getFiles()
+            .getFiles();
+    }
 
-			for (File f : files) {
-				builder.append("\n\t-").append(f.getAbsolutePath());
-			}
+    public Optional<File> resolveFile() {
+        Set<File> files = resolve();
 
-			throw new RuntimeException(builder.toString());
-		} else {
-			return files.stream().findFirst();
-		}
-	}
+        if (files.isEmpty()) {
+            return Optional.empty();
+        } else if (files.size() > 1) {
+            StringBuilder builder = new StringBuilder(this.toString());
+            builder.append(" resolves to more than one file:");
 
-	@Override
-	public String toString() {
-		return getDepString();
-	}
+            for (File f : files) {
+                builder.append("\n\t-").append(f.getAbsolutePath());
+            }
 
-	public String getDepString() {
-		return dependency.getGroup() + ":" + dependency.getName() + ":" + dependency.getVersion();
-	}
+            throw new RuntimeException(builder.toString());
+        } else {
+            return files.stream().findFirst();
+        }
+    }
 
-	public String getResolvedDepString() {
-		return dependency.getGroup() + ":" + dependency.getName() + ":" + getResolvedVersion();
-	}
+    @Override
+    public String toString() {
+        return getDepString();
+    }
+
+    private boolean matches(ComponentIdentifier identifier) {
+        if (identifier instanceof ModuleComponentIdentifier moduleComponentIdentifier) {
+            return moduleComponentIdentifier.getGroup().equals(dependency.getGroup())
+                && moduleComponentIdentifier.getModule().equals(dependency.getName())
+                && moduleComponentIdentifier.getVersion().equals(dependency.getVersion());
+        }
+
+        return false;
+    }
 }

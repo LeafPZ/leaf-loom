@@ -29,27 +29,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class CopyGameFileExecutor implements AutoCloseable {
-    private final ExecutorService executorService;
     private final List<IOException> copyExceptions = Collections.synchronizedList(new ArrayList<>());
+
+    private final ExecutorService executorService;
 
     public CopyGameFileExecutor(int threads) {
         executorService = Executors.newFixedThreadPool(threads);
-    }
-
-    void runAsync(CopyGameFileRunner copyGameFileRunner) {
-        if (!copyExceptions.isEmpty()) {
-            return;
-        }
-
-        executorService.execute(() -> {
-            try {
-                copyGameFileRunner.run();
-            } catch (IOException e) {
-                executorService.shutdownNow();
-                copyExceptions.add(e);
-                throw new UncheckedIOException(e);
-            }
-        });
     }
 
     @Override
@@ -71,6 +56,22 @@ public class CopyGameFileExecutor implements AutoCloseable {
 
             throw copyException;
         }
+    }
+
+    void runAsync(CopyGameFileRunner copyGameFileRunner) {
+        if (!copyExceptions.isEmpty()) {
+            return;
+        }
+
+        executorService.execute(() -> {
+            try {
+                copyGameFileRunner.run();
+            } catch (IOException e) {
+                executorService.shutdownNow();
+                copyExceptions.add(e);
+                throw new UncheckedIOException(e);
+            }
+        });
     }
 
     @FunctionalInterface

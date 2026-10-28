@@ -45,7 +45,7 @@ import java.net.URL;
 import java.util.Set;
 
 public interface KotlinClasspath {
-	String version();
+    Set<URL> classpath();
 
-	Set<URL> classpath();
+    String version();
 }

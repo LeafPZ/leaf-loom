@@ -50,28 +50,31 @@ import net.fabricmc.tinyremapper.TinyRemapper;
 import net.fabricmc.tinyremapper.api.TrClass;
 
 public record MixinRefmapInlinerApplyVisitorProvider(
-		MixinReferenceRemapper remapper,
-		// A set of input tags that do NOT need their refmaps inlined
-		Predicate<InputTag> staticRemappedMixins) implements TinyRemapper.ApplyVisitorProvider, TinyRemapper.Extension {
-	@Override
-	public ClassVisitor insertApplyVisitor(TrClass cls, ClassVisitor next) {
-		return new MixinRefmapInlinerClassVisitor(remapper, next);
-	}
+    MixinReferenceRemapper remapper,
+    // A set of input tags that do NOT need their refmaps inlined
+    Predicate<InputTag> staticRemappedMixins
+) implements TinyRemapper.ApplyVisitorProvider, TinyRemapper.Extension
+{
+    @Override
+    public ClassVisitor insertApplyVisitor(TrClass cls, ClassVisitor next) {
+        return new MixinRefmapInlinerClassVisitor(remapper, next);
+    }
 
-	@Override
-	public ClassVisitor insertApplyVisitor(TrClass cls, ClassVisitor next, InputTag[] inputTags) {
-		for (InputTag tag : inputTags) {
-			if (staticRemappedMixins.test(tag)) {
-				// No need to inline the refmaps for this tag, as we know this was originally a statically remapped mixin with no refmap
-				return next;
-			}
-		}
+    @Override
+    public ClassVisitor insertApplyVisitor(TrClass cls, ClassVisitor next, InputTag[] inputTags) {
+        for (InputTag tag : inputTags) {
+            if (staticRemappedMixins.test(tag)) {
+                // No need to inline the refmaps for this tag, as we know this was originally a statically remapped
+                // mixin with no refmap
+                return next;
+            }
+        }
 
-		return new MixinRefmapInlinerClassVisitor(remapper, next);
-	}
+        return new MixinRefmapInlinerClassVisitor(remapper, next);
+    }
 
-	@Override
-	public void attach(TinyRemapper.Builder builder) {
-		builder.extraPreApplyVisitor(this);
-	}
+    @Override
+    public void attach(TinyRemapper.Builder builder) {
+        builder.extraPreApplyVisitor(this);
+    }
 }

@@ -51,82 +51,89 @@ import dev.aoqia.leaf.loom.api.mappings.layered.MappingsNamespace;
  */
 @ApiStatus.Experimental
 public interface FileMappingsSpecBuilder {
-	/**
-	 * Sets the mapping path inside a zip or jar.
-	 * This will have no effect if the file of this mapping spec
-	 * is not a zip.
-	 *
-	 * <p>Path components within the path should be separated with {@code /}.
-	 *
-	 * <p>The default mapping path is {@code mappings/mappings.tiny}, matching regular mapping dependency jars
-	 * such as Yarn's.
-	 *
-	 * @param mappingPath the mapping path
-	 * @return this builder
-	 */
-	FileMappingsSpecBuilder mappingPath(String mappingPath);
+    /**
+     * Marks that the zip file contains annotation data.
+     *
+     * @return this builder
+     */
+    FileMappingsSpecBuilder containsAnnotations();
 
-	/**
-	 * Sets the fallback namespaces. They will be used
-	 * if the mapping format itself doesn't provide namespaces with names
-	 * (e.g. Enigma mappings).
-	 *
-	 * <p>The default fallback namespaces are {@code intermediary} as the source namespace
-	 * and {@code named} as the target namespace as in Yarn.
-	 *
-	 * @param sourceNamespace the fallback source namespace
-	 * @param targetNamespace the fallback target namespace
-	 * @return this builder
-	 */
-	FileMappingsSpecBuilder fallbackNamespaces(String sourceNamespace, String targetNamespace);
+    /**
+     * Marks that the zip file contains unpick data.
+     *
+     * @return this builder
+     */
+    FileMappingsSpecBuilder containsUnpick();
 
-	/**
-	 * Marks that the file contains Enigma mappings.
-	 * Because they are stored in a directory, the format cannot be auto-detected.
-	 *
-	 * @return this builder
-	 */
-	FileMappingsSpecBuilder enigmaMappings();
+    /**
+     * Marks that the file contains Enigma mappings.
+     * Because they are stored in a directory, the format cannot be auto-detected.
+     *
+     * @return this builder
+     */
+    FileMappingsSpecBuilder enigmaMappings();
 
-	/**
-	 * Marks that the zip file contains annotation data.
-	 *
-	 * @return this builder
-	 */
-	FileMappingsSpecBuilder containsAnnotations();
+    /**
+     * Sets the fallback namespaces. They will be used
+     * if the mapping format itself doesn't provide namespaces with names
+     * (e.g. Enigma mappings).
+     *
+     * <p>
+     * The default fallback namespaces are {@code intermediary} as the source namespace
+     * and {@code named} as the target namespace as in Yarn.
+     *
+     * @param sourceNamespace the fallback source namespace
+     * @param targetNamespace the fallback target namespace
+     * @return this builder
+     */
+    FileMappingsSpecBuilder fallbackNamespaces(String sourceNamespace, String targetNamespace);
 
-	/**
-	 * Marks that the zip file contains unpick data.
-	 *
-	 * @return this builder
-	 */
-	FileMappingsSpecBuilder containsUnpick();
+    /**
+     * Sets the mapping path inside a zip or jar.
+     * This will have no effect if the file of this mapping spec
+     * is not a zip.
+     *
+     * <p>
+     * Path components within the path should be separated with {@code /}.
+     *
+     * <p>
+     * The default mapping path is {@code mappings/mappings.tiny}, matching regular mapping dependency jars
+     * such as Yarn's.
+     *
+     * @param mappingPath the mapping path
+     * @return this builder
+     */
+    FileMappingsSpecBuilder mappingPath(String mappingPath);
 
-	/**
-	 * Sets the merge namespace of this mappings spec.
-	 *
-	 * <p>The merge namespace is the namespace that is used to match up this layer's
-	 * names to the rest of the mappings. For example, Yarn mappings should be merged through
-	 * the intermediary names.
-	 *
-	 * <p>The default merge namespace is {@link MappingsNamespace#INTERMEDIARY}.
-	 *
-	 * @param namespace the new merge namespace
-	 * @return this builder
-	 */
-	FileMappingsSpecBuilder mergeNamespace(MappingsNamespace namespace);
+    /**
+     * Sets the merge namespace of this mappings spec.
+     *
+     * <p>
+     * The merge namespace is the namespace that is used to match up this layer's
+     * names to the rest of the mappings. For example, Yarn mappings should be merged through
+     * the intermediary names.
+     *
+     * <p>
+     * The default merge namespace is {@link MappingsNamespace#INTERMEDIARY}.
+     *
+     * @param namespace the new merge namespace
+     * @return this builder
+     */
+    FileMappingsSpecBuilder mergeNamespace(MappingsNamespace namespace);
 
-	/**
-	 * Sets the merge namespace of this mappings spec.
-	 *
-	 * <p>The merge namespace is the namespace that is used to match up this layer's
-	 * names to the rest of the mappings. For example, Yarn mappings should be merged through
-	 * the intermediary names.
-	 *
-	 * <p>The default merge namespace is {@code intermediary}.
-	 *
-	 * @param namespace the new merge namespace
-	 * @return this builder
-	 */
-	FileMappingsSpecBuilder mergeNamespace(String namespace);
+    /**
+     * Sets the merge namespace of this mappings spec.
+     *
+     * <p>
+     * The merge namespace is the namespace that is used to match up this layer's
+     * names to the rest of the mappings. For example, Yarn mappings should be merged through
+     * the intermediary names.
+     *
+     * <p>
+     * The default merge namespace is {@code intermediary}.
+     *
+     * @param namespace the new merge namespace
+     * @return this builder
+     */
+    FileMappingsSpecBuilder mergeNamespace(String namespace);
 }

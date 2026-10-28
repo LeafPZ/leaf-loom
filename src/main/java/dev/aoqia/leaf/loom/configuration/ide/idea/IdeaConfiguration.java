@@ -53,28 +53,33 @@ import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.task.LoomTasks;
 
 public abstract class IdeaConfiguration implements Runnable {
-	@Inject
-	protected abstract Project getProject();
+    public void run() {
+        getProject().getTasks().register("ideaSyncTask", IdeaSyncTask.class, task -> {
+            if (LoomGradleExtension.get(getProject())
+                .getRunConfigs()
+                .stream()
+                .anyMatch(config -> config.getGenerateRunConfig().get()))
+            {
+                task.dependsOn(LoomTasks.getIDELaunchConfigureTaskName(getProject()));
+            } else {
+                task.setEnabled(false);
+            }
+        });
 
-	public void run() {
-		getProject().getTasks().register("ideaSyncTask", IdeaSyncTask.class, task -> {
-			if (LoomGradleExtension.get(getProject()).getRunConfigs().stream().anyMatch(config -> config.getGenerateRunConfig().get())) {
-				task.dependsOn(LoomTasks.getIDELaunchConfigureTaskName(getProject()));
-			} else {
-				task.setEnabled(false);
-			}
-		});
+        if (!IdeaUtils.isIdeaSync()) {
+            return;
+        }
 
-		if (!IdeaUtils.isIdeaSync()) {
-			return;
-		}
+        final StartParameter startParameter = getProject().getGradle().getStartParameter();
+        final List<TaskExecutionRequest> taskRequests = new ArrayList<>(startParameter.getTaskRequests());
 
-		final StartParameter startParameter = getProject().getGradle().getStartParameter();
-		final List<TaskExecutionRequest> taskRequests = new ArrayList<>(startParameter.getTaskRequests());
+        // This doesnt overwrite any existing task requests, use Gradle to create a TaskExecutionRequest for us
+        // before adding it to the list of existing ones.
+        startParameter.setTaskNames(List.of("ideaSyncTask"));
+        taskRequests.addAll(startParameter.getTaskRequests());
+        startParameter.setTaskRequests(taskRequests);
+    }
 
-		// This doesnt overwrite any existing task requests, use Gradle to create a TaskExecutionRequest for us before adding it to the list of existing ones.
-		startParameter.setTaskNames(List.of("ideaSyncTask"));
-		taskRequests.addAll(startParameter.getTaskRequests());
-		startParameter.setTaskRequests(taskRequests);
-	}
+    @Inject
+    protected abstract Project getProject();
 }

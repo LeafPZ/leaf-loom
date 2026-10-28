@@ -55,142 +55,150 @@ import dev.aoqia.leaf.loom.task.RunGameTask;
 /**
  * Represents a run configuration for Minecraft, these can presented via an IDE run configuration or a Gradle task.
  *
- * <p>This is used to configure how Minecraft is run, including JVM arguments, program arguments, environment variables,
+ * <p>
+ * This is used to configure how Minecraft is run, including JVM arguments, program arguments, environment variables,
  * and the main class to run.
  */
 public interface RunConfiguration extends Named {
-	/**
-	 * The full name of the run configuration, i.e. 'Minecraft Client'.
-	 *
-	 * <p>By default, this is determined from the base name.
-	 *
-	 * <p>Note: unless the project is the root project (or {@link #getAppendProjectPathToDisplayName()} is disabled),
-	 * the project path will be appended automatically, e.g. 'Minecraft Client (:some:project)'.
-	 */
-	Property<String> getDisplayName();
-
-	/**
-	 * Arguments for the JVM, such as system properties.
-	 */
-	ListProperty<String> getJvmArguments();
-
-	/**
-	 * Arguments for the program, usually Minecraft specific arguments.
-	 */
-	ListProperty<String> getProgramArguments();
-
-	/**
-	 * Environment variables to set when running the configuration.
-	 */
-	MapProperty<String, Object> getEnvironmentVars();
-
-	/**
-	 * System properties to set when running the configuration.
-	 */
-	MapProperty<String, String> getSystemProperties();
-
-	/**
-	 * The environment (or side) to run, usually client or server.
-	 */
-	Property<String> getRuntimeEnvironment();
-
-	/**
-	 * Whether to append the project path to the {@link #getDisplayName()} when {@code project} isn't the root project.
-	 *
-	 * <p>Warning: could produce ambiguous run config names if disabled, unless used carefully in conjunction with
-	 * {@link #getDisplayName()}.
-	 */
-	Property<Boolean> getAppendProjectPathToDisplayName();
-
-	/**
-	 * The main class of the run configuration.
-	 */
-	Property<String> getMainClass();
-
-	/**
-	 * The name of the {@link SourceSet} to use for the run configuration.
-	 */
-	Property<String> getSourceSet();
-
-	/**
-	 * The absolute working directory for this configuration
-	 */
-	DirectoryProperty getWorkingDirectory();
+    /**
+     * Configure run config with the default client options.
+     */
+    default void client() {
+        getRuntimeEnvironment().set("client");
+    }
 
     /**
-	 * The run directory for this configuration, relative to the root project directory.
-	 */
-	DirectoryProperty getRunDirectory();
+     * Whether to append the project path to the {@link #getDisplayName()} when {@code project} isn't the root project.
+     *
+     * <p>
+     * Warning: could produce ambiguous run config names if disabled, unless used carefully in conjunction with
+     * {@link #getDisplayName()}.
+     */
+    Property<Boolean> getAppendProjectPathToDisplayName();
 
-	/**
-	 * When true a run configuration file will be generated for IDE's.
-	 *
-	 * <p>By default only run configs on the root project will be generated.
-	 */
-	Property<Boolean> getGenerateRunConfig();
+    /**
+     * The true entrypoint, this is usually dev launch injector.
+     * This should not be changed unless you know what you are doing.
+     */
+    @ApiStatus.Experimental
+    Property<String> getDevLaunchMainClass();
 
-	/**
-	 * When true generated IDE run configurations will prefer to invoke the matching Gradle run task instead of
-	 * launching the game directly, when that IDE supports such a mode.
-	 *
-	 * <p>For example, the {@code client} run configuration will run {@code :runClient}.
-	 *
-	 * <p>Changing this mode may cause an existing generated run configuration to be replaced so the IDE switches to the
-	 * correct run configuration type.
-	 */
-	Property<Boolean> getPreferGradleTask();
+    /**
+     * The full name of the run configuration, i.e. 'Minecraft Client'.
+     *
+     * <p>
+     * By default, this is determined from the base name.
+     *
+     * <p>
+     * Note: unless the project is the root project (or {@link #getAppendProjectPathToDisplayName()} is disabled),
+     * the project path will be appended automatically, e.g. 'Minecraft Client (:some:project)'.
+     */
+    Property<String> getDisplayName();
 
-	/**
-	 * Group this run config under the given folder.
-	 *
-	 * <p>This is currently only supported on IntelliJ IDEA.
-	 *
-	 * @return The property used to set the config folder.
-	 */
-	Property<String> getIdeConfigFolder();
+    /**
+     * Environment variables to set when running the configuration.
+     */
+    MapProperty<String, Object> getEnvironmentVars();
 
-	/**
-	 * The true entrypoint, this is usually dev launch injector.
-	 * This should not be changed unless you know what you are doing.
-	 */
-	@ApiStatus.Experimental
-	Property<String> getDevLaunchMainClass();
+    /**
+     * When true a run configuration file will be generated for IDE's.
+     *
+     * <p>
+     * By default only run configs on the root project will be generated.
+     */
+    Property<Boolean> getGenerateRunConfig();
 
-	default void inherit(RunConfiguration parent) {
-		getJvmArguments().convention(parent.getJvmArguments());
-		getProgramArguments().addAll(parent.getProgramArguments());
-		getEnvironmentVars().putAll(parent.getEnvironmentVars());
-		getSystemProperties().putAll(parent.getSystemProperties());
-		getRuntimeEnvironment().convention(parent.getRuntimeEnvironment());
-		getAppendProjectPathToDisplayName().convention(parent.getAppendProjectPathToDisplayName());
-		getMainClass().convention(parent.getMainClass());
-		getSourceSet().convention(parent.getSourceSet());
-		getWorkingDirectory().convention(parent.getWorkingDirectory());
-		getRunDirectory().convention(parent.getRunDirectory());
-		getGenerateRunConfig().convention(parent.getGenerateRunConfig());
-		getPreferGradleTask().convention(parent.getPreferGradleTask());
-		getIdeConfigFolder().convention(parent.getIdeConfigFolder());
-		getDevLaunchMainClass().convention(parent.getDevLaunchMainClass());
-	}
+    /**
+     * Group this run config under the given folder.
+     *
+     * <p>
+     * This is currently only supported on IntelliJ IDEA.
+     *
+     * @return The property used to set the config folder.
+     */
+    Property<String> getIdeConfigFolder();
 
-	/**
-	 * Configure run config with the default client options.
-	 */
-	default void client() {
-		getRuntimeEnvironment().set("client");
-	}
+    /**
+     * Arguments for the JVM, such as system properties.
+     */
+    ListProperty<String> getJvmArguments();
 
-	/**
-	 * Configure run config with the default server options.
-	 */
-	default void server() {
-		getRuntimeEnvironment().set("server");
-	}
+    /**
+     * The main class of the run configuration.
+     */
+    Property<String> getMainClass();
 
-	/**
-	 * Configures the Gradle task used to run this configuration.
-	 *
-	 * @param action The action used to configure the run task.
-	 */
-	void task(Action<RunGameTask> action);
+    /**
+     * When true generated IDE run configurations will prefer to invoke the matching Gradle run task instead of
+     * launching the game directly, when that IDE supports such a mode.
+     *
+     * <p>
+     * For example, the {@code client} run configuration will run {@code :runClient}.
+     *
+     * <p>
+     * Changing this mode may cause an existing generated run configuration to be replaced so the IDE switches to the
+     * correct run configuration type.
+     */
+    Property<Boolean> getPreferGradleTask();
+
+    /**
+     * Arguments for the program, usually Minecraft specific arguments.
+     */
+    ListProperty<String> getProgramArguments();
+
+    /**
+     * The run directory for this configuration, relative to the root project directory.
+     */
+    DirectoryProperty getRunDirectory();
+
+    /**
+     * The environment (or side) to run, usually client or server.
+     */
+    Property<String> getRuntimeEnvironment();
+
+    /**
+     * The name of the {@link SourceSet} to use for the run configuration.
+     */
+    Property<String> getSourceSet();
+
+    /**
+     * System properties to set when running the configuration.
+     */
+    MapProperty<String, String> getSystemProperties();
+
+    /**
+     * The absolute working directory for this configuration
+     */
+    DirectoryProperty getWorkingDirectory();
+
+    default void inherit(RunConfiguration parent) {
+        getJvmArguments().convention(parent.getJvmArguments());
+        getProgramArguments().addAll(parent.getProgramArguments());
+        getEnvironmentVars().putAll(parent.getEnvironmentVars());
+        getSystemProperties().putAll(parent.getSystemProperties());
+        getRuntimeEnvironment().convention(parent.getRuntimeEnvironment());
+        getAppendProjectPathToDisplayName().convention(parent.getAppendProjectPathToDisplayName());
+        getMainClass().convention(parent.getMainClass());
+        getSourceSet().convention(parent.getSourceSet());
+        getWorkingDirectory().convention(parent.getWorkingDirectory());
+        getRunDirectory().convention(parent.getRunDirectory());
+        getGenerateRunConfig().convention(parent.getGenerateRunConfig());
+        getPreferGradleTask().convention(parent.getPreferGradleTask());
+        getIdeConfigFolder().convention(parent.getIdeConfigFolder());
+        getDevLaunchMainClass().convention(parent.getDevLaunchMainClass());
+    }
+
+    /**
+     * Configure run config with the default server options.
+     */
+    default void server() {
+        getRuntimeEnvironment().set("server");
+    }
+
+    /**
+     * Configures the Gradle task used to run this configuration.
+     *
+     * @param action The action used to configure the run task.
+     */
+    void task(Action<RunGameTask> action);
 }

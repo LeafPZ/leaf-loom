@@ -57,90 +57,92 @@ import dev.aoqia.leaf.loom.util.Pair;
 
 @ApiStatus.Experimental
 public final class LeafModJsonV2 extends LeafModJson {
-	LeafModJsonV2(JsonObject jsonObject, LeafModJsonSource source) {
-		super(jsonObject, source);
-	}
+    LeafModJsonV2(JsonObject jsonObject, LeafModJsonSource source) {
+        super(jsonObject, source);
+    }
 
-	@Override
-	public int getVersion() {
-		return 2;
-	}
+    @Override
+    public Map<String, ModEnvironment> getClassTweakers() {
+        if (!jsonObject.has("classTweakers")) {
+            return Collections.emptyMap();
+        }
 
-	@Override
-	@Nullable public JsonElement getCustom(String key) {
-		return LeafModJsonV1.getCustom(jsonObject, key);
-	}
+        return getConditionalConfigs(jsonObject.get("classTweakers"));
+    }
 
-	@Override
-	public List<String> getMixinConfigurations() {
-		if (!jsonObject.has("mixins")) {
-			return Collections.emptyList();
-		}
+    @Override
+    @Nullable
+    public JsonElement getCustom(String key) {
+        return LeafModJsonV1.getCustom(jsonObject, key);
+    }
 
-		return List.copyOf(getConditionalConfigs(jsonObject.get("mixins")).keySet());
-	}
+    @Override
+    public List<String> getMixinConfigurations() {
+        if (!jsonObject.has("mixins")) {
+            return Collections.emptyList();
+        }
 
-	@Override
-	public Map<String, ModEnvironment> getClassTweakers() {
-		if (!jsonObject.has("classTweakers")) {
-			return Collections.emptyMap();
-		}
+        return List.copyOf(getConditionalConfigs(jsonObject.get("mixins")).keySet());
+    }
 
-		return getConditionalConfigs(jsonObject.get("classTweakers"));
-	}
+    @Override
+    public int getVersion() {
+        return 2;
+    }
 
-	private Map<String, ModEnvironment> getConditionalConfigs(JsonElement jsonElement) {
-		final Map<String, ModEnvironment> values = new HashMap<>();
+    private Map<String, ModEnvironment> getConditionalConfigs(JsonElement jsonElement) {
+        final Map<String, ModEnvironment> values = new HashMap<>();
 
-		if (jsonElement instanceof JsonArray jsonArray) {
-			for (JsonElement arrayElement : jsonArray) {
-				final Pair<String, ModEnvironment> value = readConditionalConfig(arrayElement);
+        if (jsonElement instanceof JsonArray jsonArray) {
+            for (JsonElement arrayElement : jsonArray) {
+                final Pair<String, ModEnvironment> value = readConditionalConfig(arrayElement);
 
-				if (value != null) {
-					values.put(value.left(), value.right());
-				}
-			}
-		} else if (jsonElement instanceof JsonPrimitive jsonPrimitive && jsonPrimitive.isString()) {
-			final Pair<String, ModEnvironment> value = readConditionalConfig(jsonPrimitive);
+                if (value != null) {
+                    values.put(value.left(), value.right());
+                }
+            }
+        } else if (jsonElement instanceof JsonPrimitive jsonPrimitive && jsonPrimitive.isString()) {
+            final Pair<String, ModEnvironment> value = readConditionalConfig(jsonPrimitive);
 
-			if (value != null) {
-				values.put(value.left(), value.right());
-			}
-		} else {
-			throw new LeafModJsonUtils.ParseException("Must be a string or array of strings");
-		}
+            if (value != null) {
+                values.put(value.left(), value.right());
+            }
+        } else {
+            throw new LeafModJsonUtils.ParseException("Must be a string or array of strings");
+        }
 
-		return values;
-	}
+        return values;
+    }
 
-	@Nullable private Pair<String, ModEnvironment> readConditionalConfig(JsonElement jsonElement) {
-		if (jsonElement instanceof JsonPrimitive jsonPrimitive && jsonPrimitive.isString()) {
-			return new Pair<>(jsonElement.getAsString(), ModEnvironment.UNIVERSAL);
-		} else if (jsonElement instanceof JsonObject jsonObject) {
-			final String config = LeafModJsonUtils.readString(jsonObject, "config");
-			return new Pair<>(config, getEnvironment(jsonObject));
-		} else {
-			throw new LeafModJsonUtils.ParseException("Must be a string or an object");
-		}
-	}
+    private ModEnvironment getEnvironment(JsonObject jsonObject) {
+        if (!jsonObject.has("environment")) {
+            // Default enabled for all envs.
+            return ModEnvironment.UNIVERSAL;
+        }
 
-	private ModEnvironment getEnvironment(JsonObject jsonObject) {
-		if (!jsonObject.has("environment")) {
-			// Default enabled for all envs.
-			return ModEnvironment.UNIVERSAL;
-		}
+        if (!(jsonObject.get("environment") instanceof JsonPrimitive jsonPrimitive) || !jsonPrimitive.isString()) {
+            throw new LeafModJsonUtils.ParseException("Environment must be a string");
+        }
 
-		if (!(jsonObject.get("environment") instanceof JsonPrimitive jsonPrimitive) || !jsonPrimitive.isString()) {
-			throw new LeafModJsonUtils.ParseException("Environment must be a string");
-		}
+        final String environment = jsonPrimitive.getAsString();
 
-		final String environment = jsonPrimitive.getAsString();
+        return switch (environment) {
+            case "*" -> ModEnvironment.UNIVERSAL;
+            case "client" -> ModEnvironment.CLIENT;
+            case "server" -> ModEnvironment.SERVER;
+            default -> throw new LeafModJsonUtils.ParseException("Invalid environment type: " + environment);
+        };
+    }
 
-		return switch (environment) {
-		case "*" -> ModEnvironment.UNIVERSAL;
-		case "client" -> ModEnvironment.CLIENT;
-		case "server" -> ModEnvironment.SERVER;
-		default -> throw new LeafModJsonUtils.ParseException("Invalid environment type: " + environment);
-		};
-	}
+    @Nullable
+    private Pair<String, ModEnvironment> readConditionalConfig(JsonElement jsonElement) {
+        if (jsonElement instanceof JsonPrimitive jsonPrimitive && jsonPrimitive.isString()) {
+            return new Pair<>(jsonElement.getAsString(), ModEnvironment.UNIVERSAL);
+        } else if (jsonElement instanceof JsonObject jsonObject) {
+            final String config = LeafModJsonUtils.readString(jsonObject, "config");
+            return new Pair<>(config, getEnvironment(jsonObject));
+        } else {
+            throw new LeafModJsonUtils.ParseException("Must be a string or an object");
+        }
+    }
 }

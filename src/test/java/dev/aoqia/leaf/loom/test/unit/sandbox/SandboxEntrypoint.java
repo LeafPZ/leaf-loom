@@ -42,16 +42,16 @@
 package dev.aoqia.leaf.loom.test.unit.sandbox;
 
 public class SandboxEntrypoint {
-	public static void main(String[] args) {
-		String realMain = System.getProperty("fabric.sandbox.realMain");
+    public static void main(String[] args) {
+        String realMain = System.getProperty("fabric.sandbox.realMain");
 
-		if (realMain == null) {
-			throw new IllegalStateException("Unable to find real main");
-		}
+        if (realMain == null) {
+            throw new IllegalStateException("Unable to find real main");
+        }
 
-		// Print the curren stacktrace, we can use this to ensure that we haven't been launched via DLI
-		Thread.dumpStack();
+        // Print the curren stacktrace, we can use this to ensure that we haven't been launched via DLI
+        Thread.dumpStack();
 
-		System.out.println("Running real main: " + realMain);
-	}
+        System.out.println("Running real main: " + realMain);
+    }
 }

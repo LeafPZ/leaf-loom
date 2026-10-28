@@ -55,28 +55,25 @@ import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.extension.MixinExtension;
 
 public class ScalaApInvoker extends AnnotationProcessorInvoker<ScalaCompile> {
-	public ScalaApInvoker(Project project) {
-		super(
-				project,
-				// Scala just uses the java AP configuration afaik. This of course assumes the java AP also gets configured.
-				List.of(),
-				getInvokerTasks(project),
-				AnnotationProcessorInvoker.SCALA);
-	}
+    public ScalaApInvoker(Project project) {
+        super(project,
+            // Scala just uses the java AP configuration afaik. This of course assumes the java AP also gets configured.
+            List.of(), getInvokerTasks(project), AnnotationProcessorInvoker.SCALA);
+    }
 
-	private static Map<SourceSet, TaskProvider<ScalaCompile>> getInvokerTasks(Project project) {
-		MixinExtension mixin = LoomGradleExtension.get(project).getMixin();
-		return mixin.getInvokerTasksStream(AnnotationProcessorInvoker.SCALA, ScalaCompile.class)
-				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-	}
+    private static Map<SourceSet, TaskProvider<ScalaCompile>> getInvokerTasks(Project project) {
+        MixinExtension mixin = LoomGradleExtension.get(project).getMixin();
+        return mixin.getInvokerTasksStream(AnnotationProcessorInvoker.SCALA, ScalaCompile.class)
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
 
-	@Override
-	protected void passArgument(ScalaCompile compileTask, String key, String value) {
-		compileTask.getOptions().getCompilerArgs().add("-A" + key + "=" + value);
-	}
+    @Override
+    protected File getRefmapDestinationDir(ScalaCompile task) {
+        return task.getDestinationDirectory().get().getAsFile();
+    }
 
-	@Override
-	protected File getRefmapDestinationDir(ScalaCompile task) {
-		return task.getDestinationDirectory().get().getAsFile();
-	}
+    @Override
+    protected void passArgument(ScalaCompile compileTask, String key, String value) {
+        compileTask.getOptions().getCompilerArgs().add("-A" + key + "=" + value);
+    }
 }

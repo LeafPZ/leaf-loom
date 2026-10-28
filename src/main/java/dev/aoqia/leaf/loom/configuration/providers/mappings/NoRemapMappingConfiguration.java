@@ -64,85 +64,95 @@ import dev.aoqia.leaf.loom.util.Checksum;
 import dev.aoqia.leaf.loom.util.service.ServiceFactory;
 
 public final class NoRemapMappingConfiguration extends MappingConfiguration {
-	private static final Logger LOGGER = LoggerFactory.getLogger(NoRemapMappingConfiguration.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(NoRemapMappingConfiguration.class);
 
-	private NoRemapMappingConfiguration(String mappingsIdentifier, Path inputJar) {
-		super(mappingsIdentifier, inputJar);
-	}
+    private NoRemapMappingConfiguration(String mappingsIdentifier, Path inputJar) {
+        super(mappingsIdentifier, inputJar);
+    }
 
-	public static NoRemapMappingConfiguration create(Project project, DependencyInfo dependency, ZomboidProvider gameProvider) {
-		final String version = dependency.getResolvedVersion();
-		final Path inputJar = resolveInputJar(dependency, "annotations");
-		final String[] dependencyParts = dependency.getDepString().split(":");
-		final String mappingsName = "annotations.%s.%s.%s".formatted(dependencyParts[0], dependencyParts[1], Checksum.of(inputJar).sha256().hex(12));
-		final TinyJarInfo jarInfo = readJarInfo(inputJar, dependency, gameProvider, "annotations");
-		final String mappingsIdentifier = createMappingsIdentifier(mappingsName, version, getMappingsClassifier(dependency, jarInfo.v2()), gameProvider.gameVersion());
-		var mappingConfiguration = new NoRemapMappingConfiguration(mappingsIdentifier, inputJar);
-		mappingConfiguration.setup(project, gameProvider, dependency, "annotations");
-		return mappingConfiguration;
-	}
+    public static NoRemapMappingConfiguration create(Project project, DependencyInfo dependency,
+        ZomboidProvider gameProvider)
+    {
+        final String version = dependency.getResolvedVersion();
+        final Path inputJar = resolveInputJar(dependency, "annotations");
+        final String[] dependencyParts = dependency.getDepString().split(":");
+        final String mappingsName = "annotations.%s.%s.%s".formatted(dependencyParts[0], dependencyParts[1],
+            Checksum.of(inputJar).sha256().hex(12));
+        final TinyJarInfo jarInfo = readJarInfo(inputJar, dependency, gameProvider, "annotations");
+        final String mappingsIdentifier = createMappingsIdentifier(mappingsName, version,
+            getMappingsClassifier(dependency, jarInfo.v2()), gameProvider.gameVersion());
+        var mappingConfiguration = new NoRemapMappingConfiguration(mappingsIdentifier, inputJar);
+        mappingConfiguration.setup(project, gameProvider, dependency, "annotations");
+        return mappingConfiguration;
+    }
 
-	@Override
-	protected void setupMappings(Project project, ZomboidProvider gameProvider, FileSystem inputJar) throws IOException {
-		for (var annotationsData : getAnnotationsData()) {
-			if (!MappingsNamespace.OFFICIAL.toString().equals(annotationsData.namespace())) {
-				throw new IOException("Annotations patches must use the official namespace");
-			}
-		}
+    static void validateMappings(Path mappings) throws IOException {
+        MemoryMappingTree mappingTree = new MemoryMappingTree();
+        MappingReader.read(mappings, mappingTree);
+        validateMappings(mappingTree);
+    }
 
-		if (hasUnpickDefinitions()
-				&& getUnpickMetadata() instanceof UnpickMetadata.V2 metadata
-				&& !MappingsNamespace.OFFICIAL.toString().equals(metadata.namespace())) {
-			throw new IOException("Annotations unpick definitions must use the official namespace");
-		}
-	}
+    private static void validateMappings(MemoryMappingTree mappingTree) throws IOException {
+        if (!MappingsNamespace.OFFICIAL.toString().equals(mappingTree.getSrcNamespace())
+            || !mappingTree.getDstNamespaces().isEmpty())
+        {
+            throw new IOException("Annotations mappings must contain only the official namespace");
+        }
 
-	static void validateMappings(Path mappings) throws IOException {
-		MemoryMappingTree mappingTree = new MemoryMappingTree();
-		MappingReader.read(mappings, mappingTree);
-		validateMappings(mappingTree);
-	}
+        if (mappingTree.getMetadata(MARKDOWN_METADATA_KEY).isEmpty()) {
+            LOGGER.warn("Annotations mappings should have the " + MARKDOWN_METADATA_KEY
+                + " metadata entry. Comments are still assumed to be in Markdown.");
+        }
+    }
 
-	private static void validateMappings(MemoryMappingTree mappingTree) throws IOException {
-		if (!MappingsNamespace.OFFICIAL.toString().equals(mappingTree.getSrcNamespace()) || !mappingTree.getDstNamespaces().isEmpty()) {
-			throw new IOException("Annotations mappings must contain only the official namespace");
-		}
+    @Override
+    public JavadocStyle getJavadocStyle() {
+        return JavadocStyle.MARKDOWN;
+    }
 
-		if (mappingTree.getMetadata(MARKDOWN_METADATA_KEY).isEmpty()) {
-			LOGGER.warn("Annotations mappings should have the " + MARKDOWN_METADATA_KEY + " metadata entry. Comments are still assumed to be in Markdown.");
-		}
-	}
+    @Override
+    public String getMappingsHash() {
+        return Checksum.of(inputJar()).sha256().hex();
+    }
 
-	@Override
-	public TinyMappingsService getMappingsService(Project project, ServiceFactory serviceFactory) {
-		TinyMappingsService mappingsService = super.getMappingsService(project, serviceFactory);
+    @Override
+    public TinyMappingsService getMappingsService(Project project, ServiceFactory serviceFactory) {
+        TinyMappingsService mappingsService = super.getMappingsService(project, serviceFactory);
 
-		try {
-			validateMappings(mappingsService.getMappingTree());
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to validate annotations mappings", e);
-		}
+        try {
+            validateMappings(mappingsService.getMappingTree());
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to validate annotations mappings", e);
+        }
 
-		return mappingsService;
-	}
+        return mappingsService;
+    }
 
-	@Override
-	public Provider<TinyMappingsService.Options> getMappingsServiceOptions(Project project) {
-		return TinyMappingsService.createOptions(project, project.provider(inputJar()::toFile), TinyJarInfo.MAPPINGS_PATH);
-	}
+    @Override
+    public Provider<TinyMappingsService.Options> getMappingsServiceOptions(Project project) {
+        return TinyMappingsService.createOptions(project, project.provider(inputJar()::toFile),
+            TinyJarInfo.MAPPINGS_PATH);
+    }
 
-	@Override
-	public String getMappingsHash() {
-		return Checksum.of(inputJar()).sha256().hex();
-	}
+    @Override
+    public MappingsNamespace getRuntimeNamespace() {
+        return MappingsNamespace.OFFICIAL;
+    }
 
-	@Override
-	public MappingsNamespace getRuntimeNamespace() {
-		return MappingsNamespace.OFFICIAL;
-	}
+    @Override
+    protected void setupMappings(Project project, ZomboidProvider gameProvider, FileSystem inputJar)
+        throws IOException
+    {
+        for (var annotationsData : getAnnotationsData()) {
+            if (!MappingsNamespace.OFFICIAL.toString().equals(annotationsData.namespace())) {
+                throw new IOException("Annotations patches must use the official namespace");
+            }
+        }
 
-	@Override
-	public JavadocStyle getJavadocStyle() {
-		return JavadocStyle.MARKDOWN;
-	}
+        if (hasUnpickDefinitions() && getUnpickMetadata() instanceof UnpickMetadata.V2 metadata
+            && !MappingsNamespace.OFFICIAL.toString().equals(metadata.namespace()))
+        {
+            throw new IOException("Annotations unpick definitions must use the official namespace");
+        }
+    }
 }

@@ -56,63 +56,64 @@ import org.jspecify.annotations.Nullable;
 import static dev.aoqia.leaf.loom.util.fmj.LeafModJsonUtils.readString;
 
 public final class LeafModJsonV1 extends LeafModJson {
-	LeafModJsonV1(JsonObject jsonObject, LeafModJsonSource source) {
-		super(jsonObject, source);
-	}
+    LeafModJsonV1(JsonObject jsonObject, LeafModJsonSource source) {
+        super(jsonObject, source);
+    }
 
-	@Override
-	public int getVersion() {
-		return 1;
-	}
+    static JsonElement getCustom(JsonObject jsonObject, String key) {
+        if (!jsonObject.has("custom")) {
+            return null;
+        }
 
-	@Override
-	@Nullable public JsonElement getCustom(String key) {
-		return getCustom(jsonObject, key);
-	}
+        final JsonObject custom = jsonObject.getAsJsonObject("custom");
 
-	static JsonElement getCustom(JsonObject jsonObject, String key) {
-		if (!jsonObject.has("custom")) {
-			return null;
-		}
+        if (!custom.has(key)) {
+            return null;
+        }
 
-		final JsonObject custom = jsonObject.getAsJsonObject("custom");
+        return custom.get(key);
+    }
 
-		if (!custom.has(key)) {
-			return null;
-		}
+    private static String readMixinElement(JsonElement jsonElement) {
+        if (jsonElement instanceof JsonPrimitive str) {
+            return str.getAsString();
+        } else if (jsonElement instanceof JsonObject obj) {
+            return obj.get("config").getAsString();
+        } else {
+            throw new LeafModJsonUtils.ParseException("Expected mixin element to be an object or string");
+        }
+    }
 
-		return custom.get(key);
-	}
+    @Override
+    public Map<String, ModEnvironment> getClassTweakers() {
+        if (!jsonObject.has("accessWidener")) {
+            return Collections.emptyMap();
+        }
 
-	@Override
-	public List<String> getMixinConfigurations() {
-		final JsonArray mixinArray = jsonObject.getAsJsonArray("mixins");
+        return Map.of(readString(jsonObject, "accessWidener"), ModEnvironment.UNIVERSAL);
+    }
 
-		if (mixinArray == null) {
-			return Collections.emptyList();
-		}
+    @Override
+    @Nullable
+    public JsonElement getCustom(String key) {
+        return getCustom(jsonObject, key);
+    }
 
-		return StreamSupport.stream(mixinArray.spliterator(), false)
-				.map(LeafModJsonV1::readMixinElement)
-				.collect(Collectors.toList());
-	}
+    @Override
+    public List<String> getMixinConfigurations() {
+        final JsonArray mixinArray = jsonObject.getAsJsonArray("mixins");
 
-	private static String readMixinElement(JsonElement jsonElement) {
-		if (jsonElement instanceof JsonPrimitive str) {
-			return str.getAsString();
-		} else if (jsonElement instanceof JsonObject obj) {
-			return obj.get("config").getAsString();
-		} else {
-			throw new LeafModJsonUtils.ParseException("Expected mixin element to be an object or string");
-		}
-	}
+        if (mixinArray == null) {
+            return Collections.emptyList();
+        }
 
-	@Override
-	public Map<String, ModEnvironment> getClassTweakers() {
-		if (!jsonObject.has("accessWidener")) {
-			return Collections.emptyMap();
-		}
+        return StreamSupport.stream(mixinArray.spliterator(), false)
+            .map(LeafModJsonV1::readMixinElement)
+            .collect(Collectors.toList());
+    }
 
-		return Map.of(readString(jsonObject, "accessWidener"), ModEnvironment.UNIVERSAL);
-	}
+    @Override
+    public int getVersion() {
+        return 1;
+    }
 }

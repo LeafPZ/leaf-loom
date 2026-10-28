@@ -52,26 +52,26 @@ import org.gradle.process.ExecOperations;
 import org.gradle.process.ExecResult;
 
 public abstract class XVFBExistsValueSource implements ValueSource<Boolean, ValueSourceParameters.None> {
-	public static final String XVFB = "xvfb-run";
+    public static final String XVFB = "xvfb-run";
 
-	@Inject
-	protected abstract ExecOperations getExecOperations();
+    public static Provider<Boolean> exists(Project project) {
+        return project.getProviders().of(XVFBExistsValueSource.class, i -> {});
+    }
 
-	@Override
-	public Boolean obtain() {
-		ExecResult result = getExecOperations().exec(spec -> {
-			spec.commandLine(XVFB);
-			spec.args("--help");
+    @Override
+    public Boolean obtain() {
+        ExecResult result = getExecOperations().exec(spec -> {
+            spec.commandLine(XVFB);
+            spec.args("--help");
 
-			// We don't care about the output
-			spec.setStandardOutput(OutputStream.nullOutputStream());
-			spec.setErrorOutput(OutputStream.nullOutputStream());
-		});
+            // We don't care about the output
+            spec.setStandardOutput(OutputStream.nullOutputStream());
+            spec.setErrorOutput(OutputStream.nullOutputStream());
+        });
 
-		return result.getExitValue() == 0;
-	}
+        return result.getExitValue() == 0;
+    }
 
-	public static Provider<Boolean> exists(Project project) {
-		return project.getProviders().of(XVFBExistsValueSource.class, i -> { });
-	}
+    @Inject
+    protected abstract ExecOperations getExecOperations();
 }

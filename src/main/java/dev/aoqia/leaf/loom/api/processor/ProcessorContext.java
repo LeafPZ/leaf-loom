@@ -49,19 +49,19 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJarConfigurati
 import dev.aoqia.leaf.loom.util.LazyCloseable;
 
 public interface ProcessorContext {
-	ZomboidJarConfiguration getJarConfiguration();
+    LazyCloseable<TinyRemapper> createRemapper(MappingsNamespace from, MappingsNamespace to);
 
-	boolean isMerged();
+    boolean disableObfuscation();
 
-	boolean includesClient();
+    ZomboidJarConfiguration getJarConfiguration();
 
-	boolean includesServer();
+    MemoryMappingTree getMappings();
 
-	LazyCloseable<TinyRemapper> createRemapper(MappingsNamespace from, MappingsNamespace to);
+    MappingsNamespace getProductionNamespace();
 
-	MemoryMappingTree getMappings();
+    boolean includesClient();
 
-	boolean disableObfuscation();
+    boolean includesServer();
 
-	MappingsNamespace getProductionNamespace();
+    boolean isMerged();
 }

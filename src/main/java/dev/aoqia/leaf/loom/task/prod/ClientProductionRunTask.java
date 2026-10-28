@@ -64,114 +64,118 @@ import dev.aoqia.leaf.loom.util.Platform;
 import dev.aoqia.leaf.loom.util.XVFBExistsValueSource;
 
 /**
- * A task that runs the Minecraft client in a similar way to a production launcher. You must manually register a task of this type to use it.
+ * A task that runs the Minecraft client in a similar way to a production launcher. You must manually register a task
+ * of this type to use it.
  */
 @ApiStatus.Experimental
 @DisableCachingByDefault
 public abstract non-sealed class ClientProductionRunTask extends AbstractProductionRunTask {
-	/**
-	 * Whether to use XVFB to run the game, using a virtual framebuffer. This is useful for CI environments that don't have a display server.
-	 *
-	 * <p>Defaults to true only on Linux and when the "CI" environment variable is set.
-	 *
-	 * <p>XVFB must be installed, on Debian-based systems you can install it with: <code>apt install -y xvfb</code>
-	 */
-	@Input
-	public abstract Property<Boolean> getUseXVFB();
+    @Inject
+    public ClientProductionRunTask() {
+        getUseXVFB().convention(getProject().getProviders()
+            .environmentVariable("CI")
+            .map(value -> Platform.CURRENT.getOperatingSystem().isLinux())
+            .orElse(false));
 
-	@Nested
-	@Optional
-	public abstract Property<TracyCapture> getTracyCapture();
+        getAssetsIndex().set(getExtension().getZomboidVersion());
+        getAssetsDir().set(new File(getExtension().getFiles().getUserCache(), "assets"));
+        getMainClass().convention("dev.aoqia.leaf.loader.impl.launch.knot.KnotClient");
 
-	/**
-	 * Configures the tracy profiler to run alongside the game. See @{@link TracyCapture} for more information.
-	 *
-	 * @param action The configuration action.
-	 */
-	public void tracy(Action<? super TracyCapture> action) {
-		getTracyCapture().set(getProject().getObjects().newInstance(TracyCapture.class));
-		getTracyCapture().finalizeValue();
-		action.execute(getTracyCapture().get());
-	}
+        getClasspath().from(getExtension().getZomboidProvider().getGameJar());
+        getClasspath().from(detachedConfigurationProvider("dev.aoqia.leaf:loader:%s", getProjectLoaderVersion()));
 
-	// Internal options
-	@Input
-	protected abstract Property<String> getAssetsIndex();
+        if (getExtension().getProductionNamespaceEnum().get() == MappingsNamespace.INTERMEDIARY) {
+            getClasspath().from(
+                detachedConfigurationProvider("dev.aoqia.leaf:intermediary:%s", getExtension().getZomboidVersion()));
+        }
 
-	@InputFiles
-	@PathSensitive(PathSensitivity.ABSOLUTE)
-	protected abstract DirectoryProperty getAssetsDir();
+        getClasspath().from(
+            getProject().getConfigurations().named(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES));
 
-	@Inject
-	public ClientProductionRunTask() {
-		getUseXVFB().convention(getProject().getProviders().environmentVariable("CI")
-				.map(value -> Platform.CURRENT.getOperatingSystem().isLinux())
-				.orElse(false)
-		);
+        dependsOn("downloadAssets");
+    }
 
-		getAssetsIndex().set(getExtension().getZomboidVersion());
-		getAssetsDir().set(new File(getExtension().getFiles().getUserCache(), "assets"));
-		getMainClass().convention("dev.aoqia.leaf.loader.impl.launch.knot.KnotClient");
+    @Nested
+    @Optional
+    public abstract Property<TracyCapture> getTracyCapture();
 
-		getClasspath().from(getExtension().getZomboidProvider().getGameJar());
-		getClasspath().from(detachedConfigurationProvider("dev.aoqia.leaf:loader:%s", getProjectLoaderVersion()));
+    /**
+     * Whether to use XVFB to run the game, using a virtual framebuffer. This is useful for CI environments that
+     * don't have a display server.
+     *
+     * <p>
+     * Defaults to true only on Linux and when the "CI" environment variable is set.
+     *
+     * <p>
+     * XVFB must be installed, on Debian-based systems you can install it with: <code>apt install -y xvfb</code>
+     */
+    @Input
+    public abstract Property<Boolean> getUseXVFB();
 
-		if (getExtension().getProductionNamespaceEnum().get() == MappingsNamespace.INTERMEDIARY) {
-			getClasspath().from(detachedConfigurationProvider("dev.aoqia.leaf:intermediary:%s", getExtension().getZomboidVersion()));
-		}
+    @Override
+    public void run() throws IOException {
+        if (getTracyCapture().isPresent()) {
+            getTracyCapture().get().runWithTracy(super::run);
+            return;
+        }
 
-		getClasspath().from(getProject().getConfigurations().named(Constants.Configurations.ZOMBOID_TEST_CLIENT_RUNTIME_LIBRARIES));
+        super.run();
+    }
 
-		dependsOn("downloadAssets");
-	}
+    /**
+     * Configures the tracy profiler to run alongside the game. See @{@link TracyCapture} for more information.
+     *
+     * @param action The configuration action.
+     */
+    public void tracy(Action<? super TracyCapture> action) {
+        getTracyCapture().set(getProject().getObjects().newInstance(TracyCapture.class));
+        getTracyCapture().finalizeValue();
+        action.execute(getTracyCapture().get());
+    }
 
-	@Override
-	public void run() throws IOException {
-		if (getTracyCapture().isPresent()) {
-			getTracyCapture().get().runWithTracy(super::run);
-			return;
-		}
+    @Override
+    protected void configureCommand(ExecSpec exec) {
+        if (getUseXVFB().get()) {
+            if (!Platform.CURRENT.getOperatingSystem().isLinux()) {
+                throw new UnsupportedOperationException("XVFB is only supported on Linux");
+            }
 
-		super.run();
-	}
+            exec.commandLine(XVFBExistsValueSource.XVFB);
+            exec.args("-a", getJavaLauncher().get().getExecutablePath());
 
-	@Override
-	protected void configureCommand(ExecSpec exec) {
-		if (getUseXVFB().get()) {
-			if (!Platform.CURRENT.getOperatingSystem().isLinux()) {
-				throw new UnsupportedOperationException("XVFB is only supported on Linux");
-			}
+            return;
+        }
 
-			exec.commandLine(XVFBExistsValueSource.XVFB);
-			exec.args("-a", getJavaLauncher().get().getExecutablePath());
+        super.configureCommand(exec);
+    }
 
-			return;
-		}
+    @Override
+    protected void configureJvmArgs(ExecSpec exec) {
+        super.configureJvmArgs(exec);
 
-		super.configureCommand(exec);
-	}
+        if (Platform.CURRENT.getOperatingSystem().isMacOS()) {
+            exec.args("-XstartOnFirstThread");
+        }
+    }
 
-	@Override
-	protected void configureJvmArgs(ExecSpec exec) {
-		super.configureJvmArgs(exec);
+    @Override
+    protected void configureProgramArgs(ExecSpec exec) {
+        super.configureProgramArgs(exec);
 
-		if (Platform.CURRENT.getOperatingSystem().isMacOS()) {
-			exec.args("-XstartOnFirstThread");
-		}
-	}
+        exec.args("--assetIndex", getAssetsIndex().get(), "--assetsDir",
+            getAssetsDir().get().getAsFile().getAbsolutePath(), "--gameDir",
+            getRunDir().get().getAsFile().getAbsolutePath());
 
-	@Override
-	protected void configureProgramArgs(ExecSpec exec) {
-		super.configureProgramArgs(exec);
+        if (getTracyCapture().isPresent()) {
+            exec.args("--tracy");
+        }
+    }
 
-		exec.args(
-				"--assetIndex", getAssetsIndex().get(),
-				"--assetsDir", getAssetsDir().get().getAsFile().getAbsolutePath(),
-				"--gameDir", getRunDir().get().getAsFile().getAbsolutePath()
-		);
+    @InputFiles
+    @PathSensitive(PathSensitivity.ABSOLUTE)
+    protected abstract DirectoryProperty getAssetsDir();
 
-		if (getTracyCapture().isPresent()) {
-			exec.args("--tracy");
-		}
-	}
+    // Internal options
+    @Input
+    protected abstract Property<String> getAssetsIndex();
 }

@@ -67,197 +67,199 @@ import net.fabricmc.mappingio.tree.MappingTree;
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
 
 public class CFRObfuscationMapping extends NullMapping {
-	private final MappingTree mappingTree;
+    private final MappingTree mappingTree;
 
-	public CFRObfuscationMapping(Path mappings, String runtimeNamespace) {
-		mappingTree = readMappings(mappings, runtimeNamespace);
-	}
+    public CFRObfuscationMapping(Path mappings, String runtimeNamespace) {
+        mappingTree = readMappings(mappings, runtimeNamespace);
+    }
 
-	@Override
-	public Dumper wrap(Dumper d) {
-		return new JavadocProvidingDumper(d);
-	}
+    private static MappingTree readMappings(Path input, String runtimeNamespace) {
+        try (BufferedReader reader = Files.newBufferedReader(input)) {
+            MemoryMappingTree mappingTree = new MemoryMappingTree();
+            MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(mappingTree, runtimeNamespace);
+            MappingReader.read(reader, nsSwitch);
 
-	private static MappingTree readMappings(Path input, String runtimeNamespace) {
-		try (BufferedReader reader = Files.newBufferedReader(input)) {
-			MemoryMappingTree mappingTree = new MemoryMappingTree();
-			MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(mappingTree, runtimeNamespace);
-			MappingReader.read(reader, nsSwitch);
+            return mappingTree;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read mappings", e);
+        }
+    }
 
-			return mappingTree;
-		} catch (IOException e) {
-			throw new RuntimeException("Failed to read mappings", e);
-		}
-	}
+    @Override
+    public Dumper wrap(Dumper d) {
+        return new JavadocProvidingDumper(d);
+    }
 
-	private class JavadocProvidingDumper extends DelegatingDumper {
-		JavadocProvidingDumper(Dumper delegate) {
-			super(delegate);
-		}
+    private class JavadocProvidingDumper extends DelegatingDumper {
+        JavadocProvidingDumper(Dumper delegate) {
+            super(delegate);
+        }
 
-		@Override
-		public Dumper dumpClassDoc(JavaTypeInstance owner) {
-			MappingTree.ClassMapping mapping = getClassMapping(owner);
+        @Override
+        public Dumper dumpClassDoc(JavaTypeInstance owner) {
+            MappingTree.ClassMapping mapping = getClassMapping(owner);
 
-			if (mapping == null) {
-				return this;
-			}
+            if (mapping == null) {
+                return this;
+            }
 
-			List<String> recordComponentDocs = new ArrayList<>();
+            List<String> recordComponentDocs = new ArrayList<>();
 
-			if (isRecord(owner)) {
-				ClassFile classFile = ((JavaRefTypeInstance) owner).getClassFile();
+            if (isRecord(owner)) {
+                ClassFile classFile = ((JavaRefTypeInstance) owner).getClassFile();
 
-				for (ClassFileField field : classFile.getFields()) {
-					if (field.getField().testAccessFlag(AccessFlag.ACC_STATIC)) {
-						continue;
-					}
+                for (ClassFileField field : classFile.getFields()) {
+                    if (field.getField().testAccessFlag(AccessFlag.ACC_STATIC)) {
+                        continue;
+                    }
 
-					MappingTree.FieldMapping fieldMapping = mapping.getField(field.getFieldName(), field.getField().getDescriptor());
+                    MappingTree.FieldMapping fieldMapping = mapping.getField(field.getFieldName(),
+                        field.getField().getDescriptor());
 
-					if (fieldMapping == null) {
-						continue;
-					}
+                    if (fieldMapping == null) {
+                        continue;
+                    }
 
-					String comment = fieldMapping.getComment();
+                    String comment = fieldMapping.getComment();
 
-					if (comment != null) {
-						recordComponentDocs.add(String.format("@param %s %s", fieldMapping.getSrcName(), comment));
-					}
-				}
-			}
+                    if (comment != null) {
+                        recordComponentDocs.add(String.format("@param %s %s", fieldMapping.getSrcName(), comment));
+                    }
+                }
+            }
 
-			String comment = mapping.getComment();
+            String comment = mapping.getComment();
 
-			if (comment != null || !recordComponentDocs.isEmpty()) {
-				print("/**").newln();
+            if (comment != null || !recordComponentDocs.isEmpty()) {
+                print("/**").newln();
 
-				if (comment != null) {
-					for (String line : comment.split("\\R")) {
-						print(" * ").print(line).newln();
-					}
+                if (comment != null) {
+                    for (String line : comment.split("\\R")) {
+                        print(" * ").print(line).newln();
+                    }
 
-					if (!recordComponentDocs.isEmpty()) {
-						print(" * ").newln();
-					}
-				}
+                    if (!recordComponentDocs.isEmpty()) {
+                        print(" * ").newln();
+                    }
+                }
 
-				if (comment != null && !recordComponentDocs.isEmpty()) {
-					print(" * ");
-				}
+                if (comment != null && !recordComponentDocs.isEmpty()) {
+                    print(" * ");
+                }
 
-				for (String componentDoc : recordComponentDocs) {
-					print(" * ").print(componentDoc).newln();
-				}
+                for (String componentDoc : recordComponentDocs) {
+                    print(" * ").print(componentDoc).newln();
+                }
 
-				print(" */").newln();
-			}
+                print(" */").newln();
+            }
 
-			return this;
-		}
+            return this;
+        }
 
-		@Override
-		public Dumper dumpMethodDoc(MethodPrototype method) {
-			MappingTree.ClassMapping classMapping = getClassMapping(method.getOwner());
+        @Override
+        public Dumper dumpFieldDoc(Field field, JavaTypeInstance owner) {
+            // None static fields in records are handled in the class javadoc.
+            if (isRecord(owner) && !isStatic(field)) {
+                return this;
+            }
 
-			if (classMapping == null) {
-				return this;
-			}
+            MappingTree.ClassMapping classMapping = getClassMapping(owner);
 
-			List<String> lines = new ArrayList<>();
-			MappingTree.MethodMapping mapping = classMapping.getMethod(method.getName(), method.getOriginalDescriptor());
+            if (classMapping == null) {
+                return this;
+            }
 
-			if (mapping != null) {
-				String comment = mapping.getComment();
+            MappingTree.FieldMapping fieldMapping = classMapping.getField(field.getFieldName(), field.getDescriptor());
 
-				if (comment != null) {
-					lines.addAll(Arrays.asList(comment.split("\\R")));
-				}
+            if (fieldMapping != null) {
+                dumpComment(fieldMapping.getComment());
+            }
 
-				final Collection<? extends MappingTree.MethodArgMapping> methodArgs = mapping.getArgs();
-				final List<String> params = new ArrayList<>();
+            return this;
+        }
 
-				for (MappingTree.MethodArgMapping arg : methodArgs) {
-					String argComment = arg.getComment();
+        @Override
+        public Dumper dumpMethodDoc(MethodPrototype method) {
+            MappingTree.ClassMapping classMapping = getClassMapping(method.getOwner());
 
-					if (argComment != null) {
-						params.addAll(Arrays.asList(("@param " + arg.getSrcName() + " " + argComment).split("\\R")));
-					}
-				}
+            if (classMapping == null) {
+                return this;
+            }
 
-				// Add a blank line between params and the comment.
-				if (!lines.isEmpty() && !params.isEmpty()) {
-					lines.add("");
-				}
+            List<String> lines = new ArrayList<>();
+            MappingTree.MethodMapping mapping = classMapping.getMethod(method.getName(),
+                method.getOriginalDescriptor());
 
-				lines.addAll(params);
-			}
+            if (mapping != null) {
+                String comment = mapping.getComment();
 
-			if (!lines.isEmpty()) {
-				print("/**").newln();
+                if (comment != null) {
+                    lines.addAll(Arrays.asList(comment.split("\\R")));
+                }
 
-				for (String line : lines) {
-					print(" * ").print(line).newln();
-				}
+                final Collection<? extends MappingTree.MethodArgMapping> methodArgs = mapping.getArgs();
+                final List<String> params = new ArrayList<>();
 
-				print(" */").newln();
-			}
+                for (MappingTree.MethodArgMapping arg : methodArgs) {
+                    String argComment = arg.getComment();
 
-			return this;
-		}
+                    if (argComment != null) {
+                        params.addAll(Arrays.asList(("@param " + arg.getSrcName() + " " + argComment).split("\\R")));
+                    }
+                }
 
-		@Override
-		public Dumper dumpFieldDoc(Field field, JavaTypeInstance owner) {
-			// None static fields in records are handled in the class javadoc.
-			if (isRecord(owner) && !isStatic(field)) {
-				return this;
-			}
+                // Add a blank line between params and the comment.
+                if (!lines.isEmpty() && !params.isEmpty()) {
+                    lines.add("");
+                }
 
-			MappingTree.ClassMapping classMapping = getClassMapping(owner);
+                lines.addAll(params);
+            }
 
-			if (classMapping == null) {
-				return this;
-			}
+            if (!lines.isEmpty()) {
+                print("/**").newln();
 
-			MappingTree.FieldMapping fieldMapping = classMapping.getField(field.getFieldName(), field.getDescriptor());
+                for (String line : lines) {
+                    print(" * ").print(line).newln();
+                }
 
-			if (fieldMapping != null) {
-				dumpComment(fieldMapping.getComment());
-			}
+                print(" */").newln();
+            }
 
-			return this;
-		}
+            return this;
+        }
 
-		private MappingTree.ClassMapping getClassMapping(JavaTypeInstance type) {
-			String qualifiedName = type.getRawName().replace('.', '/');
-			return mappingTree.getClass(qualifiedName);
-		}
+        private void dumpComment(String comment) {
+            if (comment == null || comment.isBlank()) {
+                return;
+            }
 
-		private boolean isRecord(JavaTypeInstance javaTypeInstance) {
-			if (javaTypeInstance instanceof JavaRefTypeInstance) {
-				ClassFile classFile = ((JavaRefTypeInstance) javaTypeInstance).getClassFile();
-				return classFile.getClassSignature().getSuperClass().getRawName().equals("java.lang.Record");
-			}
+            print("/**").newln();
 
-			return false;
-		}
+            for (String line : comment.split("\n")) {
+                print(" * ").print(line).newln();
+            }
 
-		private boolean isStatic(Field field) {
-			return field.testAccessFlag(AccessFlag.ACC_STATIC);
-		}
+            print(" */").newln();
+        }
 
-		private void dumpComment(String comment) {
-			if (comment == null || comment.isBlank()) {
-				return;
-			}
+        private MappingTree.ClassMapping getClassMapping(JavaTypeInstance type) {
+            String qualifiedName = type.getRawName().replace('.', '/');
+            return mappingTree.getClass(qualifiedName);
+        }
 
-			print("/**").newln();
+        private boolean isRecord(JavaTypeInstance javaTypeInstance) {
+            if (javaTypeInstance instanceof JavaRefTypeInstance) {
+                ClassFile classFile = ((JavaRefTypeInstance) javaTypeInstance).getClassFile();
+                return classFile.getClassSignature().getSuperClass().getRawName().equals("java.lang.Record");
+            }
 
-			for (String line : comment.split("\n")) {
-				print(" * ").print(line).newln();
-			}
+            return false;
+        }
 
-			print(" */").newln();
-		}
-	}
+        private boolean isStatic(Field field) {
+            return field.testAccessFlag(AccessFlag.ACC_STATIC);
+        }
+    }
 }

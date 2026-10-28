@@ -57,17 +57,16 @@ import dev.aoqia.leaf.loom.util.Lazy;
  * The know versions keep track of the versions that are signed using SHA1 or not signature at all.
  * The maps are the Minecraft version to sha256 hash of the jar file.
  */
-public record KnownVersions(
-		Map<String, String> client,
-		Map<String, String> server) {
-	public static final Supplier<KnownVersions> INSTANCE = Lazy.of(KnownVersions::load);
+public record KnownVersions(Map<String, String> client, Map<String, String> server) {
+    public static final Supplier<KnownVersions> INSTANCE = Lazy.of(KnownVersions::load);
 
-	private static KnownVersions load() {
-		try (InputStream is = KnownVersions.class.getClassLoader().getResourceAsStream("certs/known_versions.json");
-				Reader reader = new InputStreamReader(Objects.requireNonNull(is))) {
-			return LoomGradlePlugin.GSON.fromJson(reader, KnownVersions.class);
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to load known versions", e);
-		}
-	}
+    private static KnownVersions load() {
+        try (InputStream is = KnownVersions.class.getClassLoader().getResourceAsStream("certs/known_versions.json");
+             Reader reader = new InputStreamReader(Objects.requireNonNull(is)))
+        {
+            return LoomGradlePlugin.GSON.fromJson(reader, KnownVersions.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to load known versions", e);
+        }
+    }
 }

@@ -57,70 +57,69 @@ import dev.aoqia.leaf.loom.util.LoomVersions;
 import dev.aoqia.leaf.loom.util.ZipUtils;
 
 /**
- * A task that runs the server using the production server launcher. You must manually register a task of this type to use it.
+ * A task that runs the server using the production server launcher. You must manually register a task of this type
+ * to use it.
  */
 @ApiStatus.Experimental
 @DisableCachingByDefault
 public abstract non-sealed class ServerProductionRunTask extends AbstractProductionRunTask {
-	/**
-	 * The version of Fabric Loader to use.
-	 *
-	 * <p>Defaults to the version of Fabric Loader that the project is using.
-	 */
-	@Input
-	public abstract Property<String> getLoaderVersion();
+    @Inject
+    public ServerProductionRunTask() {
+        getLoaderVersion().convention(getProjectLoaderVersion());
+        getMinecraftVersion().convention(getExtension().getZomboidVersion());
+        getInstallPropertiesJar()
+            .convention(getProject().getLayout().getBuildDirectory().file("server_properties.jar"));
+        getInstallerVersion().convention(LoomVersions.LEAF_INSTALLER.version());
 
-	/**
-	 * The version of Minecraft to use.
-	 *
-	 * <p>Defaults to the version of Minecraft that the project is using.
-	 */
-	@Input
-	public abstract Property<String> getMinecraftVersion();
+        getMainClass().convention("dev.aoqia.leaf.installer.ServerLauncher");
+        getClasspath().from(detachedConfigurationProvider("dev.aoqia.leaf:installer:%s:server", getInstallerVersion()));
 
-	/**
-	 * The version of the Fabric Installer to use.
-	 *
-	 * <p>Defaults to a version provided by Loom.
-	 */
-	@Input
-	public abstract Property<String> getInstallerVersion();
+        getProgramArgs().add("nogui");
+    }
 
-	// Internal options
+    /**
+     * The version of the Fabric Installer to use.
+     *
+     * <p>
+     * Defaults to a version provided by Loom.
+     */
+    @Input
+    public abstract Property<String> getInstallerVersion();
 
-	@ApiStatus.Internal
-	@OutputFile
-	public abstract RegularFileProperty getInstallPropertiesJar();
+    @ApiStatus.Internal
+    @OutputFile
+    public abstract RegularFileProperty getInstallPropertiesJar();
 
-	@Inject
-	public ServerProductionRunTask() {
-		getLoaderVersion().convention(getProjectLoaderVersion());
-		getMinecraftVersion().convention(getExtension().getZomboidVersion());
-		getInstallPropertiesJar().convention(getProject().getLayout().getBuildDirectory().file("server_properties.jar"));
-		getInstallerVersion().convention(LoomVersions.LEAF_INSTALLER.version());
+    // Internal options
 
-		getMainClass().convention("dev.aoqia.leaf.installer.ServerLauncher");
-		getClasspath().from(detachedConfigurationProvider("dev.aoqia.leaf:installer:%s:server", getInstallerVersion()));
+    /**
+     * The version of Fabric Loader to use.
+     *
+     * <p>
+     * Defaults to the version of Fabric Loader that the project is using.
+     */
+    @Input
+    public abstract Property<String> getLoaderVersion();
 
-		getProgramArgs().add("nogui");
-	}
+    /**
+     * The version of Minecraft to use.
+     *
+     * <p>
+     * Defaults to the version of Minecraft that the project is using.
+     */
+    @Input
+    public abstract Property<String> getMinecraftVersion();
 
-	@Override
-	public void run() throws IOException {
-		ZipUtils.add(
-				getInstallPropertiesJar().get().getAsFile().toPath(),
-				"install.properties",
-				"leaf-loader-version=%s\ngame-version=%s".formatted(getLoaderVersion().get(), getMinecraftVersion().get())
-		);
+    @Override
+    public void run() throws IOException {
+        ZipUtils.add(getInstallPropertiesJar().get().getAsFile().toPath(), "install.properties",
+            "leaf-loader-version=%s\ngame-version=%s".formatted(getLoaderVersion().get(), getMinecraftVersion().get()));
 
-		super.run();
-	}
+        super.run();
+    }
 
-	@Override
-	protected Stream<File> streamClasspath() {
-		return Stream.concat(
-			super.streamClasspath(),
-			Stream.of(getInstallPropertiesJar().get().getAsFile())
-		);
-	}
+    @Override
+    protected Stream<File> streamClasspath() {
+        return Stream.concat(super.streamClasspath(), Stream.of(getInstallPropertiesJar().get().getAsFile()));
+    }
 }

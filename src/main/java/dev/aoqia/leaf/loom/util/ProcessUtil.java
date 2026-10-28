@@ -55,97 +55,96 @@ import dev.aoqia.leaf.loom.util.nativeplatform.LoomNativePlatform;
 import dev.aoqia.leaf.loom.util.nativeplatform.LoomNativePlatformException;
 
 public record ProcessUtil(ArgumentVisibility argumentVisibility) {
-	private static final String EXPLORER_COMMAND = "C:\\Windows\\explorer.exe";
-	private static final Logger LOGGER = LoggerFactory.getLogger(ProcessUtil.class);
+    private static final String EXPLORER_COMMAND = "C:\\Windows\\explorer.exe";
+    private static final Logger LOGGER = LoggerFactory.getLogger(ProcessUtil.class);
 
-	public static ProcessUtil create(Project project) {
-		return create(ArgumentVisibility.get(project));
-	}
+    public static ProcessUtil create(Project project) {
+        return create(ArgumentVisibility.get(project));
+    }
 
-	public static ProcessUtil create(ArgumentVisibility argumentVisibility) {
-		return new ProcessUtil(argumentVisibility);
-	}
+    public static ProcessUtil create(ArgumentVisibility argumentVisibility) {
+        return new ProcessUtil(argumentVisibility);
+    }
 
-	public String printWithParents(ProcessHandle handle) {
-		String result = printWithParents(handle, 0).trim();
+    public String printWithParents(ProcessHandle handle) {
+        String result = printWithParents(handle, 0).trim();
 
-		if (argumentVisibility == ArgumentVisibility.HIDE) {
-			return "Run with --info or --debug to show arguments, may reveal sensitive info\n" + result;
-		}
+        if (argumentVisibility == ArgumentVisibility.HIDE) {
+            return "Run with --info or --debug to show arguments, may reveal sensitive info\n" + result;
+        }
 
-		return result;
-	}
+        return result;
+    }
 
-	private String printWithParents(ProcessHandle handle, int depth) {
-		var lines = new ArrayList<String>();
-		getWindowTitles(handle).ifPresent(titles -> lines.add("title: " + titles));
-		lines.add("pid: " + handle.pid());
-		handle.info().command().ifPresent(command -> lines.add("command: " + command));
-		getProcessArguments(handle).ifPresent(arguments -> lines.add("arguments: " + arguments));
-		handle.info().startInstant().ifPresent(instant -> lines.add("started at: " + instant));
-		handle.info().user().ifPresent(user -> lines.add("user: " + user));
-		handle.parent().ifPresent(parent -> lines.add("parent:\n" + printWithParents(parent, depth + 1)));
+    private String printWithParents(ProcessHandle handle, int depth) {
+        var lines = new ArrayList<String>();
+        getWindowTitles(handle).ifPresent(titles -> lines.add("title: " + titles));
+        lines.add("pid: " + handle.pid());
+        handle.info().command().ifPresent(command -> lines.add("command: " + command));
+        getProcessArguments(handle).ifPresent(arguments -> lines.add("arguments: " + arguments));
+        handle.info().startInstant().ifPresent(instant -> lines.add("started at: " + instant));
+        handle.info().user().ifPresent(user -> lines.add("user: " + user));
+        handle.parent().ifPresent(parent -> lines.add("parent:\n" + printWithParents(parent, depth + 1)));
 
-		StringBuilder sj = new StringBuilder();
+        StringBuilder sj = new StringBuilder();
 
-		for (String line : lines) {
-			sj.append("\t".repeat(depth)).append("- ").append(line).append('\n');
-		}
+        for (String line : lines) {
+            sj.append("\t".repeat(depth)).append("- ").append(line).append('\n');
+        }
 
-		return sj.toString();
-	}
+        return sj.toString();
+    }
 
-	private Optional<String> getProcessArguments(ProcessHandle handle) {
-		if (argumentVisibility != ArgumentVisibility.SHOW_SENSITIVE) {
-			return Optional.empty();
-		}
+    private Optional<String> getProcessArguments(ProcessHandle handle) {
+        if (argumentVisibility != ArgumentVisibility.SHOW_SENSITIVE) {
+            return Optional.empty();
+        }
 
-		return handle.info().arguments().map(arr -> {
-			String join = String.join(" ", arr);
+        return handle.info().arguments().map(arr -> {
+            String join = String.join(" ", arr);
 
-			if (join.isBlank()) {
-				return "";
-			}
+            if (join.isBlank()) {
+                return "";
+            }
 
-			return " " + join;
-		});
-	}
+            return " " + join;
+        });
+    }
 
-	private Optional<String> getWindowTitles(ProcessHandle processHandle) {
-		if (processHandle.info().command().orElse("").equals(EXPLORER_COMMAND)) {
-			// Explorer is a single process, so the window titles are not useful
-			return Optional.empty();
-		}
+    private Optional<String> getWindowTitles(ProcessHandle processHandle) {
+        if (processHandle.info().command().orElse("").equals(EXPLORER_COMMAND)) {
+            // Explorer is a single process, so the window titles are not useful
+            return Optional.empty();
+        }
 
-		List<String> titles;
+        List<String> titles;
 
-		try {
-			titles = LoomNativePlatform.getWindowTitlesForPid(processHandle.pid());
-		} catch (LoomNativePlatformException e) {
-			LOGGER.error("{}, Failed to query window title for pid {}", e.getMessage(), processHandle.pid());
-			return Optional.empty();
-		}
+        try {
+            titles = LoomNativePlatform.getWindowTitlesForPid(processHandle.pid());
+        } catch (LoomNativePlatformException e) {
+            LOGGER.error("{}, Failed to query window title for pid {}", e.getMessage(), processHandle.pid());
+            return Optional.empty();
+        }
 
-		if (titles.isEmpty()) {
-			return Optional.empty();
-		}
+        if (titles.isEmpty()) {
+            return Optional.empty();
+        }
 
-		final StringJoiner joiner = new StringJoiner(", ");
+        final StringJoiner joiner = new StringJoiner(", ");
 
-		for (String title : titles) {
-			joiner.add("'" + title + "'");
-		}
+        for (String title : titles) {
+            joiner.add("'" + title + "'");
+        }
 
-		return Optional.of(joiner.toString());
-	}
+        return Optional.of(joiner.toString());
+    }
 
-	public enum ArgumentVisibility {
-		HIDE,
-		SHOW_SENSITIVE;
+    public enum ArgumentVisibility {
+        HIDE, SHOW_SENSITIVE;
 
-		static ArgumentVisibility get(Project project) {
-			final LogLevel logLevel = project.getGradle().getStartParameter().getLogLevel();
-			return (logLevel == LogLevel.INFO || logLevel == LogLevel.DEBUG) ? SHOW_SENSITIVE : HIDE;
-		}
-	}
+        static ArgumentVisibility get(Project project) {
+            final LogLevel logLevel = project.getGradle().getStartParameter().getLogLevel();
+            return (logLevel == LogLevel.INFO || logLevel == LogLevel.DEBUG) ? SHOW_SENSITIVE : HIDE;
+        }
+    }
 }

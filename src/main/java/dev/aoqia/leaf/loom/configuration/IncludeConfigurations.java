@@ -69,134 +69,158 @@ import dev.aoqia.leaf.loom.util.Strings;
  * Sets up include configurations for the jar task that consumes them.
  */
 public final class IncludeConfigurations {
-	private IncludeConfigurations() {
-	}
+    private IncludeConfigurations() {
+    }
 
-	public static void nestJars(Project project, TaskProvider<? extends Jar> jarTask, Configuration configuration) {
-		String taskName = getUniqueTaskName(project, getProcessIncludeJarsTaskName(jarTask.getName(), configuration.getName()));
-		String configName = getUniqueConfigName(project, getResolvedIncludeJarsConfigName(jarTask.getName(), configuration.getName()));
-		nestJars(project, jarTask, project.provider(() -> configuration), taskName, configName);
-	}
+    public static void nestJars(Project project, TaskProvider<? extends Jar> jarTask, Configuration configuration) {
+        String taskName = getUniqueTaskName(project,
+            getProcessIncludeJarsTaskName(jarTask.getName(), configuration.getName()));
+        String configName = getUniqueConfigName(project,
+            getResolvedIncludeJarsConfigName(jarTask.getName(), configuration.getName()));
+        nestJars(project, jarTask, project.provider(() -> configuration), taskName, configName);
+    }
 
-	public static void nestJars(Project project, TaskProvider<? extends Jar> jarTask, NamedDomainObjectProvider<? extends Configuration> configuration) {
-		String taskName = getUniqueTaskName(project, getProcessIncludeJarsTaskName(jarTask.getName(), configuration.getName()));
-		String configName = getUniqueConfigName(project, getResolvedIncludeJarsConfigName(jarTask.getName(), configuration.getName()));
-		nestJars(project, jarTask, configuration, taskName, configName);
-	}
+    public static void nestJars(Project project, TaskProvider<? extends Jar> jarTask, Configuration configuration,
+        String taskName, String configName)
+    {
+        nestJars(project, jarTask, project.provider(() -> configuration), taskName, configName);
+    }
 
-	public static void nestJars(Project project, TaskProvider<? extends Jar> jarTask, Configuration configuration, String taskName, String configName) {
-		nestJars(project, jarTask, project.provider(() -> configuration), taskName, configName);
-	}
+    public static void nestJars(Project project, TaskProvider<? extends Jar> jarTask,
+        NamedDomainObjectProvider<? extends Configuration> configuration)
+    {
+        String taskName = getUniqueTaskName(project,
+            getProcessIncludeJarsTaskName(jarTask.getName(), configuration.getName()));
+        String configName = getUniqueConfigName(project,
+            getResolvedIncludeJarsConfigName(jarTask.getName(), configuration.getName()));
+        nestJars(project, jarTask, configuration, taskName, configName);
+    }
 
-	public static void nestJars(Project project, TaskProvider<? extends Jar> jarTask, Provider<? extends Configuration> configuration, String taskName, String configName) {
-		TaskProvider<NestableJarGenerationTask> processTask = createProcessTask(project, configuration, taskName, configName);
-		FileCollection outputJars = getOutputJars(project, processTask);
+    public static void nestJars(Project project, TaskProvider<? extends Jar> jarTask,
+        Provider<? extends Configuration> configuration, String taskName, String configName)
+    {
+        TaskProvider<
+            NestableJarGenerationTask> processTask = createProcessTask(project, configuration, taskName, configName);
+        FileCollection outputJars = getOutputJars(project, processTask);
 
-		jarTask.configure(task -> {
-			task.dependsOn(processTask);
+        jarTask.configure(task -> {
+            task.dependsOn(processTask);
 
-			if (task instanceof RemapJarTask remapJarTask) {
-				remapJarTask.getNestedJars().from(outputJars);
-				remapJarTask.getNestedJars().builtBy(processTask);
-			} else {
-				NestJarsAction.addToTask(task, outputJars);
-			}
-		});
-	}
+            if (task instanceof RemapJarTask remapJarTask) {
+                remapJarTask.getNestedJars().from(outputJars);
+                remapJarTask.getNestedJars().builtBy(processTask);
+            } else {
+                NestJarsAction.addToTask(task, outputJars);
+            }
+        });
+    }
 
-	private static TaskProvider<NestableJarGenerationTask> createProcessTask(Project project, Provider<? extends Configuration> configuration, String taskName, String configName) {
-		NamedDomainObjectProvider<Configuration> internalConfiguration = createResolvingConfiguration(project, configuration, configName);
-		LoomGradleExtension extension = LoomGradleExtension.get(project);
+    private static void addNonTransitiveDependencies(Project project, Configuration target,
+        Provider<? extends Configuration> source)
+    {
+        target.getDependencyConstraints()
+            .addAllLater(project.provider(() -> source.get().getIncoming().getDependencyConstraints()));
+        target.getDependencies().addAllLater(project.provider(() -> {
+            List<Dependency> dependencies = new ArrayList<>();
 
-		return project.getTasks().register(taskName, NestableJarGenerationTask.class, task -> {
-			task.from(internalConfiguration.get());
-			task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir(task.getName()));
-			task.getUncompressNestedJars().set(extension.getUncompressNestedJars());
-		});
-	}
+            for (Dependency dependency : source.get().getIncoming().getDependencies()) {
+                if (dependency instanceof HasConfigurableAttributes<?> hasAttributes) {
+                    Category category = hasAttributes.getAttributes().getAttribute(Category.CATEGORY_ATTRIBUTE);
 
-	private static NamedDomainObjectProvider<Configuration> createResolvingConfiguration(Project project, Provider<? extends Configuration> include, String configName) {
-		return project.getConfigurations().register(configName, config -> {
-			LoomConfigurations.Role.RESOLVABLE.apply(config);
-			addNonTransitiveDependencies(project, config, include);
-			configureAttributes(project, config);
-		});
-	}
+                    if (category != null && (category.getName().equals(Category.ENFORCED_PLATFORM)
+                        || category.getName().equals(Category.REGULAR_PLATFORM)))
+                    {
+                        dependencies.add(dependency);
+                        continue;
+                    } else if (dependency instanceof ModuleDependency moduleDependency) {
+                        ModuleDependency copy = moduleDependency.copy();
+                        copy.setTransitive(false);
+                        dependencies.add(copy);
+                        continue;
+                    }
+                }
 
-	private static void addNonTransitiveDependencies(Project project, Configuration target, Provider<? extends Configuration> source) {
-		target.getDependencyConstraints().addAllLater(project.provider(() -> source.get().getIncoming().getDependencyConstraints()));
-		target.getDependencies().addAllLater(project.provider(() -> {
-			List<Dependency> dependencies = new ArrayList<>();
+                dependencies.add(dependency);
+            }
 
-			for (Dependency dependency : source.get().getIncoming().getDependencies()) {
-				if (dependency instanceof HasConfigurableAttributes<?> hasAttributes) {
-					Category category = hasAttributes.getAttributes().getAttribute(Category.CATEGORY_ATTRIBUTE);
+            return dependencies;
+        }));
+    }
 
-					if (category != null && (category.getName().equals(Category.ENFORCED_PLATFORM) || category.getName().equals(Category.REGULAR_PLATFORM))) {
-						dependencies.add(dependency);
-						continue;
-					} else if (dependency instanceof ModuleDependency moduleDependency) {
-						ModuleDependency copy = moduleDependency.copy();
-						copy.setTransitive(false);
-						dependencies.add(copy);
-						continue;
-					}
-				}
+    private static void configureAttributes(Project project, Configuration configuration) {
+        configuration.attributes(attributes -> {
+            attributes.attribute(Usage.USAGE_ATTRIBUTE, project.getObjects().named(Usage.class, Usage.JAVA_RUNTIME));
+            attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE,
+                project.getObjects().named(LibraryElements.class, LibraryElements.JAR));
+            attributes.attribute(Category.CATEGORY_ATTRIBUTE,
+                project.getObjects().named(Category.class, Category.LIBRARY));
+            attributes.attribute(Bundling.BUNDLING_ATTRIBUTE,
+                project.getObjects().named(Bundling.class, Bundling.EXTERNAL));
+        });
+    }
 
-				dependencies.add(dependency);
-			}
+    private static TaskProvider<NestableJarGenerationTask> createProcessTask(Project project,
+        Provider<? extends Configuration> configuration, String taskName, String configName)
+    {
+        NamedDomainObjectProvider<
+            Configuration> internalConfiguration = createResolvingConfiguration(project, configuration, configName);
+        LoomGradleExtension extension = LoomGradleExtension.get(project);
 
-			return dependencies;
-		}));
-	}
+        return project.getTasks().register(taskName, NestableJarGenerationTask.class, task -> {
+            task.from(internalConfiguration.get());
+            task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir(task.getName()));
+            task.getUncompressNestedJars().set(extension.getUncompressNestedJars());
+        });
+    }
 
-	private static void configureAttributes(Project project, Configuration configuration) {
-		configuration.attributes(attributes -> {
-			attributes.attribute(Usage.USAGE_ATTRIBUTE, project.getObjects().named(Usage.class, Usage.JAVA_RUNTIME));
-			attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.getObjects().named(LibraryElements.class, LibraryElements.JAR));
-			attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.getObjects().named(Category.class, Category.LIBRARY));
-			attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.getObjects().named(Bundling.class, Bundling.EXTERNAL));
-		});
-	}
+    private static NamedDomainObjectProvider<Configuration> createResolvingConfiguration(Project project,
+        Provider<? extends Configuration> include, String configName)
+    {
+        return project.getConfigurations().register(configName, config -> {
+            LoomConfigurations.Role.RESOLVABLE.apply(config);
+            addNonTransitiveDependencies(project, config, include);
+            configureAttributes(project, config);
+        });
+    }
 
-	private static FileCollection getOutputJars(Project project, TaskProvider<NestableJarGenerationTask> processTask) {
-		return project.fileTree(processTask.flatMap(NestableJarGenerationTask::getOutputDirectory))
-				.matching(pattern -> pattern.include("*.jar"));
-	}
+    private static FileCollection getOutputJars(Project project, TaskProvider<NestableJarGenerationTask> processTask) {
+        return project.fileTree(processTask.flatMap(NestableJarGenerationTask::getOutputDirectory))
+            .matching(pattern -> pattern.include("*.jar"));
+    }
 
-	private static String getProcessIncludeJarsTaskName(String jarTaskName, String configurationName) {
-		return "process" + Strings.capitalize(jarTaskName) + Strings.capitalize(configurationName) + "Jars";
-	}
+    private static String getProcessIncludeJarsTaskName(String jarTaskName, String configurationName) {
+        return "process" + Strings.capitalize(jarTaskName) + Strings.capitalize(configurationName) + "Jars";
+    }
 
-	private static String getResolvedIncludeJarsConfigName(String jarTaskName, String configurationName) {
-		return "resolved" + Strings.capitalize(jarTaskName) + Strings.capitalize(configurationName) + "Jars";
-	}
+    private static String getResolvedIncludeJarsConfigName(String jarTaskName, String configurationName) {
+        return "resolved" + Strings.capitalize(jarTaskName) + Strings.capitalize(configurationName) + "Jars";
+    }
 
-	private static String getUniqueTaskName(Project project, String taskName) {
-		if (!project.getTasks().getNames().contains(taskName)) {
-			return taskName;
-		}
+    private static String getUniqueConfigName(Project project, String configName) {
+        if (!project.getConfigurations().getNames().contains(configName)) {
+            return configName;
+        }
 
-		int suffix = 2;
+        int suffix = 2;
 
-		while (project.getTasks().getNames().contains(taskName + suffix)) {
-			suffix++;
-		}
+        while (project.getConfigurations().getNames().contains(configName + suffix)) {
+            suffix++;
+        }
 
-		return taskName + suffix;
-	}
+        return configName + suffix;
+    }
 
-	private static String getUniqueConfigName(Project project, String configName) {
-		if (!project.getConfigurations().getNames().contains(configName)) {
-			return configName;
-		}
+    private static String getUniqueTaskName(Project project, String taskName) {
+        if (!project.getTasks().getNames().contains(taskName)) {
+            return taskName;
+        }
 
-		int suffix = 2;
+        int suffix = 2;
 
-		while (project.getConfigurations().getNames().contains(configName + suffix)) {
-			suffix++;
-		}
+        while (project.getTasks().getNames().contains(taskName + suffix)) {
+            suffix++;
+        }
 
-		return configName + suffix;
-	}
+        return taskName + suffix;
+    }
 }

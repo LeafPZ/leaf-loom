@@ -53,54 +53,57 @@ import dev.aoqia.leaf.loom.util.Platform;
 
 @SuppressWarnings("unused")
 public record ZomboidVersionMeta(
-		String id,
-        String steamBranch,
-        String gitBranch,
-        String gitHash,
-        Manifests manifests,
-        Arguments arguments,
-		MainClass mainClass,
-		String releaseTime,
-		String generateTime,
-		AssetIndexes assetIndexes,
-		int javaVersion,
-        List<Library> libraries
-) {
-	private static final Map<Platform.OperatingSystem, String> OS_NAMES = Map.of(
-			Platform.OperatingSystem.WINDOWS, "windows",
-			Platform.OperatingSystem.MAC_OS, "macos",
-			Platform.OperatingSystem.LINUX, "linux"
-	);
+    String id,
+    String steamBranch,
+    String gitBranch,
+    String gitHash,
+    Manifests manifests,
+    Arguments arguments,
+    MainClass mainClass,
+    String releaseTime,
+    String generateTime,
+    AssetIndexes assetIndexes,
+    int javaVersion,
+    List<Library> libraries
+)
+{
+    private static final Map<Platform.OperatingSystem, String> OS_NAMES = Map.of(Platform.OperatingSystem.WINDOWS,
+        "windows", Platform.OperatingSystem.MAC_OS, "macos", Platform.OperatingSystem.LINUX, "linux");
 
-	public boolean isVersionOrNewer(String releaseTime) {
-		return this.releaseTime().compareTo(releaseTime) >= 0;
-	}
+    public boolean isVersionOrNewer(String releaseTime) {
+        return this.releaseTime().compareTo(releaseTime) >= 0;
+    }
 
-	/**
-	 * Returns true if the version was released before 41.78.*
-	 */
-	public boolean isLegacyVersion() {
-		return !isVersionOrNewer(Constants.RELEASE_TIME_41_78_19);
-	}
+    /**
+     * Returns true if the version was released before 41.78.*
+     */
+    public boolean isLegacyVersion() {
+        return !isVersionOrNewer(Constants.RELEASE_TIME_41_78_19);
+    }
 
-	public boolean hasClient() {
-		return !manifests.client.isEmpty();
-	}
+    public boolean hasClient() {
+        return !manifests.client.isEmpty();
+    }
 
-	public boolean hasServer() {
-		return !manifests.server.isEmpty();
-	}
+    public boolean hasServer() {
+        return !manifests.server.isEmpty();
+    }
 
-	public boolean hasNativesToExtract() {
-		 return libraries.stream().anyMatch(Library::hasNatives);
-	}
+    public boolean hasNativesToExtract() {
+        return libraries.stream().anyMatch(Library::hasNatives);
+    }
 
     public record MainClass(@Nullable String client, @Nullable String server) {}
 
-	public record AssetIndexes(AssetIndexEntry client, AssetIndexEntry server) {}
+    public record AssetIndexes(AssetIndexEntry client, AssetIndexEntry server) {}
 
-    public record AssetIndexEntry(AssetIndexEntryValue macos, AssetIndexEntryValue linux, AssetIndexEntryValue windows,
-        @Nullable AssetIndexEntryValue common) {
+    public record AssetIndexEntry(
+        AssetIndexEntryValue macos,
+        AssetIndexEntryValue linux,
+        AssetIndexEntryValue windows,
+        @Nullable AssetIndexEntryValue common
+    )
+    {
         public AssetIndexEntryValue getFromOs(Platform.OperatingSystem os) {
             return switch (os) {
                 case LINUX -> linux();
@@ -118,12 +121,15 @@ public record ZomboidVersionMeta(
         }
     }
 
-    public record ManifestEntry(List<String> macos, List<String> linux, List<String> windows,
-        @Nullable List<String> common) {
+    public record ManifestEntry(
+        List<String> macos,
+        List<String> linux,
+        List<String> windows,
+        @Nullable List<String> common
+    )
+    {
         public boolean contains(String id) {
-            return (common != null && common.contains(id))
-                || linux.contains(id)
-                || windows.contains(id)
+            return (common != null && common.contains(id)) || linux.contains(id) || windows.contains(id)
                 || macos.contains(id);
         }
 
@@ -132,101 +138,110 @@ public record ZomboidVersionMeta(
         }
     }
 
-	public record Library(Downloads downloads, String name, Map<String, String> natives, List<Rule> rules, Object extract) {
-		public boolean isValidForOS(Platform platform) {
-			if (rules == null) {
-				// No rules allow everything.
-				return true;
-			}
+    public record Library(
+        Downloads downloads,
+        String name,
+        Map<String, String> natives,
+        List<Rule> rules,
+        Object extract
+    )
+    {
+        public boolean isValidForOS(Platform platform) {
+            if (rules == null) {
+                // No rules allow everything.
+                return true;
+            }
 
-			boolean valid = false;
+            boolean valid = false;
 
-			for (Rule rule : this.rules) {
-				if (rule.appliesToOS(platform)) {
-					valid = rule.isAllowed();
-				}
-			}
+            for (Rule rule : this.rules) {
+                if (rule.appliesToOS(platform)) {
+                    valid = rule.isAllowed();
+                }
+            }
 
-			return valid;
-		}
+            return valid;
+        }
 
-		public boolean hasNatives() {
-			return this.natives != null;
-		}
+        public boolean hasNatives() {
+            return this.natives != null;
+        }
 
-		public boolean hasNativesForOS(Platform platform) {
-			if (!hasNatives()) {
-				return false;
-			}
+        public boolean hasNativesForOS(Platform platform) {
+            if (!hasNatives()) {
+                return false;
+            }
 
-			if (classifierForOS(platform) == null) {
-				return false;
-			}
+            if (classifierForOS(platform) == null) {
+                return false;
+            }
 
-			return isValidForOS(platform);
-		}
+            return isValidForOS(platform);
+        }
 
-		@Nullable public Download classifierForOS(Platform platform) {
-			String classifier = natives.get(OS_NAMES.get(platform.getOperatingSystem()));
+        @Nullable
+        public Download classifierForOS(Platform platform) {
+            String classifier = natives.get(OS_NAMES.get(platform.getOperatingSystem()));
 
-			if (classifier == null) {
-				return null;
-			}
+            if (classifier == null) {
+                return null;
+            }
 
-			if (platform.getArchitecture().isArm() && platform.getArchitecture().is64Bit()) {
-				// Default to the arm64 natives, if not found fallback.
-				final Download armNative = downloads().classifier(classifier + "-arm64");
+            if (platform.getArchitecture().isArm() && platform.getArchitecture().is64Bit()) {
+                // Default to the arm64 natives, if not found fallback.
+                final Download armNative = downloads().classifier(classifier + "-arm64");
 
-				if (armNative != null) {
-					return armNative;
-				}
-			}
+                if (armNative != null) {
+                    return armNative;
+                }
+            }
 
-			// Used in the twitch library in 1.7.10
-			classifier = classifier.replace("${arch}", platform.getArchitecture().is64Bit() ? "64" : "32");
+            // Used in the twitch library in 1.7.10
+            classifier = classifier.replace("${arch}", platform.getArchitecture().is64Bit() ? "64" : "32");
 
-			return downloads().classifier(classifier);
-		}
+            return downloads().classifier(classifier);
+        }
 
-		public Download artifact() {
-			if (downloads() == null) {
-				return null;
-			}
+        public Download artifact() {
+            if (downloads() == null) {
+                return null;
+            }
 
-			return downloads().artifact();
-		}
-	}
+            return downloads().artifact();
+        }
+    }
 
-	public record Downloads(Download artifact, Map<String, Download> classifiers) {
-		@Nullable public Download classifier(String os) {
-			return classifiers.get(os);
-		}
-	}
+    public record Downloads(Download artifact, Map<String, Download> classifiers) {
+        @Nullable
+        public Download classifier(String os) {
+            return classifiers.get(os);
+        }
+    }
 
     public record Arguments(List<String> game, Map<String, Argument> jvm) {}
 
     public record Argument(List<Rule> rules) {}
 
-	public record Rule(String action, OS os) {
-		public boolean appliesToOS(Platform platform) {
-			return os() == null || os().isValidForOS(platform);
-		}
+    public record Rule(String action, OS os) {
+        public boolean appliesToOS(Platform platform) {
+            return os() == null || os().isValidForOS(platform);
+        }
 
-		public boolean isAllowed() {
-			return action().equals("allow");
-		}
-	}
+        public boolean isAllowed() {
+            return action().equals("allow");
+        }
+    }
 
-	public record OS(String name) {
-		public boolean isValidForOS(Platform platform) {
-			return name() == null || name().equalsIgnoreCase(OS_NAMES.get(platform.getOperatingSystem()));
-		}
-	}
+    public record OS(String name) {
+        public boolean isValidForOS(Platform platform) {
+            return name() == null || name().equalsIgnoreCase(OS_NAMES.get(platform.getOperatingSystem()));
+        }
+    }
 
-	public record Download(String path, String sha1, long size, String url) {
-		public File relativeFile(File baseDirectory) {
-			Objects.requireNonNull(path(), "Cannot get relative file from a null path");
-			return new File(baseDirectory, path());
-		}
-	}
+    public record Download(String path, String sha1, long size, String url) {
+        public File relativeFile(File baseDirectory) {
+            Objects.requireNonNull(path(), "Cannot get relative file from a null path");
+            return new File(baseDirectory, path());
+        }
+    }
 }

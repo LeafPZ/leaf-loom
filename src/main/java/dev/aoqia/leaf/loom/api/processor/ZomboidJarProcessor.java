@@ -50,19 +50,21 @@ import org.jspecify.annotations.Nullable;
 import net.fabricmc.mappingio.tree.MemoryMappingTree;
 
 public interface ZomboidJarProcessor<S extends ZomboidJarProcessor.Spec> extends Named {
-	@Nullable S buildSpec(SpecContext context);
+    @Nullable
+    S buildSpec(SpecContext context);
 
-	void processJar(Path jar, S spec, ProcessorContext context) throws IOException;
+    void processJar(Path jar, S spec, ProcessorContext context) throws IOException;
 
-	@Nullable default MappingsProcessor<S> processMappings() {
-		return null;
-	}
+    @Nullable
+    default MappingsProcessor<S> processMappings() {
+        return null;
+    }
 
-	interface Spec {
-		// Must make sure hashCode is correctly implemented.
-	}
+    interface MappingsProcessor<S> {
+        boolean transform(MemoryMappingTree mappings, S spec, MappingProcessorContext context);
+    }
 
-	interface MappingsProcessor<S> {
-		boolean transform(MemoryMappingTree mappings, S spec, MappingProcessorContext context);
-	}
+    interface Spec {
+        // Must make sure hashCode is correctly implemented.
+    }
 }

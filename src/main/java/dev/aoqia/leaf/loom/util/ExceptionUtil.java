@@ -56,73 +56,77 @@ import dev.aoqia.leaf.loom.util.nativeplatform.LoomNativePlatform;
 import dev.aoqia.leaf.loom.util.nativeplatform.LoomNativePlatformException;
 
 public final class ExceptionUtil {
-	private static final Logger LOGGER = LoggerFactory.getLogger(ExceptionUtil.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExceptionUtil.class);
 
-	/**
-	 * Creates a descriptive user-facing wrapper exception for an underlying cause.
-	 *
-	 * <p>The output format has a message like this: {@code [message], [cause class]: [cause message]}.
-	 * For example: {@code Failed to remap, java.io.IOException: Access denied}.
-	 *
-	 * @param constructor the exception factory which takes in a message and a cause
-	 * @param message     the more general message for the resulting exception
-	 * @param cause       the causing exception
-	 * @param <E> the created exception type
-	 * @param <C> the cause type
-	 * @return the created exception
-	 */
-	public static <E, C extends Throwable> E createDescriptiveWrapper(BiFunction<String, C, E> constructor, String message, C cause) {
-		String descriptiveMessage = "%s, %s: %s".formatted(message, cause.getClass().getName(), cause.getMessage());
-		return constructor.apply(descriptiveMessage, cause);
-	}
+    /**
+     * Creates a descriptive user-facing wrapper exception for an underlying cause.
+     *
+     * <p>
+     * The output format has a message like this: {@code [message], [cause class]: [cause message]}.
+     * For example: {@code Failed to remap, java.io.IOException: Access denied}.
+     *
+     * @param constructor the exception factory which takes in a message and a cause
+     * @param message the more general message for the resulting exception
+     * @param cause the causing exception
+     * @param <E> the created exception type
+     * @param <C> the cause type
+     * @return the created exception
+     */
+    public static <E, C extends Throwable> E createDescriptiveWrapper(BiFunction<String, C, E> constructor,
+        String message, C cause)
+    {
+        String descriptiveMessage = "%s, %s: %s".formatted(message, cause.getClass().getName(), cause.getMessage());
+        return constructor.apply(descriptiveMessage, cause);
+    }
 
-	public static void processException(Throwable e, DaemonUtils.Context context) {
-		Throwable cause = e;
-		boolean unrecoverable = false;
+    public static void processException(Throwable e, DaemonUtils.Context context) {
+        Throwable cause = e;
+        boolean unrecoverable = false;
 
-		while (cause != null) {
-			if (cause instanceof FileSystemUtil.UnrecoverableZipException) {
-				unrecoverable = true;
-			} else if (cause instanceof FileSystemException fse) {
-				printFileLocks(fse.getFile());
-				break;
-			}
+        while (cause != null) {
+            if (cause instanceof FileSystemUtil.UnrecoverableZipException) {
+                unrecoverable = true;
+            } else if (cause instanceof FileSystemException fse) {
+                printFileLocks(fse.getFile());
+                break;
+            }
 
-			cause = cause.getCause();
-		}
+            cause = cause.getCause();
+        }
 
-		if (unrecoverable) {
-			DaemonUtils.tryStopGradleDaemon(context);
-		}
-	}
+        if (unrecoverable) {
+            DaemonUtils.tryStopGradleDaemon(context);
+        }
+    }
 
-	private static void printFileLocks(String filename) {
-		final Path path = Paths.get(filename);
+    private static void printFileLocks(String filename) {
+        final Path path = Paths.get(filename);
 
-		if (!Files.exists(path)) {
-			return;
-		}
+        if (!Files.exists(path)) {
+            return;
+        }
 
-		final List<ProcessHandle> processes;
+        final List<ProcessHandle> processes;
 
-		try {
-			processes = LoomNativePlatform.getProcessesWithLockOn(path);
-		} catch (LoomNativePlatformException e) {
-			LOGGER.error("{}, Failed to query processes holding a lock on {}", e.getMessage(), path);
-			return;
-		}
+        try {
+            processes = LoomNativePlatform.getProcessesWithLockOn(path);
+        } catch (LoomNativePlatformException e) {
+            LOGGER.error("{}, Failed to query processes holding a lock on {}", e.getMessage(), path);
+            return;
+        }
 
-		if (processes.isEmpty()) {
-			return;
-		}
+        if (processes.isEmpty()) {
+            return;
+        }
 
-		final ProcessUtil processUtil = ProcessUtil.create(LOGGER.isInfoEnabled() ? ProcessUtil.ArgumentVisibility.SHOW_SENSITIVE : ProcessUtil.ArgumentVisibility.HIDE);
+        final ProcessUtil processUtil = ProcessUtil.create(LOGGER.isInfoEnabled()
+            ? ProcessUtil.ArgumentVisibility.SHOW_SENSITIVE : ProcessUtil.ArgumentVisibility.HIDE);
 
-		final String noun = processes.size() == 1 ? "process has" : "processes have";
-		LOGGER.error("The following {} a lock on the file '{}':", noun, path);
+        final String noun = processes.size() == 1 ? "process has" : "processes have";
+        LOGGER.error("The following {} a lock on the file '{}':", noun, path);
 
-		for (ProcessHandle process : processes) {
-			LOGGER.error(processUtil.printWithParents(process));
-		}
-	}
+        for (ProcessHandle process : processes) {
+            LOGGER.error(processUtil.printWithParents(process));
+        }
+    }
 }

@@ -43,5 +43,4 @@ package dev.aoqia.leaf.loom.configuration.classpathgroups;
 
 import java.io.Serializable;
 
-public record ExternalClasspathGroup(String projectPath, String sourceSetName) implements Serializable {
-}
+public record ExternalClasspathGroup(String projectPath, String sourceSetName) implements Serializable {}

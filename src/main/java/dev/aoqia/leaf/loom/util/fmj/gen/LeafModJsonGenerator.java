@@ -42,5 +42,5 @@
 package dev.aoqia.leaf.loom.util.fmj.gen;
 
 public interface LeafModJsonGenerator<Spec> {
-	String generate(Spec spec);
+    String generate(Spec spec);
 }

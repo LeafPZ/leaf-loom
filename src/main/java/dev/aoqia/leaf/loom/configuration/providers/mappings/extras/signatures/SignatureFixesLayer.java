@@ -47,5 +47,5 @@ import org.jetbrains.annotations.ApiStatus;
 
 @ApiStatus.Experimental
 public interface SignatureFixesLayer {
-	Map<String, String> getSignatureFixes();
+    Map<String, String> getSignatureFixes();
 }

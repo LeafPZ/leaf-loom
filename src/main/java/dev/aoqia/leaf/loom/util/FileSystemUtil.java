@@ -61,103 +61,24 @@ import java.util.function.Supplier;
 import net.fabricmc.tinyremapper.FileSystemReference;
 
 public final class FileSystemUtil {
-	public record Delegate(FileSystemReference reference, URI uri) implements AutoCloseable, Supplier<FileSystem> {
-		public Path getPath(String path, String... more) {
-			return get().getPath(path, more);
-		}
+    private FileSystemUtil() {
+    }
 
-		public Path getRoot() {
-			return get().getPath("/");
-		}
+    public static Delegate getJarFileSystem(File file, boolean create) throws IOException {
+        return new Delegate(FileSystemReference.openJar(file.toPath(), create), toJarUri(file.toPath()));
+    }
 
-		public byte[] readAllBytes(String path) throws IOException {
-			Path fsPath = getPath(path);
+    public static Delegate getJarFileSystem(Path path) throws IOException {
+        return new Delegate(FileSystemReference.openJar(path), toJarUri(path));
+    }
 
-			if (Files.exists(fsPath)) {
-				return Files.readAllBytes(fsPath);
-			} else {
-				throw new NoSuchFileException(fsPath.toString());
-			}
-		}
+    public static Delegate getJarFileSystem(Path path, boolean create) throws IOException {
+        return new Delegate(FileSystemReference.openJar(path, create), toJarUri(path));
+    }
 
-		public <T> T fromInputStream(IOFunction<InputStream, T> function, String path, String... more) throws IOException {
-			try (InputStream inputStream = Files.newInputStream(getPath(path, more))) {
-				return function.apply(inputStream);
-			}
-		}
-
-		public String readString(String path) throws IOException {
-			return new String(readAllBytes(path), StandardCharsets.UTF_8);
-		}
-
-		@Override
-		public void close() throws IOException {
-			try {
-				reference.close();
-			} catch (IOException e) {
-				// An IOException can only ever be thrown by the underlying FileSystem.close() call in tiny remapper
-				// This means that this reference was the last open
-				try {
-					// We would then almost always expect this to throw a FileSystemNotFoundException
-					FileSystem fileSystem = FileSystems.getFileSystem(uri);
-
-					if (fileSystem.isOpen()) {
-						// Or the unlikely chance that another thread opened a new reference
-						throw e;
-					}
-
-					// However if we end up here, the closed FileSystem was not removed from ZipFileSystemProvider.filesystems
-					// This leaves us in a broken state, preventing this JVM from ever being able to open a zip at this path.
-					// See: https://bugs.openjdk.org/browse/JDK-8291712
-					throw new UnrecoverableZipException(e.getMessage(), e);
-				} catch (FileSystemNotFoundException ignored) {
-					// This the "happy" case, where the zip FS failed to close but was
-				}
-
-				// Throw the normal exception, we can recover from this
-				throw e;
-			}
-		}
-
-		@Override
-		public FileSystem get() {
-			return reference.getFs();
-		}
-
-		// TODO cleanup
-		public FileSystem fs() {
-			return get();
-		}
-	}
-
-	private FileSystemUtil() {
-	}
-
-	public static Delegate getJarFileSystem(File file, boolean create) throws IOException {
-		return new Delegate(FileSystemReference.openJar(file.toPath(), create), toJarUri(file.toPath()));
-	}
-
-	public static Delegate getJarFileSystem(Path path, boolean create) throws IOException {
-		return new Delegate(FileSystemReference.openJar(path, create), toJarUri(path));
-	}
-
-	public static Delegate getJarFileSystem(Path path) throws IOException {
-		return new Delegate(FileSystemReference.openJar(path), toJarUri(path));
-	}
-
-	public static Delegate getJarFileSystem(URI uri, boolean create) throws IOException {
-		return new Delegate(FileSystemReference.open(uri, create), uri);
-	}
-
-	private static URI toJarUri(Path path) {
-		URI uri = path.toUri();
-
-		try {
-			return new URI("jar:" + uri.getScheme(), uri.getHost(), uri.getPath(), uri.getFragment());
-		} catch (URISyntaxException e) {
-			throw new RuntimeException("can't convert path "+path+" to uri", e);
-		}
-	}
+    public static Delegate getJarFileSystem(URI uri, boolean create) throws IOException {
+        return new Delegate(FileSystemReference.open(uri, create), uri);
+    }
 
     public static boolean isFileLocked(File file) {
         try (RandomAccessFile raf = new RandomAccessFile(file, "rw"); FileChannel channel = raf.getChannel()) {
@@ -173,9 +94,92 @@ public final class FileSystemUtil {
         }
     }
 
-	public static class UnrecoverableZipException extends RuntimeException {
-		public UnrecoverableZipException(String message, Throwable cause) {
-			super(message, cause);
-		}
-	}
+    private static URI toJarUri(Path path) {
+        URI uri = path.toUri();
+
+        try {
+            return new URI("jar:" + uri.getScheme(), uri.getHost(), uri.getPath(), uri.getFragment());
+        } catch (URISyntaxException e) {
+            throw new RuntimeException("can't convert path " + path + " to uri", e);
+        }
+    }
+
+    public record Delegate(FileSystemReference reference, URI uri) implements AutoCloseable, Supplier<FileSystem> {
+        public Path getPath(String path, String... more) {
+            return get().getPath(path, more);
+        }
+
+        public Path getRoot() {
+            return get().getPath("/");
+        }
+
+        public byte[] readAllBytes(String path) throws IOException {
+            Path fsPath = getPath(path);
+
+            if (Files.exists(fsPath)) {
+                return Files.readAllBytes(fsPath);
+            } else {
+                throw new NoSuchFileException(fsPath.toString());
+            }
+        }
+
+        public <T> T fromInputStream(IOFunction<InputStream, T> function, String path, String... more)
+            throws IOException
+        {
+            try (InputStream inputStream = Files.newInputStream(getPath(path, more))) {
+                return function.apply(inputStream);
+            }
+        }
+
+        public String readString(String path) throws IOException {
+            return new String(readAllBytes(path), StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                reference.close();
+            } catch (IOException e) {
+                // An IOException can only ever be thrown by the underlying FileSystem.close() call in tiny remapper
+                // This means that this reference was the last open
+                try {
+                    // We would then almost always expect this to throw a FileSystemNotFoundException
+                    FileSystem fileSystem = FileSystems.getFileSystem(uri);
+
+                    if (fileSystem.isOpen()) {
+                        // Or the unlikely chance that another thread opened a new reference
+                        throw e;
+                    }
+
+                    // However if we end up here, the closed FileSystem was not removed from ZipFileSystemProvider
+                    // .filesystems
+                    // This leaves us in a broken state, preventing this JVM from ever being able to open a zip at
+                    // this path.
+                    // See: https://bugs.openjdk.org/browse/JDK-8291712
+                    throw new UnrecoverableZipException(e.getMessage(), e);
+                } catch (FileSystemNotFoundException ignored) {
+                    // This the "happy" case, where the zip FS failed to close but was
+                }
+
+                // Throw the normal exception, we can recover from this
+                throw e;
+            }
+        }
+
+        @Override
+        public FileSystem get() {
+            return reference.getFs();
+        }
+
+        // TODO cleanup
+        public FileSystem fs() {
+            return get();
+        }
+    }
+
+    public static class UnrecoverableZipException extends RuntimeException {
+        public UnrecoverableZipException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
 }

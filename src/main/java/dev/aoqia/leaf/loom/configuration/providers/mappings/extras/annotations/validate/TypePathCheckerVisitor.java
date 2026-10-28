@@ -51,214 +51,216 @@ import org.objectweb.asm.signature.SignatureVisitor;
 import dev.aoqia.leaf.loom.util.Constants;
 
 public final class TypePathCheckerVisitor extends SignatureVisitor {
-	private final TypePath path;
-	private final int pathLen;
-	private int pathIndex = 0;
-	private boolean reached = false;
-	private String error = null;
+    private final Deque<Integer> argIndexStack = new ArrayDeque<>();
+    private String error = null;
+    private final TypePath path;
+    private int pathIndex = 0;
+    private final int pathLen;
 
-	private final Deque<Integer> argIndexStack = new ArrayDeque<>();
-	private final SignatureVisitor sink = new SignatureVisitor(Constants.ASM_VERSION) {
-	};
+    private boolean reached = false;
+    private final SignatureVisitor sink = new SignatureVisitor(Constants.ASM_VERSION) {
+    };
 
-	public TypePathCheckerVisitor(final TypePath path) {
-		super(Constants.ASM_VERSION);
-		this.path = path;
-		this.pathLen = path == null ? 0 : path.getLength();
+    public TypePathCheckerVisitor(final TypePath path) {
+        super(Constants.ASM_VERSION);
+        this.path = path;
+        this.pathLen = path == null ? 0 : path.getLength();
 
-		if (this.pathLen == 0) {
-			reached = true;
-		}
-	}
+        if (this.pathLen == 0) {
+            reached = true;
+        }
+    }
 
-	private boolean hasMoreSteps() {
-		return pathIndex < pathLen;
-	}
+    @Nullable
+    public String getError() {
+        if (error != null) {
+            return error;
+        }
 
-	private int nextStepKind() {
-		return path.getStep(pathIndex);
-	}
+        if (!reached) {
+            return "TypePath not fully consumed at index " + pathIndex + ", remaining steps: '" + remainingSteps()
+                + "'";
+        }
 
-	private int nextStepArgumentIndex() {
-		return path.getStepArgument(pathIndex);
-	}
+        return null;
+    }
 
-	private String stepRepr(int i) {
-		return switch (path.getStep(i)) {
-		case TypePath.ARRAY_ELEMENT -> "[";
-		case TypePath.INNER_TYPE -> ".";
-		case TypePath.WILDCARD_BOUND -> "*";
-		case TypePath.TYPE_ARGUMENT -> path.getStepArgument(i) + ";";
-		default -> throw new AssertionError("Unexpected type path step kind: " + path.getStep(i));
-		};
-	}
+    @Override
+    public SignatureVisitor visitArrayType() {
+        if (hasMoreSteps()) {
+            if (nextStepKind() == TypePath.ARRAY_ELEMENT) {
+                consumeStep();
+            } else {
+                error = "At step " + pathIndex + " expected array element '[' but found '" + stepRepr(pathIndex) + "'.";
+            }
+        }
 
-	private String remainingSteps() {
-		if (path == null || !hasMoreSteps()) {
-			return "<none>";
-		}
+        return this;
+    }
 
-		StringBuilder sb = new StringBuilder();
+    @Override
+    public void visitBaseType(final char descriptor) {
+        if (hasMoreSteps()) {
+            error = "TypePath has extra steps starting at index " + pathIndex + " ('" + remainingSteps()
+                + "') but reached base type descriptor '" + descriptor + "'.";
+        } else {
+            reached = true;
+        }
+    }
 
-		for (int i = pathIndex; i < pathLen; i++) {
-			sb.append(stepRepr(i));
-		}
+    @Override
+    public void visitClassType(final String name) {
+        argIndexStack.push(0);
 
-		return sb.toString();
-	}
+        String[] innerParts = name.split("\\$");
 
-	private void consumeStep() {
-		pathIndex++;
+        for (int i = 1; i < innerParts.length; i++) {
+            visitInnerClassType(innerParts[i]);
+        }
+    }
 
-		if (pathIndex == pathLen) {
-			reached = true;
-		}
-	}
+    @Override
+    public void visitEnd() {
+        if (argIndexStack.isEmpty()) {
+            if (error == null) {
+                error = "visitEnd encountered with no matching class/inner-class at step " + pathIndex + ".";
+            }
+        } else {
+            argIndexStack.pop();
+        }
+    }
 
-	@Nullable public String getError() {
-		if (error != null) {
-			return error;
-		}
+    @Override
+    public void visitInnerClassType(final String name) {
+        if (hasMoreSteps()) {
+            if (nextStepKind() == TypePath.INNER_TYPE) {
+                consumeStep();
+            } else {
+                error = "At step " + pathIndex + " expected inner type '.' but found '" + stepRepr(pathIndex) + "'.";
+            }
+        }
 
-		if (!reached) {
-			return "TypePath not fully consumed at index " + pathIndex + ", remaining steps: '" + remainingSteps() + "'";
-		}
+        argIndexStack.push(0);
+    }
 
-		return null;
-	}
+    @Override
+    public void visitTypeArgument() {
+        // unbounded wildcard '*' — terminal
+        if (error != null) {
+            return;
+        }
 
-	@Override
-	public void visitBaseType(final char descriptor) {
-		if (hasMoreSteps()) {
-			error = "TypePath has extra steps starting at index " + pathIndex + " ('" + remainingSteps()
-					+ "') but reached base type descriptor '" + descriptor + "'.";
-		} else {
-			reached = true;
-		}
-	}
+        if (argIndexStack.isEmpty()) {
+            error = "Type signature has no enclosing class type for an unbounded wildcard at step " + pathIndex + ".";
+            return;
+        }
 
-	@Override
-	public void visitTypeVariable(final String name) {
-		if (hasMoreSteps()) {
-			error = "TypePath has extra steps starting at index " + pathIndex + " ('" + remainingSteps()
-					+ "') but reached type variable '" + name + "'.";
-		} else {
-			reached = true;
-		}
-	}
+        int idx = argIndexStack.pop();
+        boolean targeted = hasMoreSteps() && nextStepKind() == TypePath.TYPE_ARGUMENT && nextStepArgumentIndex() == idx;
 
-	@Override
-	public SignatureVisitor visitArrayType() {
-		if (hasMoreSteps()) {
-			if (nextStepKind() == TypePath.ARRAY_ELEMENT) {
-				consumeStep();
-			} else {
-				error = "At step " + pathIndex + " expected array element '[' but found '" + stepRepr(pathIndex) + "'.";
-			}
-		}
+        if (targeted) {
+            consumeStep();
 
-		return this;
-	}
+            if (hasMoreSteps()) {
+                error = "TypePath targets unbounded wildcard '*' at step " + (pathIndex - 1)
+                    + " but contains further steps; '*' is terminal.";
+            } else {
+                reached = true;
+            }
+        }
 
-	@Override
-	public void visitClassType(final String name) {
-		argIndexStack.push(0);
+        argIndexStack.push(idx + 1);
+        // no nested visits for unbounded wildcard
+    }
 
-		String[] innerParts = name.split("\\$");
+    @Override
+    public SignatureVisitor visitTypeArgument(final char wildcard) {
+        if (error != null) {
+            return sink;
+        }
 
-		for (int i = 1; i < innerParts.length; i++) {
-			visitInnerClassType(innerParts[i]);
-		}
-	}
+        if (argIndexStack.isEmpty()) {
+            error = "Type signature has no enclosing class type for a type argument at step " + pathIndex + ".";
+            return sink;
+        }
 
-	@Override
-	public void visitInnerClassType(final String name) {
-		if (hasMoreSteps()) {
-			if (nextStepKind() == TypePath.INNER_TYPE) {
-				consumeStep();
-			} else {
-				error = "At step " + pathIndex + " expected inner type '.' but found '" + stepRepr(pathIndex) + "'.";
-			}
-		}
+        int idx = argIndexStack.pop();
+        boolean targeted = hasMoreSteps() && nextStepKind() == TypePath.TYPE_ARGUMENT && nextStepArgumentIndex() == idx;
 
-		argIndexStack.push(0);
-	}
+        if (targeted) {
+            consumeStep();
 
-	@Override
-	public void visitTypeArgument() {
-		// unbounded wildcard '*' — terminal
-		if (error != null) {
-			return;
-		}
+            if (pathIndex == pathLen) {
+                // Path targets the whole type argument; success if no further navigation needed.
+                argIndexStack.push(idx + 1);
+                return sink;
+            }
+        }
 
-		if (argIndexStack.isEmpty()) {
-			error = "Type signature has no enclosing class type for an unbounded wildcard at step " + pathIndex + ".";
-			return;
-		}
+        argIndexStack.push(idx + 1);
 
-		int idx = argIndexStack.pop();
-		boolean targeted = hasMoreSteps() && nextStepKind() == TypePath.TYPE_ARGUMENT && nextStepArgumentIndex() == idx;
+        if (hasMoreSteps() && nextStepKind() == TypePath.WILDCARD_BOUND) {
+            if (wildcard == SignatureVisitor.EXTENDS || wildcard == SignatureVisitor.SUPER) {
+                consumeStep();
+            } else {
+                error = "At step " + pathIndex + " found wildcard bound '*' but the type argument is exact ('=').";
+            }
+        }
 
-		if (targeted) {
-			consumeStep();
+        return this;
+    }
 
-			if (hasMoreSteps()) {
-				error = "TypePath targets unbounded wildcard '*' at step " + (pathIndex - 1)
-						+ " but contains further steps; '*' is terminal.";
-			} else {
-				reached = true;
-			}
-		}
+    @Override
+    public void visitTypeVariable(final String name) {
+        if (hasMoreSteps()) {
+            error = "TypePath has extra steps starting at index " + pathIndex + " ('" + remainingSteps()
+                + "') but reached type variable '" + name + "'.";
+        } else {
+            reached = true;
+        }
+    }
 
-		argIndexStack.push(idx + 1);
-		// no nested visits for unbounded wildcard
-	}
+    private void consumeStep() {
+        pathIndex++;
 
-	@Override
-	public SignatureVisitor visitTypeArgument(final char wildcard) {
-		if (error != null) {
-			return sink;
-		}
+        if (pathIndex == pathLen) {
+            reached = true;
+        }
+    }
 
-		if (argIndexStack.isEmpty()) {
-			error = "Type signature has no enclosing class type for a type argument at step " + pathIndex + ".";
-			return sink;
-		}
+    private boolean hasMoreSteps() {
+        return pathIndex < pathLen;
+    }
 
-		int idx = argIndexStack.pop();
-		boolean targeted = hasMoreSteps() && nextStepKind() == TypePath.TYPE_ARGUMENT && nextStepArgumentIndex() == idx;
+    private int nextStepArgumentIndex() {
+        return path.getStepArgument(pathIndex);
+    }
 
-		if (targeted) {
-			consumeStep();
+    private int nextStepKind() {
+        return path.getStep(pathIndex);
+    }
 
-			if (pathIndex == pathLen) {
-				// Path targets the whole type argument; success if no further navigation needed.
-				argIndexStack.push(idx + 1);
-				return sink;
-			}
-		}
+    private String remainingSteps() {
+        if (path == null || !hasMoreSteps()) {
+            return "<none>";
+        }
 
-		argIndexStack.push(idx + 1);
+        StringBuilder sb = new StringBuilder();
 
-		if (hasMoreSteps() && nextStepKind() == TypePath.WILDCARD_BOUND) {
-			if (wildcard == SignatureVisitor.EXTENDS || wildcard == SignatureVisitor.SUPER) {
-				consumeStep();
-			} else {
-				error = "At step " + pathIndex + " found wildcard bound '*' but the type argument is exact ('=').";
-			}
-		}
+        for (int i = pathIndex; i < pathLen; i++) {
+            sb.append(stepRepr(i));
+        }
 
-		return this;
-	}
+        return sb.toString();
+    }
 
-	@Override
-	public void visitEnd() {
-		if (argIndexStack.isEmpty()) {
-			if (error == null) {
-				error = "visitEnd encountered with no matching class/inner-class at step " + pathIndex + ".";
-			}
-		} else {
-			argIndexStack.pop();
-		}
-	}
+    private String stepRepr(int i) {
+        return switch (path.getStep(i)) {
+            case TypePath.ARRAY_ELEMENT -> "[";
+            case TypePath.INNER_TYPE -> ".";
+            case TypePath.WILDCARD_BOUND -> "*";
+            case TypePath.TYPE_ARGUMENT -> path.getStepArgument(i) + ";";
+            default -> throw new AssertionError("Unexpected type path step kind: " + path.getStep(i));
+        };
+    }
 }

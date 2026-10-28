@@ -51,57 +51,49 @@ import dev.aoqia.leaf.loom.LoomGradlePlugin;
 import dev.aoqia.leaf.loom.kotlin.remapping.KotlinMetadataTinyRemapperExtensionImpl;
 
 /**
- * Used to run the Kotlin remapper with a specific version of Kotlin that may not match the kotlin version included with gradle.
+ * Used to run the Kotlin remapper with a specific version of Kotlin that may not match the kotlin version included
+ * with gradle.
  */
 public class KotlinRemapperClassloader extends URLClassLoader {
-	// Packages that should be loaded from the gradle plugin classloader.
-	private static final List<String> PARENT_PACKAGES = List.of(
-			"net.fabricmc.tinyremapper",
-			"dev.aoqia.leaf.loom.util.kotlin",
-			"org.objectweb.asm",
-			"org.slf4j"
-	);
+    // Packages that should be loaded from the gradle plugin classloader.
+    private static final List<String> PARENT_PACKAGES = List.of("net.fabricmc.tinyremapper",
+        "dev.aoqia.leaf.loom.util.kotlin", "org.objectweb.asm", "org.slf4j");
 
-	private KotlinRemapperClassloader(URL[] urls) {
-		super(urls, null);
-	}
+    private KotlinRemapperClassloader(URL[] urls) {
+        super(urls, null);
+    }
 
-	@Override
-	protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-		if (PARENT_PACKAGES.stream().anyMatch(name::startsWith)) {
-			return LoomGradlePlugin.class.getClassLoader().loadClass(name);
-		}
+    public static KotlinRemapperClassloader create(KotlinClasspath classpathProvider) {
+        // Include the libraries that are not on the kotlin classpath.
+        final Stream<URL> loomUrls = getClassUrls(KotlinMetadataTinyRemapperExtensionImpl.class);
 
-		return super.loadClass(name, resolve);
-	}
+        final URL[] urls = Stream.concat(loomUrls, classpathProvider.classpath().stream()).toArray(URL[]::new);
 
-	public static KotlinRemapperClassloader create(KotlinClasspath classpathProvider) {
-		// Include the libraries that are not on the kotlin classpath.
-		final Stream<URL> loomUrls = getClassUrls(
-				KotlinMetadataTinyRemapperExtensionImpl.class // Loom (Kotlin)
-		);
+        return new KotlinRemapperClassloader(urls);
+    }
 
-		final URL[] urls = Stream.concat(
-				loomUrls,
-				classpathProvider.classpath().stream()
-		).toArray(URL[]::new);
+    private static Stream<URL> getClassUrls(Class<?>... classes) {
+        return Arrays.stream(classes).map(klass -> klass.getProtectionDomain().getCodeSource().getLocation());
+    }
 
-		return new KotlinRemapperClassloader(urls);
-	}
+    /**
+     * Load the {@link KotlinMetadataTinyRemapperExtensionImpl} class on the new classloader.
+     */
+    public KotlinMetadataTinyRemapperExtension getTinyRemapperExtension() {
+        try {
+            Class<?> klass = this.loadClass(KotlinMetadataTinyRemapperExtensionImpl.class.getCanonicalName());
+            return (KotlinMetadataTinyRemapperExtension) klass.getField("INSTANCE").get(null);
+        } catch (ClassNotFoundException | IllegalAccessException | NoSuchFieldException e) {
+            throw new RuntimeException("Failed to create instance", e);
+        }
+    }
 
-	private static Stream<URL> getClassUrls(Class<?>... classes) {
-		return Arrays.stream(classes).map(klass -> klass.getProtectionDomain().getCodeSource().getLocation());
-	}
+    @Override
+    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+        if (PARENT_PACKAGES.stream().anyMatch(name::startsWith)) {
+            return LoomGradlePlugin.class.getClassLoader().loadClass(name);
+        }
 
-	/**
-	 * Load the {@link KotlinMetadataTinyRemapperExtensionImpl} class on the new classloader.
-	 */
-	public KotlinMetadataTinyRemapperExtension getTinyRemapperExtension() {
-		try {
-			Class<?> klass = this.loadClass(KotlinMetadataTinyRemapperExtensionImpl.class.getCanonicalName());
-			return (KotlinMetadataTinyRemapperExtension) klass.getField("INSTANCE").get(null);
-		} catch (ClassNotFoundException | IllegalAccessException | NoSuchFieldException e) {
-			throw new RuntimeException("Failed to create instance", e);
-		}
-	}
+        return super.loadClass(name, resolve);
+    }
 }

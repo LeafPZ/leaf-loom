@@ -52,19 +52,22 @@ import dev.aoqia.leaf.loom.util.Constants;
 
 @DisableCachingByDefault
 public abstract class ExtractNativesTask extends Sync {
-	@Inject
-	public ExtractNativesTask() {
-		// Is there a lazy way to do this for many files? - Doesnt seem there is...
-		for (File nativeFile : getProject().getConfigurations().getByName(Constants.Configurations.ZOMBOID_NATIVES).getFiles()) {
-			from(getProject().zipTree(nativeFile), copySpec -> {
-				copySpec.exclude("META-INF/**");
-				// Fix pre LWJGL 3 versions on Macos. See: https://github.com/FabricMC/fabric-loom/issues/955
-				copySpec.rename(s -> s.replace(".jnilib", ".dylib"));
-			});
-		}
+    @Inject
+    public ExtractNativesTask() {
+        // Is there a lazy way to do this for many files? - Doesnt seem there is...
+        for (File nativeFile : getProject().getConfigurations()
+            .getByName(Constants.Configurations.ZOMBOID_NATIVES)
+            .getFiles())
+        {
+            from(getProject().zipTree(nativeFile), copySpec -> {
+                copySpec.exclude("META-INF/**");
+                // Fix pre LWJGL 3 versions on Macos. See: https://github.com/FabricMC/fabric-loom/issues/955
+                copySpec.rename(s -> s.replace(".jnilib", ".dylib"));
+            });
+        }
 
-		into(LoomGradleExtension.get(getProject()).getFiles().getNativesDirectory(getProject()));
+        into(LoomGradleExtension.get(getProject()).getFiles().getNativesDirectory(getProject()));
 
-		setDescription("Downloads and extracts the minecraft natives");
-	}
+        setDescription("Downloads and extracts the minecraft natives");
+    }
 }

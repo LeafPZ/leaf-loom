@@ -58,72 +58,81 @@ import static dev.aoqia.leaf.loom.configuration.mods.ModConfigurationRemapper.MI
 import static dev.aoqia.leaf.loom.configuration.mods.ModConfigurationRemapper.replaceIfNullOrEmpty;
 
 public interface ArtifactRef {
-	Path path();
+    void applyToConfiguration(Project project, NamedDomainObjectProvider<? extends Configuration> configuration);
 
-	@Nullable Path sources();
+    @Nullable
+    String classifier();
 
-	String name();
+    String group();
 
-	String group();
+    String name();
 
-	String version();
+    Path path();
 
-	@Nullable String classifier();
+    @Nullable
+    Path sources();
 
-	void applyToConfiguration(Project project, NamedDomainObjectProvider<? extends Configuration> configuration);
+    String version();
 
-	record ResolvedArtifactRef(ResolvedArtifact artifact, @Nullable Path sources) implements ArtifactRef {
-		@Override
-		public Path path() {
-			return artifact.getFile().toPath();
-		}
+    record FileArtifactRef(Path path, String group, String name, String version) implements ArtifactRef {
+        @Override
+        public @Nullable Path sources() {
+            return null;
+        }
 
-		public String group() {
-			return replaceIfNullOrEmpty(artifact.getModuleVersion().getId().getGroup(), () -> MISSING_GROUP);
-		}
+        @Override
+        public @Nullable String classifier() {
+            return null;
+        }
 
-		public String name() {
-			return artifact.getModuleVersion().getId().getName();
-		}
+        @Override
+        public void applyToConfiguration(Project project,
+            NamedDomainObjectProvider<? extends Configuration> configuration)
+        {
+            final DependencyHandler dependencies = project.getDependencies();
 
-		public String version() {
-			return replaceIfNullOrEmpty(artifact.getModuleVersion().getId().getVersion(), () -> Checksum.of(artifact.getFile()).sha256().hex(10));
-		}
+            dependencies.add(configuration.getName(), project.files(path.toFile()));
+        }
+    }
 
-		public String classifier() {
-			return artifact.getClassifier();
-		}
+    record ResolvedArtifactRef(ResolvedArtifact artifact, @Nullable Path sources) implements ArtifactRef {
+        @Override
+        public Path path() {
+            return artifact.getFile().toPath();
+        }
 
-		@Override
-		public void applyToConfiguration(Project project, NamedDomainObjectProvider<? extends Configuration> configuration) {
-			final DependencyHandler dependencies = project.getDependencies();
+        public String group() {
+            return replaceIfNullOrEmpty(artifact.getModuleVersion().getId().getGroup(), () -> MISSING_GROUP);
+        }
 
-			Dependency dep = dependencies.create(artifact.getModuleVersion() + (artifact.getClassifier() == null ? "" : ':' + artifact.getClassifier())); // the owning module of the artifact
+        public String name() {
+            return artifact.getModuleVersion().getId().getName();
+        }
 
-			if (dep instanceof ModuleDependency moduleDependency) {
-				moduleDependency.setTransitive(false);
-			}
+        public String version() {
+            return replaceIfNullOrEmpty(artifact.getModuleVersion().getId().getVersion(),
+                () -> Checksum.of(artifact.getFile()).sha256().hex(10));
+        }
 
-			dependencies.add(configuration.getName(), dep);
-		}
-	}
+        public String classifier() {
+            return artifact.getClassifier();
+        }
 
-	record FileArtifactRef(Path path, String group, String name, String version) implements ArtifactRef {
-		@Override
-		public @Nullable Path sources() {
-			return null;
-		}
+        @Override
+        public void applyToConfiguration(Project project,
+            NamedDomainObjectProvider<? extends Configuration> configuration)
+        {
+            final DependencyHandler dependencies = project.getDependencies();
 
-		@Override
-		public @Nullable String classifier() {
-			return null;
-		}
+            // the owning module of the artifact
+            Dependency dep = dependencies.create(
+                artifact.getModuleVersion() + (artifact.getClassifier() == null ? "" : ':' + artifact.getClassifier()));
 
-		@Override
-		public void applyToConfiguration(Project project, NamedDomainObjectProvider<? extends Configuration> configuration) {
-			final DependencyHandler dependencies = project.getDependencies();
+            if (dep instanceof ModuleDependency moduleDependency) {
+                moduleDependency.setTransitive(false);
+            }
 
-			dependencies.add(configuration.getName(), project.files(path.toFile()));
-		}
-	}
+            dependencies.add(configuration.getName(), dep);
+        }
+    }
 }

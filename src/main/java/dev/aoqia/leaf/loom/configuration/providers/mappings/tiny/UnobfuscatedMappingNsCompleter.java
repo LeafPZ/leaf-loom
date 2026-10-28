@@ -60,189 +60,214 @@ import net.fabricmc.mappingio.adapter.ForwardingMappingVisitor;
  * names only if those intermediary names are equal to the named names.
  */
 public final class UnobfuscatedMappingNsCompleter extends ForwardingMappingVisitor {
-	private final String testNs;
-	private final Map<String, String> alternatives;
-	private int testNsId;
-	private int[] alternativesMapping;
+    private final Map<String, String> alternatives;
+    private int[] alternativesMapping;
+    private String[] dstNames;
+    private boolean[] lastMethodUnobf;
 
-	private String srcName;
-	private String[] dstNames;
-	private boolean[] unobf;
-	private boolean[] lastMethodUnobf;
+    private boolean relayHeaderOrMetadata;
+    private String srcName;
+    private final String testNs;
+    private int testNsId;
 
-	private boolean relayHeaderOrMetadata;
+    private boolean[] unobf;
 
-	public UnobfuscatedMappingNsCompleter(MappingVisitor next, String testNs, Map<String, String> alternatives) {
-		super(next);
+    public UnobfuscatedMappingNsCompleter(MappingVisitor next, String testNs, Map<String, String> alternatives) {
+        super(next);
 
-		this.testNs = testNs;
-		this.alternatives = alternatives;
-	}
+        this.testNs = testNs;
+        this.alternatives = alternatives;
+    }
 
-	@Override
-	public boolean visitHeader() throws IOException {
-		relayHeaderOrMetadata = next.visitHeader();
+    @Override
+    public boolean visitClass(String srcName) throws IOException {
+        this.srcName = srcName;
 
-		return true;
-	}
+        return next.visitClass(srcName);
+    }
 
-	@Override
-	public void visitNamespaces(String srcNamespace, List<String> dstNamespaces) throws IOException {
-		int count = dstNamespaces.size();
-		testNsId = -1;
-		alternativesMapping = new int[count];
-		dstNames = new String[count];
-		unobf = new boolean[count + 1]; // contains src ns as well
-		lastMethodUnobf = new boolean[count + 1]; // contains src ns as well
+    @Override
+    public boolean visitContent() throws IOException {
+        // for in-content metadata
+        relayHeaderOrMetadata = true;
 
-		for (int i = 0; i < count; i++) {
-			String dst = dstNamespaces.get(i);
+        return next.visitContent();
+    }
 
-			if (testNs.equals(dst)) {
-				testNsId = i;
-			}
+    @Override
+    public void visitDstName(MappedElementKind targetKind, int namespace, String name) {
+        dstNames[namespace] = name;
+    }
 
-			String src = alternatives.get(dst);
-			int srcIdx;
+    @Override
+    public boolean visitElementContent(MappedElementKind targetKind) throws IOException {
+        for (int ns : alternativesMapping) {
+            // offset by 1 bc src ns is -1
+            int idx = ns + 1;
 
-			if (src == null) {
-				srcIdx = i;
-			} else if (src.equals(srcNamespace)) {
-				srcIdx = -1;
-			} else {
-				srcIdx = dstNamespaces.indexOf(src);
-				if (srcIdx < 0) throw new RuntimeException("invalid alternative mapping ns "+src+": not in "+dstNamespaces+" or "+srcNamespace);
-			}
+            if (targetKind == MappedElementKind.METHOD_ARG || targetKind == MappedElementKind.METHOD_VAR) {
+                unobf[idx] = lastMethodUnobf[idx];
+            } else if (ns == testNsId) {
+                unobf[idx] = true;
 
-			alternativesMapping[i] = srcIdx;
-		}
+                if (targetKind == MappedElementKind.METHOD) {
+                    lastMethodUnobf[idx] = true;
+                }
+            } else if (!unobf[idx]) {
+                // only check each ns once
+                String name = ns == -1 ? srcName : dstNames[ns];
+                String testName = dstNames[testNsId];
 
-		if (testNsId == -1 && !testNs.equals(srcNamespace)) throw new RuntimeException("test namespace " + testNs + " not present in src and dst namespaces!");
+                if (testName != null && testName.equals(name)) {
+                    unobf[idx] = true;
 
-		if (relayHeaderOrMetadata) next.visitNamespaces(srcNamespace, dstNamespaces);
-	}
+                    if (targetKind == MappedElementKind.METHOD) {
+                        lastMethodUnobf[idx] = true;
+                    }
+                }
+            }
+        }
 
-	@Override
-	public void visitMetadata(String key, @Nullable String value) throws IOException {
-		if (relayHeaderOrMetadata) next.visitMetadata(key, value);
-	}
+        nsLoop:
+        for (int i = 0; i < dstNames.length; i++) {
+            String name = dstNames[i];
 
-	@Override
-	public boolean visitContent() throws IOException {
-		relayHeaderOrMetadata = true; // for in-content metadata
+            if (name == null) {
+                int src = i;
+                long visited = 1L << src;
 
-		return next.visitContent();
-	}
+                do {
+                    int newSrc = alternativesMapping[src];
 
-	@Override
-	public boolean visitClass(String srcName) throws IOException {
-		this.srcName = srcName;
+                    // mapping to src name
+                    if (newSrc < 0) {
+                        if (unobf[newSrc + 1]) {
+                            // srcName must never be null
+                            name = srcName;
+                            break;
+                        } else {
+                            continue nsLoop;
+                        }
+                    } else if (newSrc == src) {
+                        // no-op (identity) mapping, explicit in case src > 64
 
-		return next.visitClass(srcName);
-	}
+                        // always null
+                        continue nsLoop;
+                    } else if ((visited & 1L << newSrc) != 0) {
+                        // cyclic mapping
 
-	@Override
-	public boolean visitField(String srcName, @Nullable String srcDesc) throws IOException {
-		this.srcName = srcName;
+                        // always null
+                        continue nsLoop;
+                    } else {
+                        if (unobf[newSrc + 1]) {
+                            src = newSrc;
+                            name = dstNames[src];
+                            visited |= 1L << src;
+                        } else {
+                            continue nsLoop;
+                        }
+                    }
+                } while (name == null);
 
-		return next.visitField(srcName, srcDesc);
-	}
+                assert name != null;
+            }
 
-	@Override
-	public boolean visitMethod(String srcName, @Nullable String srcDesc) throws IOException {
-		this.srcName = srcName;
+            next.visitDstName(targetKind, i, name);
+        }
 
-		return next.visitMethod(srcName, srcDesc);
-	}
+        Arrays.fill(dstNames, null);
+        Arrays.fill(unobf, false);
+        Arrays.fill(lastMethodUnobf, false);
 
-	@Override
-	public boolean visitMethodArg(int argPosition, int lvIndex, @Nullable String srcName) throws IOException {
-		this.srcName = srcName;
+        return next.visitElementContent(targetKind);
+    }
 
-		return next.visitMethodArg(argPosition, lvIndex, srcName);
-	}
+    @Override
+    public boolean visitField(String srcName, @Nullable String srcDesc) throws IOException {
+        this.srcName = srcName;
 
-	@Override
-	public boolean visitMethodVar(int lvtRowIndex, int lvIndex, int startOpIdx, int endOpIdx, @Nullable String srcName) throws IOException {
-		this.srcName = srcName;
+        return next.visitField(srcName, srcDesc);
+    }
 
-		return next.visitMethodVar(lvtRowIndex, lvIndex, startOpIdx, endOpIdx, srcName);
-	}
+    @Override
+    public boolean visitHeader() throws IOException {
+        relayHeaderOrMetadata = next.visitHeader();
 
-	@Override
-	public void visitDstName(MappedElementKind targetKind, int namespace, String name) {
-		dstNames[namespace] = name;
-	}
+        return true;
+    }
 
-	@Override
-	public boolean visitElementContent(MappedElementKind targetKind) throws IOException {
-		for (int ns : alternativesMapping) {
-			int idx = ns + 1; // offset by 1 bc src ns is -1
+    @Override
+    public void visitMetadata(String key, @Nullable String value) throws IOException {
+        if (relayHeaderOrMetadata) {
+            next.visitMetadata(key, value);
+        }
+    }
 
-			if (targetKind == MappedElementKind.METHOD_ARG || targetKind == MappedElementKind.METHOD_VAR) {
-				unobf[idx] = lastMethodUnobf[idx];
-			} else if (ns == testNsId) {
-				unobf[idx] = true;
+    @Override
+    public boolean visitMethod(String srcName, @Nullable String srcDesc) throws IOException {
+        this.srcName = srcName;
 
-				if (targetKind == MappedElementKind.METHOD) {
-					lastMethodUnobf[idx] = true;
-				}
-			} else if (!unobf[idx]) { // only check each ns once
-				String name = ns == -1 ? srcName : dstNames[ns];
-				String testName = dstNames[testNsId];
+        return next.visitMethod(srcName, srcDesc);
+    }
 
-				if (testName != null && testName.equals(name)) {
-					unobf[idx] = true;
+    @Override
+    public boolean visitMethodArg(int argPosition, int lvIndex, @Nullable String srcName) throws IOException {
+        this.srcName = srcName;
 
-					if (targetKind == MappedElementKind.METHOD) {
-						lastMethodUnobf[idx] = true;
-					}
-				}
-			}
-		}
+        return next.visitMethodArg(argPosition, lvIndex, srcName);
+    }
 
-		nsLoop: for (int i = 0; i < dstNames.length; i++) {
-			String name = dstNames[i];
+    @Override
+    public boolean visitMethodVar(int lvtRowIndex, int lvIndex, int startOpIdx, int endOpIdx, @Nullable String srcName)
+        throws IOException
+    {
+        this.srcName = srcName;
 
-			if (name == null) {
-				int src = i;
-				long visited = 1L << src;
+        return next.visitMethodVar(lvtRowIndex, lvIndex, startOpIdx, endOpIdx, srcName);
+    }
 
-				do {
-					int newSrc = alternativesMapping[src];
+    @Override
+    public void visitNamespaces(String srcNamespace, List<String> dstNamespaces) throws IOException {
+        int count = dstNamespaces.size();
+        testNsId = -1;
+        alternativesMapping = new int[count];
+        dstNames = new String[count];
+        // contains src ns as well
+        unobf = new boolean[count + 1];
+        // contains src ns as well
+        lastMethodUnobf = new boolean[count + 1];
 
-					if (newSrc < 0) { // mapping to src name
-						if (unobf[newSrc + 1]) {
-							name = srcName;
-							break; // srcName must never be null
-						} else {
-							continue nsLoop;
-						}
-					} else if (newSrc == src) { // no-op (identity) mapping, explicit in case src > 64
-						continue nsLoop; // always null
-					} else if ((visited & 1L << newSrc) != 0) { // cyclic mapping
-						continue nsLoop; // always null
-					} else {
-						if (unobf[newSrc + 1]) {
-							src = newSrc;
-							name = dstNames[src];
-							visited |= 1L << src;
-						} else {
-							continue nsLoop;
-						}
-					}
-				} while (name == null);
+        for (int i = 0; i < count; i++) {
+            String dst = dstNamespaces.get(i);
 
-				assert name != null;
-			}
+            if (testNs.equals(dst)) {
+                testNsId = i;
+            }
 
-			next.visitDstName(targetKind, i, name);
-		}
+            String src = alternatives.get(dst);
+            int srcIdx;
 
-		Arrays.fill(dstNames, null);
-		Arrays.fill(unobf, false);
-		Arrays.fill(lastMethodUnobf, false);
+            if (src == null) {
+                srcIdx = i;
+            } else if (src.equals(srcNamespace)) {
+                srcIdx = -1;
+            } else {
+                srcIdx = dstNamespaces.indexOf(src);
+                if (srcIdx < 0) {
+                    throw new RuntimeException(
+                        "invalid alternative mapping ns " + src + ": not in " + dstNamespaces + " or " + srcNamespace);
+                }
+            }
 
-		return next.visitElementContent(targetKind);
-	}
+            alternativesMapping[i] = srcIdx;
+        }
+
+        if (testNsId == -1 && !testNs.equals(srcNamespace)) {
+            throw new RuntimeException("test namespace " + testNs + " not present in src and dst namespaces!");
+        }
+
+        if (relayHeaderOrMetadata) {
+            next.visitNamespaces(srcNamespace, dstNamespaces);
+        }
+    }
 }

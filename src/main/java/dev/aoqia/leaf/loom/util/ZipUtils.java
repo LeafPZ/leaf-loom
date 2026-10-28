@@ -74,299 +74,357 @@ import org.objectweb.asm.ClassWriter;
 import dev.aoqia.leaf.loom.LoomGradlePlugin;
 
 public class ZipUtils {
-	public static boolean isZip(Path zip) throws IOException {
-		if (Files.notExists(zip)) {
-			throw new NoSuchFileException("Cannot check if '" + zip + "' is a zip because it doesn't exist!");
-		}
+    public static void add(Path zip, Iterable<Pair<String, byte[]>> files) throws IOException {
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, true)) {
+            for (Pair<String, byte[]> pair : files) {
+                Path fsPath = fs.get().getPath(pair.left());
+                Path fsPathParent = fsPath.getParent();
+                if (fsPathParent != null) {
+                    Files.createDirectories(fsPathParent);
+                }
 
-		if (Files.isRegularFile(zip)) {
-			try (DataInputStream in = new DataInputStream(Files.newInputStream(zip))) {
-				int header = in.readInt();
-				// See https://en.wikipedia.org/wiki/List_of_file_signatures
-				return header == 0x504B0304 || header == 0x504B0506 || header == 0x504B0708;
-			}
-		} else {
-			return false;
-		}
-	}
+                Files.write(fsPath, pair.right(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            }
+        }
+    }
 
-	public static boolean contains(Path zip, String path) {
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false)) {
-			Path fsPath = fs.get().getPath(path);
+    public static void add(Path zip, String path, byte[] bytes) throws IOException {
+        add(zip, Collections.singleton(new Pair<>(path, bytes)));
+    }
 
-			return Files.exists(fsPath);
-		} catch (IOException e) {
-			throw new UncheckedIOException("Failed to check file from zip", e);
-		}
-	}
+    public static void add(Path zip, String path, String str) throws IOException {
+        add(zip, path, str.getBytes(StandardCharsets.UTF_8));
+    }
 
-	public static void unpackAll(Path zip, Path output) throws IOException {
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false);
-				Stream<Path> walk = Files.walk(fs.getRoot())) {
-			Iterator<Path> iterator = walk.iterator();
+    public static boolean contains(Path zip, String path) {
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false)) {
+            Path fsPath = fs.get().getPath(path);
 
-			while (iterator.hasNext()) {
-				Path fsPath = iterator.next();
-				if (!Files.isRegularFile(fsPath)) continue;
-				Path dstPath = output.resolve(fs.getRoot().relativize(fsPath).toString());
-				Path dstPathParent = dstPath.getParent();
-				if (dstPathParent != null) Files.createDirectories(dstPathParent);
-				Files.copy(fsPath, dstPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-			}
-		}
-	}
+            return Files.exists(fsPath);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to check file from zip", e);
+        }
+    }
 
-	public static byte @Nullable [] unpackNullable(Path zip, String path) throws IOException {
-		try {
-			return unpack(zip, path);
-		} catch (NoSuchFileException e) {
-			return null;
-		}
-	}
+    public static boolean isZip(Path zip) throws IOException {
+        if (Files.notExists(zip)) {
+            throw new NoSuchFileException("Cannot check if '" + zip + "' is a zip because it doesn't exist!");
+        }
 
-	public static byte[] unpack(Path zip, String path) throws IOException {
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false)) {
-			return fs.readAllBytes(path);
-		}
-	}
+        if (Files.isRegularFile(zip)) {
+            try (DataInputStream in = new DataInputStream(Files.newInputStream(zip))) {
+                int header = in.readInt();
+                // See https://en.wikipedia.org/wiki/List_of_file_signatures
+                return header == 0x504B0304 || header == 0x504B0506 || header == 0x504B0708;
+            }
+        } else {
+            return false;
+        }
+    }
 
-	public static <T> T unpackGson(Path zip, String path, Class<T> clazz) throws IOException {
-		final byte[] bytes = unpack(zip, path);
-		return LoomGradlePlugin.GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), clazz);
-	}
+    public static void pack(Path from, Path zip) throws IOException {
+        Files.deleteIfExists(zip);
 
-	@Nullable public static <T> T unpackGsonNullable(Path zip, String path, Class<T> clazz) throws IOException {
-		try {
-			return unpackGson(zip, path, clazz);
-		} catch (NoSuchFileException e) {
-			return null;
-		}
-	}
+        if (!Files.isDirectory(from)) {
+            throw new IllegalArgumentException(from + " is not a directory!");
+        }
 
-	public static <T> T unpackJson(Path zip, String path, Class<T> clazz) throws IOException {
-		final byte[] bytes = unpack(zip, path);
-		return LoomGradlePlugin.GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), clazz);
-	}
+        int count = 0;
 
-	public static void pack(Path from, Path zip) throws IOException {
-		Files.deleteIfExists(zip);
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, true);
+             Stream<Path> walk = Files.walk(from))
+        {
+            Iterator<Path> iterator = walk.iterator();
 
-		if (!Files.isDirectory(from)) throw new IllegalArgumentException(from + " is not a directory!");
+            while (iterator.hasNext()) {
+                Path fromPath = iterator.next();
+                if (!Files.isRegularFile(fromPath)) {
+                    continue;
+                }
 
-		int count = 0;
+                Path fsPath = fs.get().getPath(from.relativize(fromPath).toString());
+                Path fsPathParent = fsPath.getParent();
+                if (fsPathParent != null) {
+                    Files.createDirectories(fsPathParent);
+                }
 
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, true);
-				Stream<Path> walk = Files.walk(from)) {
-			Iterator<Path> iterator = walk.iterator();
+                Files.copy(fromPath, fsPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                count++;
+            }
+        }
 
-			while (iterator.hasNext()) {
-				Path fromPath = iterator.next();
-				if (!Files.isRegularFile(fromPath)) continue;
-				Path fsPath = fs.get().getPath(from.relativize(fromPath).toString());
-				Path fsPathParent = fsPath.getParent();
-				if (fsPathParent != null) Files.createDirectories(fsPathParent);
-				Files.copy(fromPath, fsPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-				count++;
-			}
-		}
+        if (count == 0) {
+            throw new IOException("Noting packed into %s from %s".formatted(zip, from));
+        }
+    }
 
-		if (count == 0) {
-			throw new IOException("Noting packed into %s from %s".formatted(zip, from));
-		}
-	}
+    public static void replace(Path zip, String path, byte[] bytes) throws IOException {
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, true)) {
+            Path fsPath = fs.get().getPath(path);
 
-	public static void add(Path zip, String path, String str) throws IOException {
-		add(zip, path, str.getBytes(StandardCharsets.UTF_8));
-	}
+            if (Files.exists(fsPath)) {
+                Files.write(fsPath, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            } else {
+                throw new NoSuchFileException(fsPath.toString());
+            }
+        }
+    }
 
-	public static void add(Path zip, String path, byte[] bytes) throws IOException {
-		add(zip, Collections.singleton(new Pair<>(path, bytes)));
-	}
+    public static int transform(Path zip, Collection<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms)
+        throws IOException
+    {
+        return transform(zip, transforms.stream());
+    }
 
-	public static void add(Path zip, Iterable<Pair<String, byte[]>> files) throws IOException {
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, true)) {
-			for (Pair<String, byte[]> pair : files) {
-				Path fsPath = fs.get().getPath(pair.left());
-				Path fsPathParent = fsPath.getParent();
-				if (fsPathParent != null) Files.createDirectories(fsPathParent);
-				Files.write(fsPath, pair.right(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-			}
-		}
-	}
+    public static int transform(Path zip, Map<String, UnsafeUnaryOperator<byte[]>> transforms) throws IOException {
+        int replacedCount = 0;
 
-	public static void replace(Path zip, String path, byte[] bytes) throws IOException {
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, true)) {
-			Path fsPath = fs.get().getPath(path);
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false)) {
+            for (Map.Entry<String, UnsafeUnaryOperator<byte[]>> entry : transforms.entrySet()) {
+                Path fsPath = fs.get().getPath(entry.getKey());
 
-			if (Files.exists(fsPath)) {
-				Files.write(fsPath, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-			} else {
-				throw new NoSuchFileException(fsPath.toString());
-			}
-		}
-	}
+                if (Files.exists(fsPath)) {
+                    Files.write(fsPath, entry.getValue().apply(Files.readAllBytes(fsPath)), StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING);
+                    replacedCount++;
+                }
+            }
+        }
 
-	public static int transformString(Path zip, Collection<Pair<String, UnsafeUnaryOperator<String>>> transforms) throws IOException {
-		return transformString(zip, transforms.stream());
-	}
+        return replacedCount;
+    }
 
-	public static int transformString(Path zip, Stream<Pair<String, UnsafeUnaryOperator<String>>> transforms) throws IOException {
-		return transformString(zip, collectTransformersStream(transforms));
-	}
+    public static int transform(Path zip, Stream<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms)
+        throws IOException
+    {
+        return transform(zip, collectTransformersStream(transforms));
+    }
 
-	public static int transformString(Path zip, Map<String, UnsafeUnaryOperator<String>> transforms) throws IOException {
-		return transformMapped(zip, transforms, bytes -> new String(bytes, StandardCharsets.UTF_8), s -> s.getBytes(StandardCharsets.UTF_8));
-	}
+    public static int transformAsync(Path zip, Collection<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms)
+        throws IOException
+    {
+        return transformAsync(zip, Executors::newWorkStealingPool, transforms.stream());
+    }
 
-	public static <T> int transformJson(Class<T> typeOfT, Path zip, Collection<Pair<String, UnsafeUnaryOperator<T>>> transforms) throws IOException {
-		return transformJson(typeOfT, zip, transforms.stream());
-	}
+    public static int transformAsync(Path zip, Stream<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms)
+        throws IOException
+    {
+        return transformAsync(zip, Executors::newWorkStealingPool, collectTransformersStream(transforms));
+    }
 
-	public static <T> int transformJson(Class<T> typeOfT, Path zip, Stream<Pair<String, UnsafeUnaryOperator<T>>> transforms) throws IOException {
-		return transformJson(typeOfT, zip, collectTransformersStream(transforms));
-	}
+    public static int transformAsync(Path zip, Supplier<ExecutorService> executorSupplier,
+        Collection<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms) throws IOException
+    {
+        return transformAsync(zip, executorSupplier, transforms.stream());
+    }
 
-	public static <T> int transformJson(Class<T> typeOfT, Path zip, Map<String, UnsafeUnaryOperator<T>> transforms) throws IOException {
-		return transformMapped(zip, transforms, bytes -> LoomGradlePlugin.GSON.fromJson(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8), typeOfT),
-				s -> LoomGradlePlugin.GSON.toJson(s, typeOfT).getBytes(StandardCharsets.UTF_8));
-	}
+    public static int transformAsync(Path zip, Supplier<ExecutorService> executorSupplier,
+        Map<String, UnsafeUnaryOperator<byte[]>> transforms) throws IOException
+    {
+        final AtomicInteger replacedCount = new AtomicInteger(0);
+        final Collection<Future<?>> futures = new java.util.ArrayList<>();
 
-	public static <T> void transformJson(Class<T> typeOfT, Path zip, String path, UnsafeUnaryOperator<T> transformer) throws IOException {
-		int transformed = transformJson(typeOfT, zip, Map.of(path, transformer));
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false);
+             ExecutorService service = executorSupplier.get())
+        {
+            for (Map.Entry<String, UnsafeUnaryOperator<byte[]>> entry : transforms.entrySet()) {
+                futures.add(service.submit(() -> {
+                    Path fsPath = fs.get().getPath(entry.getKey());
 
-		if (transformed != 1) {
-			throw new IOException("Failed to transform " + path + " in " + zip);
-		}
-	}
+                    if (Files.exists(fsPath)) {
+                        try {
+                            Files.write(fsPath, entry.getValue().apply(Files.readAllBytes(fsPath)),
+                                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                            replacedCount.incrementAndGet();
+                        } catch (IOException ioe) {
+                            throw new UncheckedIOException("Failed to apply transformation to " + fsPath, ioe);
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to apply transformation to " + fsPath, e);
+                        }
+                    }
+                }));
+            }
 
-	public static int transform(Path zip, Collection<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms) throws IOException {
-		return transform(zip, transforms.stream());
-	}
+            for (Future<?> future : futures) {
+                try {
+                    future.get();
+                } catch (InterruptedException e) {
+                    throw new IOException("Transformation was interrupted", e);
+                } catch (ExecutionException e) {
+                    Throwable cause = e.getCause();
 
-	public static int transform(Path zip, Stream<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms) throws IOException {
-		return transform(zip, collectTransformersStream(transforms));
-	}
+                    if (cause instanceof UncheckedIOException uncheckedIOException) {
+                        throw uncheckedIOException.getCause();
+                    } else if (cause instanceof RuntimeException runtimeException) {
+                        throw runtimeException;
+                    } else {
+                        throw new IOException("Failed to apply transformation", cause);
+                    }
+                }
+            }
+        }
 
-	public static <T> int transformMapped(Path zip, Map<String, UnsafeUnaryOperator<T>> transforms, Function<byte[], T> deserializer, Function<T, byte[]> serializer) throws IOException {
-		Map<String, UnsafeUnaryOperator<byte[]>> newTransforms = new HashMap<>();
+        return replacedCount.get();
+    }
 
-		for (Map.Entry<String, UnsafeUnaryOperator<T>> entry : transforms.entrySet()) {
-			if (entry.getValue() != null) {
-				newTransforms.put(entry.getKey(), bytes -> {
-					return serializer.apply(entry.getValue().apply(deserializer.apply(bytes)));
-				});
-			}
-		}
+    public static int transformAsync(Path zip, Supplier<ExecutorService> executorSupplier,
+        Stream<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms) throws IOException
+    {
+        return transformAsync(zip, executorSupplier, collectTransformersStream(transforms));
+    }
 
-		return transform(zip, newTransforms);
-	}
+    public static <T> int transformJson(Class<T> typeOfT, Path zip,
+        Collection<Pair<String, UnsafeUnaryOperator<T>>> transforms) throws IOException
+    {
+        return transformJson(typeOfT, zip, transforms.stream());
+    }
 
-	public static int transform(Path zip, Map<String, UnsafeUnaryOperator<byte[]>> transforms) throws IOException {
-		int replacedCount = 0;
+    public static <T> int transformJson(Class<T> typeOfT, Path zip, Map<String, UnsafeUnaryOperator<T>> transforms)
+        throws IOException
+    {
+        return transformMapped(zip, transforms,
+            bytes -> LoomGradlePlugin.GSON
+                .fromJson(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8), typeOfT),
+            s -> LoomGradlePlugin.GSON.toJson(s, typeOfT).getBytes(StandardCharsets.UTF_8));
+    }
 
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false)) {
-			for (Map.Entry<String, UnsafeUnaryOperator<byte[]>> entry : transforms.entrySet()) {
-				Path fsPath = fs.get().getPath(entry.getKey());
+    public static <T> int transformJson(Class<T> typeOfT, Path zip,
+        Stream<Pair<String, UnsafeUnaryOperator<T>>> transforms) throws IOException
+    {
+        return transformJson(typeOfT, zip, collectTransformersStream(transforms));
+    }
 
-				if (Files.exists(fsPath)) {
-					Files.write(fsPath, entry.getValue().apply(Files.readAllBytes(fsPath)), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-					replacedCount++;
-				}
-			}
-		}
+    public static <T> void transformJson(Class<T> typeOfT, Path zip, String path, UnsafeUnaryOperator<T> transformer)
+        throws IOException
+    {
+        int transformed = transformJson(typeOfT, zip, Map.of(path, transformer));
 
-		return replacedCount;
-	}
+        if (transformed != 1) {
+            throw new IOException("Failed to transform " + path + " in " + zip);
+        }
+    }
 
-	public static int transformAsync(Path zip, Collection<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms) throws IOException {
-		return transformAsync(zip, Executors::newWorkStealingPool, transforms.stream());
-	}
+    public static <T> int transformMapped(Path zip, Map<String, UnsafeUnaryOperator<T>> transforms,
+        Function<byte[], T> deserializer, Function<T, byte[]> serializer) throws IOException
+    {
+        Map<String, UnsafeUnaryOperator<byte[]>> newTransforms = new HashMap<>();
 
-	public static int transformAsync(Path zip, Stream<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms) throws IOException {
-		return transformAsync(zip, Executors::newWorkStealingPool, collectTransformersStream(transforms));
-	}
+        for (Map.Entry<String, UnsafeUnaryOperator<T>> entry : transforms.entrySet()) {
+            if (entry.getValue() != null) {
+                newTransforms.put(entry.getKey(), bytes -> {
+                    return serializer.apply(entry.getValue().apply(deserializer.apply(bytes)));
+                });
+            }
+        }
 
-	public static int transformAsync(Path zip, Supplier<ExecutorService> executorSupplier, Collection<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms) throws IOException {
-		return transformAsync(zip, executorSupplier, transforms.stream());
-	}
+        return transform(zip, newTransforms);
+    }
 
-	public static int transformAsync(Path zip, Supplier<ExecutorService> executorSupplier, Stream<Pair<String, UnsafeUnaryOperator<byte[]>>> transforms) throws IOException {
-		return transformAsync(zip, executorSupplier, collectTransformersStream(transforms));
-	}
+    public static int transformString(Path zip, Collection<Pair<String, UnsafeUnaryOperator<String>>> transforms)
+        throws IOException
+    {
+        return transformString(zip, transforms.stream());
+    }
 
-	public static int transformAsync(Path zip, Supplier<ExecutorService> executorSupplier, Map<String, UnsafeUnaryOperator<byte[]>> transforms) throws IOException {
-		final AtomicInteger replacedCount = new AtomicInteger(0);
-		final Collection<Future<?>> futures = new java.util.ArrayList<>();
+    public static int transformString(Path zip, Map<String, UnsafeUnaryOperator<String>> transforms)
+        throws IOException
+    {
+        return transformMapped(zip, transforms, bytes -> new String(bytes, StandardCharsets.UTF_8),
+            s -> s.getBytes(StandardCharsets.UTF_8));
+    }
 
-		try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false);
-				ExecutorService service = executorSupplier.get()) {
-			for (Map.Entry<String, UnsafeUnaryOperator<byte[]>> entry : transforms.entrySet()) {
-				futures.add(service.submit(() -> {
-					Path fsPath = fs.get().getPath(entry.getKey());
+    public static int transformString(Path zip, Stream<Pair<String, UnsafeUnaryOperator<String>>> transforms)
+        throws IOException
+    {
+        return transformString(zip, collectTransformersStream(transforms));
+    }
 
-					if (Files.exists(fsPath)) {
-						try {
-							Files.write(fsPath, entry.getValue().apply(Files.readAllBytes(fsPath)), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-							replacedCount.incrementAndGet();
-						} catch (IOException ioe) {
-							throw new UncheckedIOException("Failed to apply transformation to " + fsPath, ioe);
-						} catch (Exception e) {
-							throw new RuntimeException("Failed to apply transformation to " + fsPath, e);
-						}
-					}
-				}));
-			}
+    public static byte[] unpack(Path zip, String path) throws IOException {
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false)) {
+            return fs.readAllBytes(path);
+        }
+    }
 
-			for (Future<?> future : futures) {
-				try {
-					future.get();
-				} catch (InterruptedException e) {
-					throw new IOException("Transformation was interrupted", e);
-				} catch (ExecutionException e) {
-					Throwable cause = e.getCause();
+    public static void unpackAll(Path zip, Path output) throws IOException {
+        try (FileSystemUtil.Delegate fs = FileSystemUtil.getJarFileSystem(zip, false);
+             Stream<Path> walk = Files.walk(fs.getRoot()))
+        {
+            Iterator<Path> iterator = walk.iterator();
 
-					if (cause instanceof UncheckedIOException uncheckedIOException) {
-						throw uncheckedIOException.getCause();
-					} else if (cause instanceof RuntimeException runtimeException) {
-						throw runtimeException;
-					} else {
-						throw new IOException("Failed to apply transformation", cause);
-					}
-				}
-			}
-		}
+            while (iterator.hasNext()) {
+                Path fsPath = iterator.next();
+                if (!Files.isRegularFile(fsPath)) {
+                    continue;
+                }
 
-		return replacedCount.get();
-	}
+                Path dstPath = output.resolve(fs.getRoot().relativize(fsPath).toString());
+                Path dstPathParent = dstPath.getParent();
+                if (dstPathParent != null) {
+                    Files.createDirectories(dstPathParent);
+                }
 
-	@FunctionalInterface
-	public interface UnsafeUnaryOperator<T> {
-		T apply(T arg) throws IOException;
-	}
+                Files.copy(fsPath, dstPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+            }
+        }
+    }
 
-	public interface AsmClassOperator extends UnsafeUnaryOperator<byte[]> {
-		ClassVisitor visit(ClassVisitor classVisitor);
+    public static <T> T unpackGson(Path zip, String path, Class<T> clazz) throws IOException {
+        final byte[] bytes = unpack(zip, path);
+        return LoomGradlePlugin.GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), clazz);
+    }
 
-		@Override
-		default byte[] apply(byte[] arg) throws IOException {
-			final ClassReader reader = new ClassReader(arg);
-			final ClassWriter writer = new ClassWriter(0);
+    @Nullable
+    public static <T> T unpackGsonNullable(Path zip, String path, Class<T> clazz) throws IOException {
+        try {
+            return unpackGson(zip, path, clazz);
+        } catch (NoSuchFileException e) {
+            return null;
+        }
+    }
 
-			reader.accept(visit(writer), 0);
+    public static <T> T unpackJson(Path zip, String path, Class<T> clazz) throws IOException {
+        final byte[] bytes = unpack(zip, path);
+        return LoomGradlePlugin.GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), clazz);
+    }
 
-			return writer.toByteArray();
-		}
-	}
+    public static byte @Nullable [] unpackNullable(Path zip, String path) throws IOException {
+        try {
+            return unpack(zip, path);
+        } catch (NoSuchFileException e) {
+            return null;
+        }
+    }
 
-	private static <T> Map<String, UnsafeUnaryOperator<T>> collectTransformersStream(Stream<Pair<String, UnsafeUnaryOperator<T>>> transforms) {
-		Map<String, UnsafeUnaryOperator<T>> map = new HashMap<>();
-		Iterator<Pair<String, UnsafeUnaryOperator<T>>> iterator = transforms.iterator();
+    private static <T> Map<String, UnsafeUnaryOperator<T>>
+        collectTransformersStream(Stream<Pair<String, UnsafeUnaryOperator<T>>> transforms)
+    {
+        Map<String, UnsafeUnaryOperator<T>> map = new HashMap<>();
+        Iterator<Pair<String, UnsafeUnaryOperator<T>>> iterator = transforms.iterator();
 
-		while (iterator.hasNext()) {
-			Pair<String, UnsafeUnaryOperator<T>> next = iterator.next();
-			map.put(next.left(), next.right());
-		}
+        while (iterator.hasNext()) {
+            Pair<String, UnsafeUnaryOperator<T>> next = iterator.next();
+            map.put(next.left(), next.right());
+        }
 
-		return map;
-	}
+        return map;
+    }
+
+    public interface AsmClassOperator extends UnsafeUnaryOperator<byte[]> {
+        @Override
+        default byte[] apply(byte[] arg) throws IOException {
+            final ClassReader reader = new ClassReader(arg);
+            final ClassWriter writer = new ClassWriter(0);
+
+            reader.accept(visit(writer), 0);
+
+            return writer.toByteArray();
+        }
+
+        ClassVisitor visit(ClassVisitor classVisitor);
+    }
+
+    @FunctionalInterface
+    public interface UnsafeUnaryOperator<T> {
+        T apply(T arg) throws IOException;
+    }
 }

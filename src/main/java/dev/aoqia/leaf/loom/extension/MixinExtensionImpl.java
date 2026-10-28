@@ -65,100 +65,112 @@ import org.gradle.api.tasks.util.PatternSet;
 import org.jetbrains.annotations.ApiStatus;
 
 public class MixinExtensionImpl extends MixinExtensionApiImpl implements MixinExtension {
-	private boolean isDefault;
-	private final Property<String> defaultRefmapName;
-	private final Property<Boolean> inlineDependencyRefmaps;
+    private final Property<String> defaultRefmapName;
+    private final Property<Boolean> inlineDependencyRefmaps;
+    private boolean isDefault;
 
-	@Inject
-	public MixinExtensionImpl(Project project) {
-		super(project);
-		this.isDefault = true;
-		this.defaultRefmapName = project.getObjects().property(String.class)
-				.convention(project.provider(this::getDefaultMixinRefmapName));
-		this.defaultRefmapName.finalizeValueOnRead();
-		this.inlineDependencyRefmaps = project.getObjects().property(Boolean.class)
-				.convention(false);
-		this.inlineDependencyRefmaps.finalizeValueOnRead();
-	}
+    @Inject
+    public MixinExtensionImpl(Project project) {
+        super(project);
+        this.isDefault = true;
+        this.defaultRefmapName = project.getObjects()
+            .property(String.class)
+            .convention(project.provider(this::getDefaultMixinRefmapName));
+        this.defaultRefmapName.finalizeValueOnRead();
+        this.inlineDependencyRefmaps = project.getObjects().property(Boolean.class).convention(false);
+        this.inlineDependencyRefmaps.finalizeValueOnRead();
+    }
 
-	@Override
-	public Property<String> getDefaultRefmapName() {
-		if (!super.getUseLegacyMixinAp().get()) logLegacyMixinAPConfiguration();
+    @Override
+    public Stream<Configuration> getApConfigurationsStream(Function<SourceSet, String> getApConfigNameFunc) {
+        return getMixinSourceSetsStream()
+            .map(sourceSet -> project.getConfigurations().getByName(getApConfigNameFunc.apply(sourceSet)));
+    }
 
-		return defaultRefmapName;
-	}
+    @Override
+    public Property<String> getDefaultRefmapName() {
+        if (!super.getUseLegacyMixinAp().get()) {
+            logLegacyMixinAPConfiguration();
+        }
 
-	private String getDefaultMixinRefmapName() {
-		String defaultRefmapName = project.getExtensions().getByType(BasePluginExtension.class).getArchivesName().get() + "-refmap.json";
-		project.getLogger().info("Could not find refmap definition, will be using default name: " + defaultRefmapName);
-		return defaultRefmapName;
-	}
+        return defaultRefmapName;
+    }
 
-	@Override
-	protected PatternSet add0(SourceSet sourceSet, Provider<String> refmapName) {
-		if (!super.getUseLegacyMixinAp().get()) logLegacyMixinAPConfiguration();
+    @ApiStatus.Experimental
+    @Override
+    public Property<Boolean> getInlineDependencyRefmaps() {
+        return inlineDependencyRefmaps;
+    }
 
-		PatternSet pattern = new PatternSet().setIncludes(Collections.singletonList("**/*.json"));
-		MixinExtension.setMixinInformationContainer(sourceSet, new MixinExtension.MixinInformationContainer(sourceSet, refmapName, pattern));
+    @Override
+    public <T extends Task> Stream<Map.Entry<SourceSet, TaskProvider<T>>>
+        getInvokerTasksStream(String compileTaskLanguage, Class<T> taskType)
+    {
+        return getMixinSourceSetsStream().flatMap(sourceSet -> {
+            try {
+                TaskProvider<
+                    T> task = project.getTasks().named(sourceSet.getCompileTaskName(compileTaskLanguage), taskType);
+                return Stream.of(new AbstractMap.SimpleEntry<>(sourceSet, task));
+            } catch (UnknownTaskException ignored) {
+                return Stream.empty();
+            }
+        });
+    }
 
-		isDefault = false;
+    @Override
+    @Input
+    public Collection<SourceSet> getMixinSourceSets() {
+        return getMixinSourceSetsStream().collect(Collectors.toList());
+    }
 
-		return pattern;
-	}
+    @Override
+    public Stream<SourceSet> getMixinSourceSetsStream() {
+        return project.getExtensions()
+            .getByType(JavaPluginExtension.class)
+            .getSourceSets()
+            .stream()
+            .filter(sourceSet -> MixinExtension.getMixinInformationContainer(sourceSet) != null);
+    }
 
-	@Override
-	public Stream<SourceSet> getMixinSourceSetsStream() {
-		return project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().stream()
-				.filter(sourceSet -> MixinExtension.getMixinInformationContainer(sourceSet) != null);
-	}
+    @Override
+    public void init() {
+        if (isDefault) {
+            initDefault();
+        }
 
-	@Override
-	public Stream<Configuration> getApConfigurationsStream(Function<SourceSet, String> getApConfigNameFunc) {
-		return getMixinSourceSetsStream()
-				.map(sourceSet -> project.getConfigurations().getByName(getApConfigNameFunc.apply(sourceSet)));
-	}
+        isDefault = false;
+    }
 
-	@Override
-	public <T extends Task> Stream<Map.Entry<SourceSet, TaskProvider<T>>> getInvokerTasksStream(String compileTaskLanguage, Class<T> taskType) {
-		return getMixinSourceSetsStream()
-				.flatMap(sourceSet -> {
-					try {
-						TaskProvider<T> task = project.getTasks().named(sourceSet.getCompileTaskName(compileTaskLanguage), taskType);
-						return Stream.of(new AbstractMap.SimpleEntry<>(sourceSet, task));
-					} catch (UnknownTaskException ignored) {
-						return Stream.empty();
-					}
-				});
-	}
+    @Override
+    protected PatternSet add0(SourceSet sourceSet, Provider<String> refmapName) {
+        if (!super.getUseLegacyMixinAp().get()) {
+            logLegacyMixinAPConfiguration();
+        }
 
-	@Override
-	@Input
-	public Collection<SourceSet> getMixinSourceSets() {
-		return getMixinSourceSetsStream().collect(Collectors.toList());
-	}
+        PatternSet pattern = new PatternSet().setIncludes(Collections.singletonList("**/*.json"));
+        MixinExtension.setMixinInformationContainer(sourceSet,
+            new MixinExtension.MixinInformationContainer(sourceSet, refmapName, pattern));
 
-	@Override
-	public void init() {
-		if (isDefault) {
-			initDefault();
-		}
+        isDefault = false;
 
-		isDefault = false;
-	}
+        return pattern;
+    }
 
-	private void initDefault() {
-		project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().forEach(sourceSet -> {
-			if (sourceSet.getName().equals("main")) {
-				add(sourceSet);
-			} else {
-				add(sourceSet, getDefaultRefmapName().map(defaultRefmapName -> "%s-%s".formatted(sourceSet.getName(), defaultRefmapName)), x -> { });
-			}
-		});
-	}
+    private String getDefaultMixinRefmapName() {
+        String defaultRefmapName = project.getExtensions().getByType(BasePluginExtension.class).getArchivesName().get()
+            + "-refmap.json";
+        project.getLogger().info("Could not find refmap definition, will be using default name: " + defaultRefmapName);
+        return defaultRefmapName;
+    }
 
-	@ApiStatus.Experimental
-	@Override
-	public Property<Boolean> getInlineDependencyRefmaps() {
-		return inlineDependencyRefmaps;
-	}
+    private void initDefault() {
+        project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().forEach(sourceSet -> {
+            if (sourceSet.getName().equals("main")) {
+                add(sourceSet);
+            } else {
+                add(sourceSet, getDefaultRefmapName()
+                    .map(defaultRefmapName -> "%s-%s".formatted(sourceSet.getName(), defaultRefmapName)), x -> {});
+            }
+        });
+    }
 }

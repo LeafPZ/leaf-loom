@@ -51,29 +51,32 @@ import dev.aoqia.leaf.loom.util.LoomVersions;
 import dev.aoqia.leaf.loom.util.Platform;
 
 public class LoomNativeSupportLibraryProcessor extends LibraryProcessor {
-	public LoomNativeSupportLibraryProcessor(Platform platform, LibraryContext context) {
-		super(platform, context);
-	}
+    public LoomNativeSupportLibraryProcessor(Platform platform, LibraryContext context) {
+        super(platform, context);
+    }
 
-	@Override
-	public ApplicationResult getApplicationResult() {
-		if (!context.usesLWJGL3()) {
-			// Only supports LWJGL 3
-			return ApplicationResult.DONT_APPLY;
-		}
+    @Override
+    public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
+        dependencyConsumer
+            .accept(Library.fromMaven(LoomVersions.NATIVE_SUPPORT.mavenNotation(), Library.Target.LOCAL_MOD));
+        return ALLOW_ALL;
+    }
 
-		if (platform.getOperatingSystem().isMacOS() && platform.getArchitecture().isArm() && !context.supportsArm64(Platform.OperatingSystem.MAC_OS)) {
-			// Add the loom native support mod when adding ARM64 macOS support
-			return ApplicationResult.MUST_APPLY;
-		}
+    @Override
+    public ApplicationResult getApplicationResult() {
+        if (!context.usesLWJGL3()) {
+            // Only supports LWJGL 3
+            return ApplicationResult.DONT_APPLY;
+        }
 
-		// A developer can opt into this
-		return ApplicationResult.CAN_APPLY;
-	}
+        if (platform.getOperatingSystem().isMacOS() && platform.getArchitecture().isArm()
+            && !context.supportsArm64(Platform.OperatingSystem.MAC_OS))
+        {
+            // Add the loom native support mod when adding ARM64 macOS support
+            return ApplicationResult.MUST_APPLY;
+        }
 
-	@Override
-	public Predicate<Library> apply(Consumer<Library> dependencyConsumer) {
-		dependencyConsumer.accept(Library.fromMaven(LoomVersions.NATIVE_SUPPORT.mavenNotation(), Library.Target.LOCAL_MOD));
-		return ALLOW_ALL;
-	}
+        // A developer can opt into this
+        return ApplicationResult.CAN_APPLY;
+    }
 }

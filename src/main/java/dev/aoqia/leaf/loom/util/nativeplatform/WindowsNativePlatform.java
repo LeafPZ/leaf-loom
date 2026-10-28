@@ -53,190 +53,195 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 final class WindowsNativePlatform implements LoomNativePlatform.NativePlatform {
-	private static final Logger LOGGER = LoggerFactory.getLogger(WindowsNativePlatform.class);
-	private static final int CCH_RM_SESSION_KEY = 32;
+    private static final int CCH_RM_SESSION_KEY = 32;
 
-	private WindowsNativePlatform() {
-	}
+    private static final Logger LOGGER = LoggerFactory.getLogger(WindowsNativePlatform.class);
 
-	static WindowsNativePlatform create() {
-		return new WindowsNativePlatform();
-	}
+    private WindowsNativePlatform() {
+    }
 
-	@Override
-	public List<ProcessHandle> getProcessesWithLockOn(Path path) throws LoomNativePlatformException {
-		return getPidsHoldingFileHandles(path).stream()
-				.map(ProcessHandle::of)
-				.filter(Optional::isPresent)
-				.map(Optional::get)
-				.toList();
-	}
+    static WindowsNativePlatform create() {
+        return new WindowsNativePlatform();
+    }
 
-	@Override
-	public List<String> getWindowTitlesForPid(long pid) throws LoomNativePlatformException {
-		try (Arena arena = Arena.ofConfined()) {
-			List<String> titles = new ArrayList<>();
-			WindowEnumCallback callback = new WindowEnumCallback(pid, titles);
-			MemorySegment callbackStub = Win32.upcallStub(callback, "accept", FunctionDescriptor.of(Win32.BOOL, Win32.HWND, Win32.LONG_PTR), arena);
+    @Override
+    public List<ProcessHandle> getProcessesWithLockOn(Path path) throws LoomNativePlatformException {
+        return getPidsHoldingFileHandles(path).stream()
+            .map(ProcessHandle::of)
+            .filter(Optional::isPresent)
+            .map(Optional::get)
+            .toList();
+    }
 
-			try {
-				Win32.enumWindows(callbackStub, 0);
-			} catch (LoomNativePlatformException e) {
-				callback.throwIfFailed();
-				throw e;
-			}
+    @Override
+    public List<String> getWindowTitlesForPid(long pid) throws LoomNativePlatformException {
+        try (Arena arena = Arena.ofConfined()) {
+            List<String> titles = new ArrayList<>();
+            WindowEnumCallback callback = new WindowEnumCallback(pid, titles);
+            MemorySegment callbackStub = Win32.upcallStub(callback, "accept",
+                FunctionDescriptor.of(Win32.BOOL, Win32.HWND, Win32.LONG_PTR), arena);
 
-			callback.throwIfFailed();
-			return titles;
-		} catch (LoomNativePlatformException e) {
-			throw e;
-		} catch (Throwable e) {
-			LOGGER.error("Failed to query window titles for pid {}", pid, e);
-			throw new LoomNativePlatformException("EnumWindows failed", e);
-		}
-	}
+            try {
+                Win32.enumWindows(callbackStub, 0);
+            } catch (LoomNativePlatformException e) {
+                callback.throwIfFailed();
+                throw e;
+            }
 
-	private List<Long> getPidsHoldingFileHandles(Path path) throws LoomNativePlatformException {
-		try (Arena arena = Arena.ofConfined()) {
-			try (RmSession session = RmSession.open(arena)) {
-				return getPidsHoldingFileHandles(arena, session, path);
-			}
-		} catch (LoomNativePlatformException e) {
-			throw e;
-		} catch (Throwable e) {
-			LOGGER.error("Failed to query processes holding a lock on {}", path, e);
-			throw new LoomNativePlatformException("Failed to query Restart Manager", e);
-		}
-	}
+            callback.throwIfFailed();
+            return titles;
+        } catch (LoomNativePlatformException e) {
+            throw e;
+        } catch (Throwable e) {
+            LOGGER.error("Failed to query window titles for pid {}", pid, e);
+            throw new LoomNativePlatformException("EnumWindows failed", e);
+        }
+    }
 
-	private List<Long> getPidsHoldingFileHandles(Arena arena, RmSession session, Path path) throws Throwable {
-		Win32.rmRegisterResources(session.handle(), arena, path.toString());
+    private List<Long> getPidsHoldingFileHandles(Arena arena, RmSession session, Path path) throws Throwable {
+        Win32.rmRegisterResources(session.handle(), arena, path.toString());
 
-		MemorySegment procInfoNeeded = arena.allocate(Win32.DWORD);
-		MemorySegment procInfo = arena.allocate(Win32.DWORD);
-		MemorySegment rebootReasons = arena.allocate(Win32.DWORD);
-		int procInfoCount = 64;
-		MemorySegment processes;
-		int error;
+        MemorySegment procInfoNeeded = arena.allocate(Win32.DWORD);
+        MemorySegment procInfo = arena.allocate(Win32.DWORD);
+        MemorySegment rebootReasons = arena.allocate(Win32.DWORD);
+        int procInfoCount = 64;
+        MemorySegment processes;
+        int error;
 
-		do {
-			procInfo.set(Win32.DWORD, 0, procInfoCount);
-			procInfoNeeded.set(Win32.DWORD, 0, 0);
-			processes = arena.allocate(Win32.RM_PROCESS_INFO, procInfoCount);
-			error = Win32.rmGetList(session.handle(), procInfoNeeded, procInfo, processes, rebootReasons);
-			procInfoCount = Math.max(procInfoNeeded.get(Win32.DWORD, 0), procInfoCount * 2);
-		} while (error == Win32.ERROR_MORE_DATA);
+        do {
+            procInfo.set(Win32.DWORD, 0, procInfoCount);
+            procInfoNeeded.set(Win32.DWORD, 0, 0);
+            processes = arena.allocate(Win32.RM_PROCESS_INFO, procInfoCount);
+            error = Win32.rmGetList(session.handle(), procInfoNeeded, procInfo, processes, rebootReasons);
+            procInfoCount = Math.max(procInfoNeeded.get(Win32.DWORD, 0), procInfoCount * 2);
+        } while (error == Win32.ERROR_MORE_DATA);
 
-		int returnedProcesses = procInfo.get(Win32.DWORD, 0);
-		List<Long> pids = new ArrayList<>();
+        int returnedProcesses = procInfo.get(Win32.DWORD, 0);
+        List<Long> pids = new ArrayList<>();
 
-		for (int i = 0; i < returnedProcesses; i++) {
-			MemorySegment processInfo = processes.asSlice(Win32.RM_PROCESS_INFO.byteSize() * i, Win32.RM_PROCESS_INFO.byteSize());
-			int pid = processInfo.get(Win32.DWORD, 0);
-			MemorySegment restartManagerStartTime = processInfo.asSlice(Win32.DWORD.byteSize(), Win32.FILETIME.byteSize());
+        for (int i = 0; i < returnedProcesses; i++) {
+            MemorySegment processInfo = processes.asSlice(Win32.RM_PROCESS_INFO.byteSize() * i,
+                Win32.RM_PROCESS_INFO.byteSize());
+            int pid = processInfo.get(Win32.DWORD, 0);
+            MemorySegment restartManagerStartTime = processInfo.asSlice(Win32.DWORD.byteSize(),
+                Win32.FILETIME.byteSize());
 
-			if (isSameLiveProcess(arena, pid, restartManagerStartTime)) {
-				pids.add(Integer.toUnsignedLong(pid));
-			}
-		}
+            if (isSameLiveProcess(arena, pid, restartManagerStartTime)) {
+                pids.add(Integer.toUnsignedLong(pid));
+            }
+        }
 
-		return pids;
-	}
+        return pids;
+    }
 
-	private boolean isSameLiveProcess(Arena arena, int pid, MemorySegment restartManagerStartTime) throws Throwable {
-		try (Win32Process process = Win32Process.open(pid)) {
-			if (!process.isValid()) {
-				return false;
-			}
+    private List<Long> getPidsHoldingFileHandles(Path path) throws LoomNativePlatformException {
+        try (Arena arena = Arena.ofConfined()) {
+            try (RmSession session = RmSession.open(arena)) {
+                return getPidsHoldingFileHandles(arena, session, path);
+            }
+        } catch (LoomNativePlatformException e) {
+            throw e;
+        } catch (Throwable e) {
+            LOGGER.error("Failed to query processes holding a lock on {}", path, e);
+            throw new LoomNativePlatformException("Failed to query Restart Manager", e);
+        }
+    }
 
-			Win32.ProcessTimes processTimes = Win32.getProcessTimes(arena, process.handle());
-			return processTimes != null && Win32.compareFileTime(restartManagerStartTime, processTimes.createTime()) == 0;
-		}
-	}
+    private boolean isSameLiveProcess(Arena arena, int pid, MemorySegment restartManagerStartTime) throws Throwable {
+        try (Win32Process process = Win32Process.open(pid)) {
+            if (!process.isValid()) {
+                return false;
+            }
 
-	private record RmSession(int handle) implements AutoCloseable {
-		static RmSession open(Arena arena) throws Throwable {
-			return new RmSession(Win32.rmStartSession(arena, CCH_RM_SESSION_KEY));
-		}
+            Win32.ProcessTimes processTimes = Win32.getProcessTimes(arena, process.handle());
+            return processTimes != null
+                && Win32.compareFileTime(restartManagerStartTime, processTimes.createTime()) == 0;
+        }
+    }
 
-		@Override
-		public void close() throws LoomNativePlatformException {
-			try {
-				Win32.rmEndSession(handle);
-			} catch (LoomNativePlatformException e) {
-				throw e;
-			} catch (Throwable e) {
-				throw new LoomNativePlatformException("RmEndSession failed", e);
-			}
-		}
-	}
+    private record RmSession(int handle) implements AutoCloseable {
+        static RmSession open(Arena arena) throws Throwable {
+            return new RmSession(Win32.rmStartSession(arena, CCH_RM_SESSION_KEY));
+        }
 
-	private record Win32Process(MemorySegment handle) implements AutoCloseable {
-		static Win32Process open(int pid) throws Throwable {
-			return new Win32Process(Win32.openProcess(Win32.PROCESS_QUERY_LIMITED_INFORMATION, 0, pid));
-		}
+        @Override
+        public void close() throws LoomNativePlatformException {
+            try {
+                Win32.rmEndSession(handle);
+            } catch (LoomNativePlatformException e) {
+                throw e;
+            } catch (Throwable e) {
+                throw new LoomNativePlatformException("RmEndSession failed", e);
+            }
+        }
+    }
 
-		boolean isValid() {
-			return !handle.equals(MemorySegment.NULL);
-		}
+    private record Win32Process(MemorySegment handle) implements AutoCloseable {
+        static Win32Process open(int pid) throws Throwable {
+            return new Win32Process(Win32.openProcess(Win32.PROCESS_QUERY_LIMITED_INFORMATION, 0, pid));
+        }
 
-		@Override
-		public void close() throws LoomNativePlatformException {
-			if (!isValid()) {
-				return;
-			}
+        boolean isValid() {
+            return !handle.equals(MemorySegment.NULL);
+        }
 
-			try {
-				Win32.closeHandle(handle);
-			} catch (Throwable e) {
-				throw new LoomNativePlatformException("CloseHandle failed", e);
-			}
-		}
-	}
+        @Override
+        public void close() throws LoomNativePlatformException {
+            if (!isValid()) {
+                return;
+            }
 
-	private static final class WindowEnumCallback {
-		private final long pid;
-		private final List<String> titles;
-		private Throwable failure;
+            try {
+                Win32.closeHandle(handle);
+            } catch (Throwable e) {
+                throw new LoomNativePlatformException("CloseHandle failed", e);
+            }
+        }
+    }
 
-		WindowEnumCallback(long pid, List<String> titles) {
-			this.pid = pid;
-			this.titles = titles;
-		}
+    private static final class WindowEnumCallback {
+        private Throwable failure;
+        private final long pid;
+        private final List<String> titles;
 
-		@SuppressWarnings("unused")
-		public int accept(MemorySegment hwnd, long data) {
-			try {
-				if (isWindowOfPid(hwnd) && isMainWindow(hwnd)) {
-					getWindowTitle(hwnd).ifPresent(titles::add);
-				}
+        WindowEnumCallback(long pid, List<String> titles) {
+            this.pid = pid;
+            this.titles = titles;
+        }
 
-				return 1;
-			} catch (Throwable e) {
-				failure = e;
-				return 0;
-			}
-		}
+        @SuppressWarnings("unused")
+        public int accept(MemorySegment hwnd, long data) {
+            try {
+                if (isWindowOfPid(hwnd) && isMainWindow(hwnd)) {
+                    getWindowTitle(hwnd).ifPresent(titles::add);
+                }
 
-		private void throwIfFailed() throws LoomNativePlatformException {
-			if (failure != null) {
-				LOGGER.error("Failed to inspect window", failure);
-				throw new LoomNativePlatformException("Failed to inspect window", failure);
-			}
-		}
+                return 1;
+            } catch (Throwable e) {
+                failure = e;
+                return 0;
+            }
+        }
 
-		private boolean isWindowOfPid(MemorySegment hwnd) throws Throwable {
-			return Win32.getWindowThreadProcessId(hwnd) == pid;
-		}
+        private Optional<String> getWindowTitle(MemorySegment hwnd) throws Throwable {
+            try (Arena arena = Arena.ofConfined()) {
+                return Win32.getWindowText(hwnd, arena);
+            }
+        }
 
-		private boolean isMainWindow(MemorySegment hwnd) throws Throwable {
-			return Win32.getWindow(hwnd, Win32.GW_OWNER).equals(MemorySegment.NULL) && Win32.isWindowVisible(hwnd);
-		}
+        private boolean isMainWindow(MemorySegment hwnd) throws Throwable {
+            return Win32.getWindow(hwnd, Win32.GW_OWNER).equals(MemorySegment.NULL) && Win32.isWindowVisible(hwnd);
+        }
 
-		private Optional<String> getWindowTitle(MemorySegment hwnd) throws Throwable {
-			try (Arena arena = Arena.ofConfined()) {
-				return Win32.getWindowText(hwnd, arena);
-			}
-		}
-	}
+        private boolean isWindowOfPid(MemorySegment hwnd) throws Throwable {
+            return Win32.getWindowThreadProcessId(hwnd) == pid;
+        }
+
+        private void throwIfFailed() throws LoomNativePlatformException {
+            if (failure != null) {
+                LOGGER.error("Failed to inspect window", failure);
+                throw new LoomNativePlatformException("Failed to inspect window", failure);
+            }
+        }
+    }
 }

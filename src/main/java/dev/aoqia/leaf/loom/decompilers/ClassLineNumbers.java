@@ -54,121 +54,124 @@ import org.jspecify.annotations.Nullable;
 import static java.text.MessageFormat.format;
 
 public record ClassLineNumbers(Map<String, ClassLineNumbers.Entry> lineMap) {
-	public ClassLineNumbers {
-		Objects.requireNonNull(lineMap, "lineMap");
+    public ClassLineNumbers {
+        Objects.requireNonNull(lineMap, "lineMap");
 
-		if (lineMap.isEmpty()) {
-			throw new IllegalArgumentException("lineMap is empty");
-		}
+        if (lineMap.isEmpty()) {
+            throw new IllegalArgumentException("lineMap is empty");
+        }
 
-		for (Map.Entry<String, Entry> entry : lineMap.entrySet()) {
-			Objects.requireNonNull(entry.getKey(), "lineMap key");
-			Objects.requireNonNull(entry.getValue(), "lineMap value");
-		}
-	}
+        for (Map.Entry<String, Entry> entry : lineMap.entrySet()) {
+            Objects.requireNonNull(entry.getKey(), "lineMap key");
+            Objects.requireNonNull(entry.getValue(), "lineMap value");
+        }
+    }
 
-	public static ClassLineNumbers readMappings(BufferedReader reader) {
-		var lineMap = new HashMap<String, ClassLineNumbers.Entry>();
+    public static ClassLineNumbers readMappings(BufferedReader reader) {
+        var lineMap = new HashMap<String, ClassLineNumbers.Entry>();
 
-		String line = null;
-		int lineNumber = 0;
+        String line = null;
+        int lineNumber = 0;
 
-		record CurrentClass(String className, int maxLine, int maxLineDest) {
-			void putEntry(Map<String, ClassLineNumbers.Entry> entries, Map<Integer, Integer> mappings) {
-				var entry = new ClassLineNumbers.Entry(className(), maxLine(), maxLineDest(), Collections.unmodifiableMap(mappings));
+        record CurrentClass(String className, int maxLine, int maxLineDest) {
+            void putEntry(Map<String, ClassLineNumbers.Entry> entries, Map<Integer, Integer> mappings) {
+                var entry = new ClassLineNumbers.Entry(className(), maxLine(), maxLineDest(),
+                    Collections.unmodifiableMap(mappings));
 
-				final ClassLineNumbers.Entry previous = entries.put(className(), entry);
+                final ClassLineNumbers.Entry previous = entries.put(className(), entry);
 
-				if (previous != null) {
-					throw new IllegalStateException("Duplicate class line mappings for " + className());
-				}
-			}
-		}
+                if (previous != null) {
+                    throw new IllegalStateException("Duplicate class line mappings for " + className());
+                }
+            }
+        }
 
-		CurrentClass currentClass = null;
-		Map<Integer, Integer> currentMappings = new HashMap<>();
-		boolean didRead = false;
+        CurrentClass currentClass = null;
+        Map<Integer, Integer> currentMappings = new HashMap<>();
+        boolean didRead = false;
 
-		try {
-			while ((line = reader.readLine()) != null) {
-				if (line.isEmpty()) {
-					continue;
-				}
+        try {
+            while ((line = reader.readLine()) != null) {
+                if (line.isEmpty()) {
+                    continue;
+                }
 
-				didRead = true;
+                didRead = true;
 
-				final String[] segments = line.trim().split("\t");
+                final String[] segments = line.trim().split("\t");
 
-				if (line.charAt(0) != '\t') {
-					if (currentClass != null) {
-						currentClass.putEntry(lineMap, currentMappings);
-						currentMappings = new HashMap<>();
-					}
+                if (line.charAt(0) != '\t') {
+                    if (currentClass != null) {
+                        currentClass.putEntry(lineMap, currentMappings);
+                        currentMappings = new HashMap<>();
+                    }
 
-					currentClass = new CurrentClass(segments[0], Integer.parseInt(segments[1]), Integer.parseInt(segments[2]));
-				} else {
-					Objects.requireNonNull(currentClass, "No class line mappings found for line " + lineNumber);
-					currentMappings.put(Integer.parseInt(segments[0]), Integer.parseInt(segments[1]));
-				}
+                    currentClass = new CurrentClass(segments[0], Integer.parseInt(segments[1]),
+                        Integer.parseInt(segments[2]));
+                } else {
+                    Objects.requireNonNull(currentClass, "No class line mappings found for line " + lineNumber);
+                    currentMappings.put(Integer.parseInt(segments[0]), Integer.parseInt(segments[1]));
+                }
 
-				lineNumber++;
-			}
-		} catch (Exception e) {
-			throw new RuntimeException(format("Exception reading mapping line @{0}: {1}", lineNumber, line), e);
-		}
+                lineNumber++;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(format("Exception reading mapping line @{0}: {1}", lineNumber, line), e);
+        }
 
-		if (!didRead) {
-			throw new IllegalArgumentException("Unable to read empty linemap data");
-		}
+        if (!didRead) {
+            throw new IllegalArgumentException("Unable to read empty linemap data");
+        }
 
-		currentClass.putEntry(lineMap, currentMappings);
+        currentClass.putEntry(lineMap, currentMappings);
 
-		return new ClassLineNumbers(Collections.unmodifiableMap(lineMap));
-	}
+        return new ClassLineNumbers(Collections.unmodifiableMap(lineMap));
+    }
 
-	public void write(Writer writer) throws IOException {
-		for (Map.Entry<String, ClassLineNumbers.Entry> entry : lineMap.entrySet()) {
-			entry.getValue().write(writer);
-		}
-	}
+    public void write(Writer writer) throws IOException {
+        for (Map.Entry<String, ClassLineNumbers.Entry> entry : lineMap.entrySet()) {
+            entry.getValue().write(writer);
+        }
+    }
 
-	/**
-	 * Merge two ClassLineNumbers together, throwing an exception if there are any duplicate class line mappings.
-	 */
-	@Nullable public static ClassLineNumbers merge(@Nullable ClassLineNumbers a, @Nullable ClassLineNumbers b) {
-		if (a == null) {
-			return b;
-		} else if (b == null) {
-			return a;
-		}
+    /**
+     * Merge two ClassLineNumbers together, throwing an exception if there are any duplicate class line mappings.
+     */
+    @Nullable
+    public static ClassLineNumbers merge(@Nullable ClassLineNumbers a, @Nullable ClassLineNumbers b) {
+        if (a == null) {
+            return b;
+        } else if (b == null) {
+            return a;
+        }
 
-		var lineMap = new HashMap<>(a.lineMap());
+        var lineMap = new HashMap<>(a.lineMap());
 
-		for (Map.Entry<String, Entry> entry : b.lineMap().entrySet()) {
-			lineMap.merge(entry.getKey(), entry.getValue(), (v1, v2) -> {
-				throw new IllegalStateException("Duplicate class line mappings for " + entry.getKey());
-			});
-		}
+        for (Map.Entry<String, Entry> entry : b.lineMap().entrySet()) {
+            lineMap.merge(entry.getKey(), entry.getValue(), (v1, v2) -> {
+                throw new IllegalStateException("Duplicate class line mappings for " + entry.getKey());
+            });
+        }
 
-		return new ClassLineNumbers(Collections.unmodifiableMap(lineMap));
-	}
+        return new ClassLineNumbers(Collections.unmodifiableMap(lineMap));
+    }
 
-	public record Entry(String className, int maxLine, int maxLineDest, Map<Integer, Integer> lineMap) {
-		public void write(Writer writer) throws IOException {
-			writer.write(className);
-			writer.write('\t');
-			writer.write(Integer.toString(maxLine));
-			writer.write('\t');
-			writer.write(Integer.toString(maxLineDest));
-			writer.write('\n');
+    public record Entry(String className, int maxLine, int maxLineDest, Map<Integer, Integer> lineMap) {
+        public void write(Writer writer) throws IOException {
+            writer.write(className);
+            writer.write('\t');
+            writer.write(Integer.toString(maxLine));
+            writer.write('\t');
+            writer.write(Integer.toString(maxLineDest));
+            writer.write('\n');
 
-			for (Map.Entry<Integer, Integer> lineEntry : lineMap.entrySet()) {
-				writer.write('\t');
-				writer.write(Integer.toString(lineEntry.getKey()));
-				writer.write('\t');
-				writer.write(Integer.toString(lineEntry.getValue()));
-				writer.write('\n');
-			}
-		}
-	}
+            for (Map.Entry<Integer, Integer> lineEntry : lineMap.entrySet()) {
+                writer.write('\t');
+                writer.write(Integer.toString(lineEntry.getKey()));
+                writer.write('\t');
+                writer.write(Integer.toString(lineEntry.getValue()));
+                writer.write('\n');
+            }
+        }
+    }
 }

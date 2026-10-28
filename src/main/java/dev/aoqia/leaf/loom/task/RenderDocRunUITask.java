@@ -55,19 +55,19 @@ import dev.aoqia.leaf.loom.util.Constants;
 
 @DisableCachingByDefault
 public abstract class RenderDocRunUITask extends DefaultTask {
-	@InputFile
-	@PathSensitive(PathSensitivity.NONE)
-	public abstract RegularFileProperty getRenderDocExecutable();
+    public RenderDocRunUITask() {
+        setGroup(Constants.TaskGroup.LEAF);
+    }
 
-	public RenderDocRunUITask() {
-		setGroup(Constants.TaskGroup.LEAF);
-	}
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    public abstract RegularFileProperty getRenderDocExecutable();
 
-	@TaskAction
-	public void run() throws IOException {
-		ProcessBuilder builder = new ProcessBuilder()
-				.command(getRenderDocExecutable().getAsFile().get().getAbsolutePath());
-		builder.start();
-		// Allow to run in the background.
-	}
+    @TaskAction
+    public void run() throws IOException {
+        ProcessBuilder builder = new ProcessBuilder()
+            .command(getRenderDocExecutable().getAsFile().get().getAbsolutePath());
+        builder.start();
+        // Allow to run in the background.
+    }
 }

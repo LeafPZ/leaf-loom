@@ -57,21 +57,23 @@ import dev.aoqia.leaf.loom.util.download.DownloadBuilder;
  */
 @ApiStatus.Experimental
 public abstract class IntermediateMappingsProvider implements Named {
-	public abstract Property<String> getGameVersion();
+    public abstract Property<Function<String, DownloadBuilder>> getDownloader();
 
-	public abstract Property<Function<String, DownloadBuilder>> getDownloader();
+    public abstract Property<String> getGameVersion();
 
-	/**
-	 * Set to true if the minecraft version is at least Beta 1.0 and pre 1.3.
-	 * When true the expected src namespace is intermediary, and the expected dst namespaces are clientOfficial and/or serverOfficial
-	 * When false the expected src namespace is named and the expected dst namespace is intermediary
-	 */
-	@ApiStatus.Experimental
-	public abstract Property<Boolean> getUseSplitOfficialNamespaces();
+    /**
+     * Set to true if the minecraft version is at least Beta 1.0 and pre 1.3.
+     * When true the expected src namespace is intermediary, and the expected dst namespaces are clientOfficial
+     * and/or serverOfficial
+     * When false the expected src namespace is named and the expected dst namespace is intermediary
+     */
+    @ApiStatus.Experimental
+    public abstract Property<Boolean> getUseSplitOfficialNamespaces();
 
-	/**
-	 * Generate or download a tinyv2 mapping file with intermediary and named namespaces.
-	 * @throws IOException
-	 */
-	public abstract void provide(Path tinyMappings) throws IOException;
+    /**
+     * Generate or download a tinyv2 mapping file with intermediary and named namespaces.
+     *
+     * @throws IOException
+     */
+    public abstract void provide(Path tinyMappings) throws IOException;
 }

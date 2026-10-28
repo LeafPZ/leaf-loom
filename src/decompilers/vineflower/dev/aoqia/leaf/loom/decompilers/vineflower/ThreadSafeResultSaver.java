@@ -63,127 +63,131 @@ import org.jetbrains.java.decompiler.main.DecompilerContext;
 import org.jetbrains.java.decompiler.main.extern.IResultSaver;
 
 public class ThreadSafeResultSaver implements IResultSaver {
-	private final Supplier<File> output;
-	private final Supplier<File> lineMapFile;
+    public PrintWriter lineMapWriter;
+    public Map<String, ZipOutputStream> outputStreams = new HashMap<>();
 
-	public Map<String, ZipOutputStream> outputStreams = new HashMap<>();
-	public Map<String, ExecutorService> saveExecutors = new HashMap<>();
-	public PrintWriter lineMapWriter;
+    public Map<String, ExecutorService> saveExecutors = new HashMap<>();
+    private final Supplier<File> lineMapFile;
+    private final Supplier<File> output;
 
-	public ThreadSafeResultSaver(Supplier<File> output, Supplier<File> lineMapFile) {
-		this.output = output;
-		this.lineMapFile = lineMapFile;
-	}
+    public ThreadSafeResultSaver(Supplier<File> output, Supplier<File> lineMapFile) {
+        this.output = output;
+        this.lineMapFile = lineMapFile;
+    }
 
-	@Override
-	public void createArchive(String path, String archiveName, Manifest manifest) {
-		String key = path + "/" + archiveName;
-		File file = output.get();
+    @Override
+    public void closeArchive(String path, String archiveName) {
+        String key = path + "/" + archiveName;
+        ExecutorService executor = saveExecutors.get(key);
+        Future<?> closeFuture = executor.submit(() -> {
+            ZipOutputStream zos = outputStreams.get(key);
 
-		try {
-			FileOutputStream fos = new FileOutputStream(file);
-			ZipOutputStream zos = manifest == null ? new ZipOutputStream(fos) : new JarOutputStream(fos, manifest);
-			outputStreams.put(key, zos);
-			saveExecutors.put(key, Executors.newSingleThreadExecutor());
-		} catch (IOException e) {
-			throw new RuntimeException("Unable to create archive: " + file, e);
-		}
+            try {
+                zos.close();
+            } catch (IOException e) {
+                throw new RuntimeException("Unable to close zip. " + key, e);
+            }
+        });
+        executor.shutdown();
 
-		if (lineMapFile.get() != null) {
-			try {
-				lineMapWriter = new PrintWriter(new FileWriter(lineMapFile.get()));
-			} catch (IOException e) {
-				throw new RuntimeException("Unable to create line mapping file: " + lineMapFile.get(), e);
-			}
-		}
-	}
+        try {
+            closeFuture.get();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException(e);
+        }
 
-	@Override
-	public void saveClassEntry(String path, String archiveName, String qualifiedName, String entryName, String content) {
-		this.saveClassEntry(path, archiveName, qualifiedName, entryName, content, null);
-	}
+        outputStreams.remove(key);
+        saveExecutors.remove(key);
 
-	@Override
-	public void saveClassEntry(String path, String archiveName, String qualifiedName, String entryName, String content, int[] mapping) {
-		String key = path + "/" + archiveName;
-		ExecutorService executor = saveExecutors.get(key);
-		executor.submit(() -> {
-			ZipOutputStream zos = outputStreams.get(key);
+        if (lineMapWriter != null) {
+            lineMapWriter.flush();
+            lineMapWriter.close();
+        }
+    }
 
-			try {
-				zos.putNextEntry(new ZipEntry(entryName));
+    @Override
+    public void copyEntry(String source, String path, String archiveName, String entry) {
+    }
 
-				if (content != null) {
-					zos.write(content.getBytes(StandardCharsets.UTF_8));
-				}
-			} catch (IOException e) {
-				DecompilerContext.getLogger().writeMessage("Cannot write entry " + entryName, e);
-			}
+    @Override
+    public void copyFile(String source, String path, String entryName) {
+    }
 
-			if (mapping != null && lineMapWriter != null) {
-				int maxLine = 0;
-				int maxLineDest = 0;
-				StringBuilder builder = new StringBuilder();
+    @Override
+    public void createArchive(String path, String archiveName, Manifest manifest) {
+        String key = path + "/" + archiveName;
+        File file = output.get();
 
-				for (int i = 0; i < mapping.length; i += 2) {
-					maxLine = Math.max(maxLine, mapping[i]);
-					maxLineDest = Math.max(maxLineDest, mapping[i + 1]);
-					builder.append("\t").append(mapping[i]).append("\t").append(mapping[i + 1]).append("\n");
-				}
+        try {
+            FileOutputStream fos = new FileOutputStream(file);
+            ZipOutputStream zos = manifest == null ? new ZipOutputStream(fos) : new JarOutputStream(fos, manifest);
+            outputStreams.put(key, zos);
+            saveExecutors.put(key, Executors.newSingleThreadExecutor());
+        } catch (IOException e) {
+            throw new RuntimeException("Unable to create archive: " + file, e);
+        }
 
-				lineMapWriter.println(qualifiedName + "\t" + maxLine + "\t" + maxLineDest);
-				lineMapWriter.println(builder.toString());
-			}
-		});
-	}
+        if (lineMapFile.get() != null) {
+            try {
+                lineMapWriter = new PrintWriter(new FileWriter(lineMapFile.get()));
+            } catch (IOException e) {
+                throw new RuntimeException("Unable to create line mapping file: " + lineMapFile.get(), e);
+            }
+        }
+    }
 
-	@Override
-	public void closeArchive(String path, String archiveName) {
-		String key = path + "/" + archiveName;
-		ExecutorService executor = saveExecutors.get(key);
-		Future<?> closeFuture = executor.submit(() -> {
-			ZipOutputStream zos = outputStreams.get(key);
+    @Override
+    public void saveClassEntry(String path, String archiveName, String qualifiedName, String entryName,
+        String content)
+    {
+        this.saveClassEntry(path, archiveName, qualifiedName, entryName, content, null);
+    }
 
-			try {
-				zos.close();
-			} catch (IOException e) {
-				throw new RuntimeException("Unable to close zip. " + key, e);
-			}
-		});
-		executor.shutdown();
+    @Override
+    public void saveClassEntry(String path, String archiveName, String qualifiedName, String entryName, String content,
+        int[] mapping)
+    {
+        String key = path + "/" + archiveName;
+        ExecutorService executor = saveExecutors.get(key);
+        executor.submit(() -> {
+            ZipOutputStream zos = outputStreams.get(key);
 
-		try {
-			closeFuture.get();
-		} catch (InterruptedException | ExecutionException e) {
-			throw new RuntimeException(e);
-		}
+            try {
+                zos.putNextEntry(new ZipEntry(entryName));
 
-		outputStreams.remove(key);
-		saveExecutors.remove(key);
+                if (content != null) {
+                    zos.write(content.getBytes(StandardCharsets.UTF_8));
+                }
+            } catch (IOException e) {
+                DecompilerContext.getLogger().writeMessage("Cannot write entry " + entryName, e);
+            }
 
-		if (lineMapWriter != null) {
-			lineMapWriter.flush();
-			lineMapWriter.close();
-		}
-	}
+            if (mapping != null && lineMapWriter != null) {
+                int maxLine = 0;
+                int maxLineDest = 0;
+                StringBuilder builder = new StringBuilder();
 
-	@Override
-	public void saveFolder(String path) {
-	}
+                for (int i = 0; i < mapping.length; i += 2) {
+                    maxLine = Math.max(maxLine, mapping[i]);
+                    maxLineDest = Math.max(maxLineDest, mapping[i + 1]);
+                    builder.append("\t").append(mapping[i]).append("\t").append(mapping[i + 1]).append("\n");
+                }
 
-	@Override
-	public void copyFile(String source, String path, String entryName) {
-	}
+                lineMapWriter.println(qualifiedName + "\t" + maxLine + "\t" + maxLineDest);
+                lineMapWriter.println(builder);
+            }
+        });
+    }
 
-	@Override
-	public void saveClassFile(String path, String qualifiedName, String entryName, String content, int[] mapping) {
-	}
+    @Override
+    public void saveClassFile(String path, String qualifiedName, String entryName, String content, int[] mapping) {
+    }
 
-	@Override
-	public void saveDirEntry(String path, String archiveName, String entryName) {
-	}
+    @Override
+    public void saveDirEntry(String path, String archiveName, String entryName) {
+    }
 
-	@Override
-	public void copyEntry(String source, String path, String archiveName, String entry) {
-	}
+    @Override
+    public void saveFolder(String path) {
+    }
 }
