@@ -340,7 +340,7 @@ spotless {
             .sortMembersVisibilityOrder("B,R,D,V")
 
         cleanthat()
-        formatAnnotations()
+        // formatAnnotations()
 
         importOrder(
             "java|javax",
