@@ -32,6 +32,14 @@ repositories {
         name = "Fabric"
         url = uri("https://maven.fabricmc.net/")
     }
+    maven {
+        name = "aoqia"
+        url = uri("https://maven.aoqia.dev/releases")
+
+        mavenContent {
+            releasesOnly()
+        }
+    }
     mavenCentral()
 }
 
@@ -160,7 +168,7 @@ dependencies {
     testImplementation(testLibs.bcprov)
     testImplementation(testLibs.bcutil)
     testImplementation(testLibs.bcpkix)
-    testImplementation(testLibs.fabric.loader)
+    testImplementation(testLibs.leaf.loader)
     testImplementation(runtimeLibs.cfr)
     testImplementation(runtimeLibs.vineflower)
 
