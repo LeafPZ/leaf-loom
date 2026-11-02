@@ -68,7 +68,7 @@ public abstract class RenderDocRunTask extends RunGameTask {
     public RenderDocRunTask(RunConfiguration settings) {
         super(settings);
         setGroup(Constants.TaskGroup.LEAF);
-        dependsOn("configureClientLaunch");
+        dependsOn("configureLaunch");
         getRenderDocArgs().addAll("capture", "--wait-for-exit");
     }
 
