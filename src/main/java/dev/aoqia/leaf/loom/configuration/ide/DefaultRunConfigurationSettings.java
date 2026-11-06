@@ -115,9 +115,6 @@ public class DefaultRunConfigurationSettings {
         run.getJvmArguments().add("-Dfabric.dli.main=" + run.getMainClass().get());
 
         if (environment.equals("client")) {
-            // Required since 26.3-snapshot-10
-            run.getJvmArguments().add("-XX:StackShadowPages=32");
-
             if (context.usesLWJGL3() && Platform.CURRENT.getOperatingSystem().isMacOS()) {
                 run.getJvmArguments().add("-XstartOnFirstThread");
             }
@@ -153,7 +150,7 @@ public class DefaultRunConfigurationSettings {
             }
 
             // Only care about system props for now!
-            // TODO(leaf): Is it OK to keep headless for dev env (which has console)?
+            // Is it OK to keep headless for dev env (which has console)?
             // We definitely need to make sure it is removed for prod env as it hides the loader exception UI.
             if (arg.startsWith("-D") && !arg.startsWith("-Djava.awt.headless")) {
                 run.getJvmArguments().add(arg);
