@@ -195,11 +195,6 @@ public class Constants {
         public static final String DISABLE_PROJECT_DEPENDENT_MODS = "leaf.loom.disableProjectDependentMods";
         public static final String DISABLE_REMAPPED_VARIANTS = "leaf.loom.disableRemappedVariants";
         public static final String DONT_REMAP = "leaf.loom.dontRemap";
-        /**
-         * When using the MojangMappingLayer this will remove names for non-root methods by using the intermediary
-         * mappings.
-         */
-        public static final String DROP_NON_INTERMEDIATE_ROOT_METHODS = "leaf.loom.dropNonIntermediateRootMethods";
         /*
          * Skip validating the game files against their hashes.
          */

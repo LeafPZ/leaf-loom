@@ -206,9 +206,5 @@ public class ZomboidProvider {
                     + " LEAF_CLIENT_GAME_PATH and LEAF_SERVER_GAME_PATH environment variables.",
                 gameJar.getAbsolutePath()));
         }
-
-        // Find all other game lib jars in the root game folder and add them as compile libraries
-        // project.getDependencies().add(Constants.Configurations.ZOMBOID_COMPILE_LIBRARIES,
-        // project.fileTree(gamePath).include("*.jar").exclude("projectzomboid.jar", "pzexe.jar"));
     }
 }
