@@ -41,11 +41,14 @@
 
 package dev.aoqia.leaf.loom.configuration.ide;
 
+import java.io.File;
 import java.util.Locale;
 
 import org.gradle.api.JavaVersion;
 import org.gradle.api.Project;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
+import org.jspecify.annotations.Nullable;
 
 import dev.aoqia.leaf.loom.LoomGradleExtension;
 import dev.aoqia.leaf.loom.api.RunConfiguration;
@@ -88,6 +91,7 @@ public class DefaultRunConfigurationSettings {
 
         run.getGenerateRunConfig().convention(GradleUtils.isRootProject(project));
         run.getPreferGradleTask().convention(true);
+        run.getHotswapClasses().convention(false);
     }
 
     // Apply any additional configuration after the user has modified the settings, but before the run config is
@@ -160,6 +164,17 @@ public class DefaultRunConfigurationSettings {
         // Add runDir to cachedir
         run.getProgramArguments().add("-cachedir=" + run.getRunDirectory().get());
 
+        // Setup class and mixin hotswapping
+        if (run.getHotswapClasses().get()) {
+            var mixinDep = getMixinDep(project);
+            if (mixinDep != null && mixinDep.isPresent()) {
+                run.getJvmArguments()
+                    .addAll(
+                        "-XX:+AllowEnhancedClassRedefinition",
+                        "-javaagent:" + mixinDep.get().getAbsoluteFile());
+            }
+        }
+
         finialiseValues(run);
 
         return RunConfigUtils.toSerialisable(run, project);
@@ -181,6 +196,7 @@ public class DefaultRunConfigurationSettings {
         run.getPreferGradleTask().finalizeValue();
         run.getIdeConfigFolder().finalizeValue();
         run.getDevLaunchMainClass().finalizeValue();
+        run.getHotswapClasses().finalizeValue();
     }
 
     private static String encodeEscaped(String s) {
@@ -197,5 +213,24 @@ public class DefaultRunConfigurationSettings {
         }
 
         return ret.toString();
+    }
+
+    private static @Nullable Provider<File> getMixinDep(Project project) {
+        try {
+            return project.getConfigurations()
+                .named(Constants.Configurations.LOADER_DEPENDENCIES)
+                .map(configuration -> {
+                    var files = configuration.getIncoming()
+                        .artifactView(
+                            view -> view.componentFilter(
+                                component -> component.getDisplayName().contains("sponge-mixin")))
+                        .getFiles();
+
+                    return files.getSingleFile();
+                });
+        } catch (Exception ignored) {
+            project.getLogger().warn("Could not find Mixin JAR for class hotswapping");
+            return null;
+        }
     }
 }

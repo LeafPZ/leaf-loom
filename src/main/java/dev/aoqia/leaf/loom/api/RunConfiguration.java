@@ -108,6 +108,9 @@ public interface RunConfiguration extends Named {
      */
     Property<Boolean> getGenerateRunConfig();
 
+    /// When true, will add the mixin jar as a Java agent and allow class redefinition for live hotswapping in debug.
+    Property<Boolean> getHotswapClasses();
+
     /**
      * Group this run config under the given folder.
      *
@@ -186,6 +189,7 @@ public interface RunConfiguration extends Named {
         getPreferGradleTask().convention(parent.getPreferGradleTask());
         getIdeConfigFolder().convention(parent.getIdeConfigFolder());
         getDevLaunchMainClass().convention(parent.getDevLaunchMainClass());
+        getHotswapClasses().convention(parent.getHotswapClasses());
     }
 
     /**
