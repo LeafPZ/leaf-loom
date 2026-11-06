@@ -160,6 +160,11 @@ public abstract class CompileConfiguration implements Runnable {
 
                 synchronized (getGlobalLockObject()) {
                     gameProvider = createZomboidProvider(configContext, metadataProvider);
+
+                    if (GradleUtils.getBooleanProperty(configContext.project(), Constants.Properties.MINIMAL_SETUP)) {
+                        return;
+                    }
+
                     mappingConfigurationSetup = provideZomboid(configContext, gameProvider);
                 }
 
@@ -469,10 +474,6 @@ public abstract class CompileConfiguration implements Runnable {
         final LoomGradleExtension extension = configContext.extension();
 
         gameProvider.provide();
-
-        if (GradleUtils.getBooleanProperty(getProject(), Constants.Properties.MINIMAL_SETUP)) {
-            return null;
-        }
 
         if (!extension.disableObfuscation()) {
             // Realise the dependencies without actually resolving them, this forces any lazy providers to be
