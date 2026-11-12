@@ -55,7 +55,7 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJarConfiguration;
 import dev.aoqia.leaf.loom.util.LazyCloseable;
 
-public record ProcessorContextImpl(ConfigContext configContext, ZomboidJar minecraftJar) implements ProcessorContext {
+public record ProcessorContextImpl(ConfigContext configContext, ZomboidJar gameJar) implements ProcessorContext {
     @Override
     public ZomboidJarConfiguration getJarConfiguration() {
         return configContext.extension().getZomboidJarConfiguration().get();
@@ -63,17 +63,17 @@ public record ProcessorContextImpl(ConfigContext configContext, ZomboidJar minec
 
     @Override
     public boolean isMerged() {
-        return minecraftJar.isMerged();
+        return gameJar.isMerged();
     }
 
     @Override
     public boolean includesClient() {
-        return minecraftJar.includesClient();
+        return gameJar.includesClient();
     }
 
     @Override
     public boolean includesServer() {
-        return minecraftJar.includesServer();
+        return gameJar.includesServer();
     }
 
     @Override
