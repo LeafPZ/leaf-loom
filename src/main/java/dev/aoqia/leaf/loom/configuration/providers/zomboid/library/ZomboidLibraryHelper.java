@@ -45,11 +45,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import dev.aoqia.leaf.loom.configuration.providers.BundleMetadata;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidVersionMeta;
 import dev.aoqia.leaf.loom.util.Platform;
 
@@ -118,18 +116,6 @@ public class ZomboidLibraryHelper {
         }
 
         return Collections.unmodifiableList(libraries);
-    }
-
-    public static List<Library> getServerLibraries(BundleMetadata bundleMetadata) {
-        Objects.requireNonNull(bundleMetadata);
-
-        var libraries = new ArrayList<Library>();
-
-        for (BundleMetadata.Entry library : bundleMetadata.libraries()) {
-            libraries.add(Library.fromMaven(library.name(), Library.Target.COMPILE));
-        }
-
-        return libraries;
     }
 
     private static Library downloadToLibrary(ZomboidVersionMeta.Download download) {
