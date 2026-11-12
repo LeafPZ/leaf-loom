@@ -57,7 +57,7 @@ import dev.aoqia.leaf.loom.util.LazyCloseable;
 
 public record ProcessorContextImpl(ConfigContext configContext, ZomboidJar gameJar) implements ProcessorContext {
     @Override
-    public ZomboidJarConfiguration getJarConfiguration() {
+    public ZomboidJarConfiguration<?, ?, ?> getJarConfiguration() {
         return configContext.extension().getZomboidJarConfiguration().get();
     }
 

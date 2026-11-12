@@ -53,7 +53,7 @@ public interface ProcessorContext {
 
     boolean disableObfuscation();
 
-    ZomboidJarConfiguration getJarConfiguration();
+    ZomboidJarConfiguration<?, ?, ?> getJarConfiguration();
 
     MemoryMappingTree getMappings();
 
