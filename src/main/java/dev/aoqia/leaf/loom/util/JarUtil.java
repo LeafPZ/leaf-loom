@@ -21,11 +21,13 @@ package dev.aoqia.leaf.loom.util;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -94,9 +96,9 @@ public class JarUtil {
      * A simple utility function to create a manifest for a JAR file.
      *
      * @param outputFs The JAR file system to write to.
-     * @param env The environment that the JAR belongs in.
+     * @param env The environment that the JAR belongs in, or null if none specified.
      */
-    public static void createManifest(FileSystemUtil.Delegate outputFs, String env) throws IOException {
+    public static void createManifest(FileSystemUtil.Delegate outputFs, @Nullable String env) throws IOException {
         final Manifest manifest = new Manifest();
         manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
 
@@ -163,5 +165,30 @@ public class JarUtil {
         }
 
         return entries;
+    }
+
+    /// Removes all signature files from a JAR file such as .EC and .SF files used by jarsigner.
+    /// @param jar the jar file to modify
+    public static void removeJarSignerFiles(Path jar) throws IOException {
+        try (var fs = FileSystemUtil.getJarFileSystem(jar)) {
+            DirectoryStream.Filter<Path> filter = e -> {
+                final String name = e.getFileName().toString().toLowerCase(Locale.ROOT);
+                return name.endsWith(".ec") || name.endsWith(".sf") || name.endsWith(".rsa");
+            };
+
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(fs.get().getPath("/META-INF/"), filter)) {
+                for (Path entry : stream) {
+                    if (!Files.isRegularFile(entry)) {
+                        continue;
+                    }
+
+                    try {
+                        Files.delete(entry);
+                    } catch (IOException e) {
+                        throw new RuntimeException("Failed to remove game jar signature file " + entry, e);
+                    }
+                }
+            }
+        }
     }
 }
