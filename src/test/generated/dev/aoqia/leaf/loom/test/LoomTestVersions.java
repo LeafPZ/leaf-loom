@@ -30,7 +30,7 @@ public record LoomTestVersions(String group, String module, String version) {
 	public static final LoomTestVersions JAVA_DEBUG = new LoomTestVersions("com.microsoft.java", "com.microsoft.java.debug.core", "0.53.1");
 	public static final LoomTestVersions JAVALIN = new LoomTestVersions("io.javalin", "javalin", "6.7.0");
 	public static final LoomTestVersions JUNIT_JUPITER_ENGINE = new LoomTestVersions("org.junit.jupiter", "junit-jupiter-engine", "6.1.1");
-	public static final LoomTestVersions LEAF_LOADER = new LoomTestVersions("dev.aoqia.leaf", "loader", "1.7.2");
+	public static final LoomTestVersions LEAF_LOADER = new LoomTestVersions("dev.aoqia.leaf", "loader", "2.0.2");
 	public static final LoomTestVersions MIXIN = new LoomTestVersions("net.fabricmc", "sponge-mixin", "0.17.2+mixin.0.8.7");
 	public static final LoomTestVersions MOCKITO = new LoomTestVersions("org.mockito", "mockito-core", "5.23.0");
 	public static final LoomTestVersions SPOCK = new LoomTestVersions("org.spockframework", "spock-core", "2.4-groovy-4.0");

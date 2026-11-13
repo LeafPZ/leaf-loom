@@ -8,7 +8,7 @@ mixin = "0.17.2+mixin.0.8.7"
 bouncycastle = "1.84"
 
 gradle-nightly = "9.9.0-20260915012842+0000"
-leaf-loader = "1.7.2"
+leaf-loader = "2.0.2"
 
 [libraries]
 spock = { module = "org.spockframework:spock-core", version.ref = "spock" }
