@@ -75,6 +75,7 @@ import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
 import dev.aoqia.leaf.loom.extension.LoomFiles;
+import dev.aoqia.leaf.loom.util.JarUtil;
 import dev.aoqia.leaf.loom.util.SidedClassVisitor;
 import dev.aoqia.leaf.loom.util.TinyRemapperHelper;
 import dev.aoqia.leaf.loom.util.ZipUtils;
@@ -253,6 +254,9 @@ public abstract class AbstractMappedZomboidProvider<M extends ZomboidProvider>
         if (extension.disableObfuscation()) {
             Files.createDirectories(remappedJars.outputJarPath().getParent());
             Files.copy(remappedJars.inputJar(), remappedJars.outputJarPath(), StandardCopyOption.REPLACE_EXISTING);
+
+            // Remove jar signature files (if any) to prevent clashes when running jar processors (e.g. transforming)
+            JarUtil.removeJarSignerFiles(remappedJars.outputJarPath());
 
             MappingConfiguration mappingConfiguration = extension.getMappingConfigurationOrNull();
 

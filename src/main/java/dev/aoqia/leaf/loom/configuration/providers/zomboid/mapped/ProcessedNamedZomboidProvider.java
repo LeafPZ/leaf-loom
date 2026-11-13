@@ -57,7 +57,6 @@ import dev.aoqia.leaf.loom.configuration.processors.ZomboidJarProcessorManager;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidJar;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidProvider;
 import dev.aoqia.leaf.loom.configuration.providers.zomboid.ZomboidSourceSets;
-import dev.aoqia.leaf.loom.util.JarUtil;
 
 public abstract class ProcessedNamedZomboidProvider<M extends ZomboidProvider, P extends NamedZomboidProvider<M>>
     extends NamedZomboidProvider<M>
@@ -187,9 +186,6 @@ public abstract class ProcessedNamedZomboidProvider<M extends ZomboidProvider, P
             final LocalMavenHelper mavenHelper = getMavenHelper(zomboidJar.getType());
             final Path outputPath = mavenHelper.copyToMaven(zomboidJar.getPath(), null);
             assert outputJar.getPath().equals(outputPath);
-
-            // Remove jar signature files (if any) before transforming
-            JarUtil.removeJarSignerFiles(outputPath);
 
             jarProcessorManager.processJar(outputPath, new ProcessorContextImpl(configContext, zomboidJar));
         }
