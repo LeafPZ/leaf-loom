@@ -69,33 +69,6 @@ public final class MappingsMerger {
     private static final Logger LOGGER = LoggerFactory.getLogger(MappingsMerger.class);
 
     @VisibleForTesting
-    public static void legacyMergedMergeAndSaveMappings(Path from, Path out,
-        IntermediateMappingsService intermediateMappingsService) throws IOException
-    {
-        MemoryMappingTree intermediaryTree = new MemoryMappingTree();
-        intermediateMappingsService.getMemoryMappingTree().accept(intermediaryTree);
-
-        try (BufferedReader reader = Files.newBufferedReader(from, StandardCharsets.UTF_8)) {
-            Tiny2FileReader.read(reader, intermediaryTree);
-        }
-
-        MemoryMappingTree officialTree = new MemoryMappingTree();
-        UnobfuscatedMappingNsCompleter nsCompleter = new UnobfuscatedMappingNsCompleter(officialTree,
-            MappingsNamespace.NAMED.toString(),
-            Map.of(MappingsNamespace.CLIENT_OFFICIAL.toString(), MappingsNamespace.INTERMEDIARY.toString(),
-                MappingsNamespace.SERVER_OFFICIAL.toString(), MappingsNamespace.INTERMEDIARY.toString()));
-        intermediaryTree.accept(nsCompleter);
-
-        // versions this old strip inner class attributes
-        // from the obfuscated jars anyway
-        // inheritMappedNamesOfEnclosingClasses(officialTree);
-
-        try (var writer = new Tiny2FileWriter(Files.newBufferedWriter(out, StandardCharsets.UTF_8), false)) {
-            officialTree.accept(writer);
-        }
-    }
-
-    @VisibleForTesting
     public static void mergeAndSaveMappings(Path from, Path out,
         IntermediateMappingsService intermediateMappingsService) throws IOException
     {

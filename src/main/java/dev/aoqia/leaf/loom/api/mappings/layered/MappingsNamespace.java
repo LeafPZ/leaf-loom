@@ -49,50 +49,25 @@ import org.jspecify.annotations.Nullable;
  * The standard namespaces used by loom.
  */
 public enum MappingsNamespace {
-    /**
-     * Official names for the Minecraft client jar, usually obfuscated.
-     * This namespace is used for versions below 1.3, where the client and server jars are obfuscated differently.
-     */
-    CLIENT_OFFICIAL,
-
-    /**
-     * Intermediary mappings have been generated to provide a stable set of names across minecraft versions.
-     *
-     * <p>
-     * Intermediary is used in a production runtime (outside a dev env) allowing mods to run across multiple
-     * versions of the game. Mods are remapped from "named" at build time.
-     *
-     * @see <a href="https://github.com/FabricMC/intermediary/">github.com/FabricMC/intermediary/</a>
-     */
-    INTERMEDIARY,
-
-    /**
-     * Named mappings are the developer friendly names used to develop mods against.
-     */
-    NAMED,
-
-    /**
-     * Official mappings are the names that are used in the vanilla Minecraft game jars, these are usually obfuscated.
-     */
+    /// Official namespace is the game's original mapping namespace.
+    /// If the game ships with obfuscation, this will mean obfuscated mappings. If not, then it's source/orig mappings.
     OFFICIAL,
+    /// Intermediary mappings can provide a stable set of names across game versions.
+    ///
+    /// Intermediary is used in a production runtime (outside a dev env) allowing mods to run across multiple
+    /// versions of the game. Mods are remapped from "named" at build time.
+    ///
+    /// @see <a href="https://github.com/FabricMC/intermediary/">FabricMC/intermediary</a>
+    INTERMEDIARY,
+    /// Developer friendly names used to develop mods against.
+    NAMED;
 
-    /**
-     * Official names for the Minecraft server jar, usually obfuscated.
-     * This namespace is used for versions below 1.3, where the client and server jars are obfuscated differently.
-     */
-    SERVER_OFFICIAL;
-
-    /**
-     * Gets a {@code MappingsNamespace} from a namespace string.
-     *
-     * @param namespace the name of the namespace as a lowercase string
-     * @return the {@code MappingsNamespace}, or null if not found
-     */
+    /// Gets a `MappingsNamespace` from a namespace string.
+    /// @param namespace the name of the namespace as a lowercase string
+    /// @return the `MappingsNamespace`, or null if not found
     public static @Nullable MappingsNamespace of(String namespace) {
         return switch (namespace) {
             case "official" -> OFFICIAL;
-            case "clientOfficial" -> CLIENT_OFFICIAL;
-            case "serverOfficial" -> SERVER_OFFICIAL;
             case "intermediary" -> INTERMEDIARY;
             case "named" -> NAMED;
             default -> null;
@@ -101,10 +76,6 @@ public enum MappingsNamespace {
 
     @Override
     public String toString() {
-        return switch (this) {
-            case CLIENT_OFFICIAL -> "clientOfficial";
-            case SERVER_OFFICIAL -> "serverOfficial";
-            default -> name().toLowerCase(Locale.ROOT);
-        };
+        return name().toLowerCase(Locale.ROOT);
     }
 }
